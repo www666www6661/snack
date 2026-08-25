@@ -1,0 +1,153 @@
+set(SNACK_CORE_SOURCES
+    agent/FakeAgentAdapter.cpp
+    agent/FakeAgentAdapter.h
+    agent/IAgentAdapter.h
+    app/AppSettings.cpp
+    app/AppSettings.h
+    app/Logging.cpp
+    app/Logging.h
+    app/SingleInstanceGuard.cpp
+    app/SingleInstanceGuard.h
+    domain/DomainTypes.cpp
+    domain/DomainTypes.h
+    session/SessionController.cpp
+    session/SessionController.h
+    storage/ContentStore.cpp
+    storage/ContentStore.h
+    storage/EventRepository.h
+    storage/EventStore.cpp
+    storage/EventStore.h
+    ui/ThemeDefinition.cpp
+    ui/ThemeDefinition.h
+)
+
+add_library(snack_core STATIC ${SNACK_CORE_SOURCES})
+add_library(Snack::Core ALIAS snack_core)
+
+target_include_directories(snack_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
+target_link_libraries(snack_core PUBLIC Qt6::Core Qt6::Gui Qt6::Network Qt6::Sql)
+target_compile_definitions(
+    snack_core
+    PUBLIC
+        SNACK_VERSION="${PROJECT_VERSION}"
+        SNACK_ORGANIZATION="www666www6661"
+        SNACK_APPLICATION_ID="io.github.www666www6661.snack"
+)
+snack_set_project_warnings(snack_core)
+
+add_library(snack_ui STATIC ui/MainWindow.cpp ui/MainWindow.h)
+add_library(Snack::Ui ALIAS snack_ui)
+target_include_directories(snack_ui PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
+target_link_libraries(snack_ui PUBLIC Snack::Core Qt6::Widgets)
+snack_set_project_warnings(snack_ui)
+
+qt_add_executable(
+    snack
+    WIN32
+    MACOSX_BUNDLE
+    app/main.cpp
+    resources/snack.qrc
+)
+
+target_link_libraries(snack PRIVATE Snack::Ui)
+snack_set_project_warnings(snack)
+
+set_target_properties(
+    snack
+    PROPERTIES
+        OUTPUT_NAME "snack"
+        MACOSX_BUNDLE_BUNDLE_NAME "Snack"
+        MACOSX_BUNDLE_GUI_IDENTIFIER "io.github.www666www6661.snack"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
+)
+
+qt_add_translations(
+    snack
+    TS_FILES
+        "${CMAKE_SOURCE_DIR}/translations/snack_zh_CN.ts"
+    RESOURCE_PREFIX "/i18n"
+)
+
+install(
+    TARGETS snack
+    BUNDLE DESTINATION .
+    RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+)
+install(FILES "${CMAKE_SOURCE_DIR}/LICENSE" DESTINATION "${CMAKE_INSTALL_DATADIR}/licenses/snack")
+
+set(_snack_deploy_tool_options
+    --no-system-dxc-compiler
+    --include-plugins qsqlite
+    --exclude-plugins qsqlmimer,qsqlodbc,qsqlpsql
+)
+set(_snack_post_build_options ${_snack_deploy_tool_options})
+set(_snack_deploy_script_options)
+
+# Qt's deployment tool cannot identify the runtime DLLs used by the official
+# LLVM-MinGW package, so copy those explicitly for that development profile.
+if(WIN32 AND MINGW AND CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    list(APPEND _snack_post_build_options --no-compiler-runtime)
+    list(APPEND _snack_deploy_script_options NO_COMPILER_RUNTIME)
+
+    get_filename_component(_snack_compiler_bin "${CMAKE_CXX_COMPILER}" DIRECTORY)
+    get_filename_component(_snack_qt_prefix "${Qt6Core_DIR}/../../.." ABSOLUTE)
+    foreach(_snack_runtime_name IN ITEMS libc++.dll libunwind.dll)
+        string(MAKE_C_IDENTIFIER "${_snack_runtime_name}" _snack_runtime_id)
+        find_file(
+            _snack_runtime_${_snack_runtime_id}
+            NAMES "${_snack_runtime_name}"
+            HINTS "${_snack_qt_prefix}/bin" "${_snack_compiler_bin}"
+            NO_DEFAULT_PATH
+        )
+        if(NOT _snack_runtime_${_snack_runtime_id})
+            message(FATAL_ERROR "Cannot find required LLVM-MinGW runtime: ${_snack_runtime_name}")
+        endif()
+        list(APPEND _snack_llvm_mingw_runtimes "${_snack_runtime_${_snack_runtime_id}}")
+    endforeach()
+endif()
+
+if(WIN32 AND SNACK_DEPLOY_QT_AFTER_BUILD)
+    add_custom_command(
+        TARGET snack
+        POST_BUILD
+        COMMAND
+            "$<TARGET_FILE:Qt6::windeployqt>"
+            "$<TARGET_FILE:snack>"
+            --dir "$<TARGET_FILE_DIR:snack>"
+            --no-translations
+            --force
+            ${_snack_post_build_options}
+        COMMENT "Deploying the Qt runtime beside snack"
+        COMMAND_EXPAND_LISTS
+        VERBATIM
+    )
+
+    if(_snack_llvm_mingw_runtimes)
+        add_custom_command(
+            TARGET snack
+            POST_BUILD
+            COMMAND
+                "${CMAKE_COMMAND}" -E copy_if_different
+                ${_snack_llvm_mingw_runtimes}
+                "$<TARGET_FILE_DIR:snack>"
+            COMMENT "Deploying the LLVM-MinGW runtime beside snack"
+            COMMAND_EXPAND_LISTS
+            VERBATIM
+        )
+    endif()
+endif()
+
+qt_generate_deploy_app_script(
+    TARGET snack
+    OUTPUT_SCRIPT snack_deploy_script
+    NO_TRANSLATIONS
+    NO_UNSUPPORTED_PLATFORM_ERROR
+    ${_snack_deploy_script_options}
+    DEPLOY_TOOL_OPTIONS ${_snack_deploy_tool_options}
+)
+install(SCRIPT "${snack_deploy_script}")
+
+if(_snack_llvm_mingw_runtimes)
+    install(FILES ${_snack_llvm_mingw_runtimes} DESTINATION "${CMAKE_INSTALL_BINDIR}")
+endif()

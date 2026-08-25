@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Snack Workbench Mockups</title>
+  <style>
+    :root {
+      --snack-canvas: #f5f4f0;
+      --snack-sidebar: #ebe9e2;
+      --snack-panel: #fbfaf7;
+      --snack-raised: #ffffff;
+      --snack-ink: #20211f;
+      --snack-muted: #6d6e68;
+      --snack-faint: #9a9b94;
+      --snack-line: #d9d7cf;
+      --snack-line-strong: #c3c0b7;
+      --snack-accent: #176b55;
+      --snack-accent-soft: #dcebe4;
+      --snack-warning: #9a5b17;
+      --snack-warning-soft: #f6e7ce;
+      --snack-danger: #a83f37;
+      --snack-danger-soft: #f4dedb;
+      --snack-blue: #356e9e;
+      --snack-code: #eeece6;
+      --snack-shadow: 0 18px 60px rgba(45, 43, 36, .12);
+      font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif;
+      color: var(--snack-ink);
+      background: #d9d7d0;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; }
+    button, input, textarea { font: inherit; }
+    button { color: inherit; }
+    .snack-frame { width: 100vw; height: 100vh; background: var(--snack-canvas); display: grid; grid-template-columns: 286px 1fr; overflow: hidden; }
+    .snack-frame.snack-dark {
+      --snack-canvas: #171816;
+      --snack-sidebar: #20211f;
+      --snack-panel: #1b1c1a;
+      --snack-raised: #252623;
+      --snack-ink: #eeeDE8;
+      --snack-muted: #adaea7;
+      --snack-faint: #7f8079;
+      --snack-line: #363732;
+      --snack-line-strong: #4a4b44;
+      --snack-accent: #7cc8a7;
+      --snack-accent-soft: #203b31;
+      --snack-warning: #e2ad67;
+      --snack-warning-soft: #3a2e1f;
+      --snack-danger: #ed9188;
+      --snack-danger-soft: #3d2725;
+      --snack-blue: #8bb6da;
+      --snack-code: #2b2c29;
+      --snack-shadow: 0 18px 60px rgba(0, 0, 0, .35);
+      color: var(--snack-ink);
+    }
+    .snack-sidebar { background: var(--snack-sidebar); border-right: 1px solid var(--snack-line); padding: 18px 14px 14px; display: flex; flex-direction: column; min-width: 0; }
+    .snack-brand { height: 38px; display: flex; align-items: center; gap: 10px; padding: 0 8px; font-weight: 600; letter-spacing: .01em; }
+    .snack-logo { width: 25px; height: 25px; border-radius: 8px; background: var(--snack-ink); color: var(--snack-canvas); display: grid; place-items: center; font-size: 12px; }
+    .snack-new { margin: 18px 4px 12px; height: 42px; border: 1px solid var(--snack-line-strong); border-radius: 12px; background: var(--snack-panel); text-align: left; padding: 0 14px; }
+    .snack-search { height: 36px; margin: 0 4px 14px; border: 0; border-bottom: 1px solid var(--snack-line); background: transparent; color: var(--snack-muted); text-align: left; padding: 0 8px; }
+    .snack-section-label { color: var(--snack-faint); font-size: 12px; padding: 10px 10px 7px; text-transform: uppercase; letter-spacing: .08em; }
+    .snack-conversations { overflow: hidden; flex: 1; }
+    .snack-conversation { border-radius: 11px; padding: 10px 10px 9px; margin: 2px 0; display: grid; grid-template-columns: 9px 1fr auto; column-gap: 9px; align-items: start; }
+    .snack-conversation.snack-active { background: var(--snack-panel); box-shadow: inset 0 0 0 1px var(--snack-line); }
+    .snack-state-dot { width: 7px; height: 7px; border-radius: 50%; margin-top: 6px; background: var(--snack-faint); }
+    .snack-state-running { background: var(--snack-accent); box-shadow: 0 0 0 3px var(--snack-accent-soft); }
+    .snack-state-wait { width: 7px; height: 7px; border-radius: 1px; background: var(--snack-warning); }
+    .snack-conversation-title { font-size: 14px; line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .snack-conversation-meta { grid-column: 2 / 4; color: var(--snack-muted); font-size: 11px; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .snack-time { font-size: 11px; color: var(--snack-faint); padding-top: 2px; }
+    .snack-sidebar-foot { border-top: 1px solid var(--snack-line); padding: 12px 8px 2px; color: var(--snack-muted); display: flex; justify-content: space-between; font-size: 13px; }
+    .snack-main { min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--snack-panel); }
+    .snack-header { height: 68px; border-bottom: 1px solid var(--snack-line); display: flex; align-items: center; padding: 0 22px; gap: 13px; flex: 0 0 auto; }
+    .snack-heading { min-width: 0; flex: 1; }
+    .snack-heading strong { display: block; font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .snack-heading span { display: block; font-size: 11px; color: var(--snack-muted); margin-top: 3px; }
+    .snack-chip { height: 32px; border: 1px solid var(--snack-line); background: transparent; border-radius: 9px; padding: 0 10px; font-size: 12px; white-space: nowrap; }
+    .snack-chip.snack-lease { color: var(--snack-accent); border-color: color-mix(in srgb, var(--snack-accent) 35%, var(--snack-line)); }
+    .snack-more { border: 0; background: transparent; width: 32px; font-size: 18px; }
+    .snack-scroll { min-height: 0; flex: 1; overflow: hidden; display: flex; justify-content: center; background: var(--snack-panel); }
+    .snack-thread { width: min(900px, calc(100% - 80px)); padding: 44px 0 28px; display: flex; flex-direction: column; gap: 26px; }
+    .snack-user-row { display: flex; justify-content: flex-end; }
+    .snack-user-message { max-width: 72%; background: var(--snack-code); border-radius: 18px 18px 5px 18px; padding: 13px 17px; line-height: 1.55; font-size: 15px; }
+    .snack-agent { font-size: 15px; line-height: 1.7; }
+    .snack-agent p { margin: 0 0 12px; }
+    .snack-agent-label { color: var(--snack-muted); font-size: 12px; margin-bottom: 9px; display: flex; gap: 8px; align-items: center; }
+    .snack-tool { border: 1px solid var(--snack-line); border-radius: 12px; background: var(--snack-panel); overflow: hidden; }
+    .snack-tool-head { height: 48px; display: grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 9px; padding: 0 14px; }
+    .snack-tool-icon { width: 20px; height: 20px; border-radius: 6px; background: var(--snack-accent-soft); color: var(--snack-accent); display: grid; place-items: center; font-size: 11px; }
+    .snack-tool-title { font-size: 13px; }
+    .snack-tool-meta { font-size: 11px; color: var(--snack-muted); }
+    .snack-tool-body { border-top: 1px solid var(--snack-line); background: var(--snack-code); padding: 12px 14px; font-family: Consolas, monospace; font-size: 12px; color: var(--snack-muted); }
+    .snack-approval { border-left: 4px solid var(--snack-warning); background: var(--snack-warning-soft); border-radius: 4px 12px 12px 4px; padding: 15px 16px; }
+    .snack-approval-title { font-size: 14px; font-weight: 600; margin-bottom: 7px; }
+    .snack-approval code { display: block; margin: 10px 0 13px; padding: 10px 12px; border-radius: 8px; background: color-mix(in srgb, var(--snack-panel) 70%, transparent); font-family: Consolas, monospace; font-size: 12px; }
+    .snack-actions { display: flex; gap: 8px; }
+    .snack-action { height: 34px; border: 1px solid var(--snack-line-strong); border-radius: 9px; background: var(--snack-panel); padding: 0 12px; font-size: 12px; }
+    .snack-action-primary { background: var(--snack-ink); color: var(--snack-panel); border-color: var(--snack-ink); }
+    .snack-action-danger { color: var(--snack-danger); }
+    .snack-composer-zone { padding: 0 30px 24px; display: flex; justify-content: center; background: linear-gradient(transparent, var(--snack-panel) 24%); }
+    .snack-composer { width: min(930px, 100%); min-height: 112px; border: 1px solid var(--snack-line-strong); border-radius: 19px; background: var(--snack-raised); box-shadow: 0 8px 28px rgba(36, 35, 30, .08); padding: 14px 15px 11px; }
+    .snack-composer-text { color: var(--snack-muted); height: 48px; font-size: 15px; padding: 3px 3px; }
+    .snack-composer-foot { display: flex; align-items: center; gap: 8px; }
+    .snack-round { width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--snack-line); background: transparent; }
+    .snack-send-mode { margin-left: auto; color: var(--snack-muted); font-size: 12px; }
+    .snack-send { width: 36px; height: 36px; border-radius: 50%; border: 0; background: var(--snack-ink); color: var(--snack-panel); font-size: 17px; }
+    .snack-review-frame { grid-template-columns: 260px minmax(0, 1fr) 390px; }
+    .snack-file-pane { background: var(--snack-panel); border-right: 1px solid var(--snack-line); min-width: 0; display: flex; flex-direction: column; }
+    .snack-pane-title { height: 55px; display: flex; align-items: center; padding: 0 16px; border-bottom: 1px solid var(--snack-line); font-size: 13px; font-weight: 600; }
+    .snack-file-list { padding: 12px 8px; }
+    .snack-file-row { height: 38px; padding: 0 9px; border-radius: 8px; display: flex; align-items: center; gap: 8px; font-family: Consolas, monospace; font-size: 12px; }
+    .snack-file-row.snack-selected { background: var(--snack-accent-soft); color: var(--snack-accent); }
+    .snack-file-stat { margin-left: auto; font-family: "Segoe UI", sans-serif; font-size: 11px; color: var(--snack-muted); }
+    .snack-diff-pane { min-width: 0; display: flex; flex-direction: column; background: var(--snack-panel); }
+    .snack-diff-toolbar { height: 55px; border-bottom: 1px solid var(--snack-line); padding: 0 16px; display: flex; align-items: center; gap: 10px; }
+    .snack-diff-title { flex: 1; font-family: Consolas, monospace; font-size: 13px; }
+    .snack-diff-code { flex: 1; padding: 22px 0; font-family: Consolas, monospace; font-size: 13px; line-height: 1.65; overflow: hidden; }
+    .snack-code-row { display: grid; grid-template-columns: 48px 48px 24px 1fr; min-height: 24px; padding-right: 18px; }
+    .snack-code-row span:nth-child(-n+3) { color: var(--snack-faint); text-align: right; padding-right: 10px; user-select: none; }
+    .snack-code-add { background: color-mix(in srgb, var(--snack-accent-soft) 72%, transparent); }
+    .snack-code-del { background: color-mix(in srgb, var(--snack-danger-soft) 76%, transparent); }
+    .snack-hunk-tools { margin: 10px 18px 10px 120px; display: flex; gap: 7px; }
+    .snack-inspector { background: var(--snack-sidebar); border-left: 1px solid var(--snack-line); display: flex; flex-direction: column; }
+    .snack-step-list { padding: 16px; }
+    .snack-step { display: grid; grid-template-columns: 20px 1fr; gap: 10px; padding: 10px 0; color: var(--snack-muted); font-size: 13px; line-height: 1.45; }
+    .snack-step-mark { width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--snack-line-strong); display: grid; place-items: center; font-size: 10px; }
+    .snack-step-current { color: var(--snack-ink); }
+    .snack-step-current .snack-step-mark { background: var(--snack-accent); border-color: var(--snack-accent); color: var(--snack-panel); }
+    .snack-step-done .snack-step-mark { color: var(--snack-accent); border-color: var(--snack-accent); }
+    .snack-dialog-canvas { width: 100vw; height: 100vh; background: radial-gradient(circle at 20% 10%, #e7eee9 0, transparent 34%), var(--snack-canvas); display: grid; place-items: center; }
+    .snack-dialog { width: 910px; min-height: 650px; border: 1px solid var(--snack-line); border-radius: 24px; background: var(--snack-panel); box-shadow: var(--snack-shadow); overflow: hidden; display: grid; grid-template-columns: 265px 1fr; }
+    .snack-dialog-side { background: var(--snack-sidebar); padding: 30px 25px; border-right: 1px solid var(--snack-line); }
+    .snack-dialog-side h1 { font-size: 24px; font-weight: 500; margin: 26px 0 10px; }
+    .snack-dialog-side p { color: var(--snack-muted); font-size: 13px; line-height: 1.65; }
+    .snack-progress-list { margin-top: 42px; display: flex; flex-direction: column; gap: 18px; font-size: 13px; }
+    .snack-progress-item { display: flex; align-items: center; gap: 10px; color: var(--snack-muted); }
+    .snack-progress-item.snack-current { color: var(--snack-ink); }
+    .snack-progress-num { width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--snack-line-strong); display: grid; place-items: center; font-size: 11px; }
+    .snack-current .snack-progress-num { background: var(--snack-ink); color: var(--snack-panel); border-color: var(--snack-ink); }
+    .snack-dialog-content { padding: 52px 58px 42px; }
+    .snack-dialog-content h2 { font-size: 22px; font-weight: 500; margin: 0 0 8px; }
+    .snack-dialog-content > p { color: var(--snack-muted); font-size: 13px; margin: 0 0 28px; }
+    .snack-agent-check { border: 1px solid var(--snack-line); border-radius: 14px; padding: 18px; margin-bottom: 12px; display: grid; grid-template-columns: 44px 1fr auto; align-items: center; gap: 14px; }
+    .snack-agent-icon { width: 42px; height: 42px; border-radius: 12px; background: var(--snack-code); display: grid; place-items: center; font-weight: 600; }
+    .snack-agent-check strong { display: block; font-size: 14px; font-weight: 600; }
+    .snack-agent-check span { display: block; color: var(--snack-muted); font-size: 12px; margin-top: 4px; }
+    .snack-check-ok { color: var(--snack-accent); font-size: 12px; }
+    .snack-path-field { margin-top: 24px; }
+    .snack-field-label { display: block; font-size: 12px; color: var(--snack-muted); margin-bottom: 7px; }
+    .snack-field { height: 44px; border: 1px solid var(--snack-line-strong); border-radius: 10px; padding: 0 13px; display: flex; align-items: center; font-family: Consolas, monospace; font-size: 12px; }
+    .snack-dialog-foot { margin-top: 35px; display: flex; justify-content: flex-end; gap: 9px; }
+    .snack-settings-frame { grid-template-columns: 230px 1fr; }
+    .snack-settings-nav { background: var(--snack-sidebar); border-right: 1px solid var(--snack-line); padding: 22px 14px; }
+    .snack-settings-nav h1 { font-size: 17px; font-weight: 600; margin: 5px 10px 24px; }
+    .snack-settings-link { height: 40px; border-radius: 9px; padding: 0 11px; display: flex; align-items: center; color: var(--snack-muted); font-size: 13px; }
+    .snack-settings-link.snack-selected { background: var(--snack-panel); color: var(--snack-ink); box-shadow: inset 0 0 0 1px var(--snack-line); }
+    .snack-settings-main { overflow: hidden; padding: 54px 80px; background: var(--snack-panel); }
+    .snack-settings-wrap { max-width: 920px; }
+    .snack-settings-wrap h2 { font-size: 24px; font-weight: 500; margin: 0 0 8px; }
+    .snack-settings-intro { color: var(--snack-muted); margin-bottom: 34px; font-size: 13px; }
+    .snack-setting-group { border-top: 1px solid var(--snack-line); padding: 24px 0; }
+    .snack-setting-row { display: grid; grid-template-columns: 1fr 330px; gap: 30px; align-items: center; margin: 14px 0; }
+    .snack-setting-row strong { display: block; font-size: 13px; font-weight: 600; }
+    .snack-setting-row span { display: block; color: var(--snack-muted); font-size: 12px; margin-top: 5px; line-height: 1.45; }
+    .snack-select { height: 40px; border: 1px solid var(--snack-line); background: var(--snack-raised); border-radius: 10px; padding: 0 12px; display: flex; align-items: center; justify-content: space-between; font-size: 12px; }
+    .snack-storage-bar { height: 9px; border-radius: 5px; background: var(--snack-code); overflow: hidden; margin-top: 13px; }
+    .snack-storage-used { height: 100%; width: 37%; background: var(--snack-accent); }
+    .snack-screen { display: none; width: 100vw; height: 100vh; }
+    .snack-screen.snack-visible { display: block; }
+  </style>
+</head>
+<body>
+  <section class="snack-screen" data-screen="chat-light">
+    <div class="snack-frame">
+      <aside class="snack-sidebar">
+        <div class="snack-brand"><div class="snack-logo">S</div>零食</div>
+        <button class="snack-new">＋ 新建会话</button><button class="snack-search">⌕ 搜索会话　 Ctrl K</button>
+        <div class="snack-section-label">等待处理</div>
+        <div class="snack-conversation"><span class="snack-state-dot snack-state-wait"></span><div class="snack-conversation-title">重构认证中间件</div><span class="snack-time">现在</span><div class="snack-conversation-meta">Claude · D:\Projects\portal</div></div>
+        <div class="snack-section-label">最近</div>
+        <div class="snack-conversations">
+          <div class="snack-conversation snack-active"><span class="snack-state-dot snack-state-running"></span><div class="snack-conversation-title">修复文件监听竞态</div><span class="snack-time">2m</span><div class="snack-conversation-meta">Codex · D:\Projects\snack</div></div>
+          <div class="snack-conversation"><span class="snack-state-dot"></span><div class="snack-conversation-title">审查缓存失效逻辑</div><span class="snack-time">1h</span><div class="snack-conversation-meta">Codex · api-gateway</div></div>
+          <div class="snack-conversation"><span class="snack-state-dot"></span><div class="snack-conversation-title">整理发布说明</div><span class="snack-time">昨天</span><div class="snack-conversation-meta">Claude · desktop-client</div></div>
+        </div>
+        <div class="snack-sidebar-foot"><span>归档</span><span>设置</span></div>
+      </aside>
+      <main class="snack-main">
+        <header class="snack-header"><div class="snack-heading"><strong>修复文件监听竞态</strong><span>D:\Projects\snack · Codex · 正在执行</span></div><button class="snack-chip snack-lease">拥有写权限</button><button class="snack-chip">gpt-5.6-terra⌄</button><button class="snack-chip">高强度⌄</button><button class="snack-chip">工作区自动⌄</button><button class="snack-more">···</button></header>
+        <div class="snack-scroll"><div class="snack-thread">
+          <div class="snack-user-row"><div class="snack-user-message">文件监听在快速保存时偶尔把一次修改记录成两次。请定位根因并补测试。</div></div>
+          <div class="snack-agent"><div class="snack-agent-label">Codex　·　高强度</div><p>我会先检查监听器的去抖边界和事件归属测试，再用一个可重复的快速写入场景验证修复。</p></div>
+          <div class="snack-tool"><div class="snack-tool-head"><div class="snack-tool-icon">✓</div><div class="snack-tool-title">搜索文件监听实现与现有测试</div><div class="snack-tool-meta">完成 · 0.8s　⌄</div></div><div class="snack-tool-body">rg "FileSystemWatcher|debounce" src tests</div></div>
+          <div class="snack-tool"><div class="snack-tool-head"><div class="snack-tool-icon">›</div><div class="snack-tool-title">运行 watcher_tests</div><div class="snack-tool-meta">执行中 · 12s　⌃</div></div><div class="snack-tool-body">[==========] Running 18 tests<br>[ RUN　　　] FileWatcherTest.CoalescesRapidWrites<br>...</div></div>
+          <div class="snack-approval"><div class="snack-approval-title">需要允许网络访问</div><div>测试需要连接本机回环地址上的临时文件事件服务。目标仅限本次执行。</div><code>tcp://127.0.0.1:43127</code><div class="snack-actions"><button class="snack-action snack-action-primary">仅本次允许</button><button class="snack-action">本会话允许</button><button class="snack-action snack-action-danger">拒绝</button></div></div>
+        </div></div>
+        <div class="snack-composer-zone"><div class="snack-composer"><div class="snack-composer-text">补充要求，或等待当前步骤完成…</div><div class="snack-composer-foot"><button class="snack-round">＋</button><button class="snack-round">@</button><button class="snack-round">/</button><span class="snack-send-mode">立即补充⌄</span><button class="snack-send">↑</button></div></div></div>
+      </main>
+    </div>
+  </section>
+  <section class="snack-screen" data-screen="chat-dark">
+    <div class="snack-frame snack-dark">
+      <aside class="snack-sidebar"><div class="snack-brand"><div class="snack-logo">S</div>Snack</div><button class="snack-new">＋ New conversation</button><button class="snack-search">⌕ Search　 Ctrl K</button><div class="snack-section-label">Needs you</div><div class="snack-conversation"><span class="snack-state-dot snack-state-wait"></span><div class="snack-conversation-title">Refactor auth middleware</div><span class="snack-time">now</span><div class="snack-conversation-meta">Claude · portal</div></div><div class="snack-section-label">Recent</div><div class="snack-conversations"><div class="snack-conversation snack-active"><span class="snack-state-dot snack-state-running"></span><div class="snack-conversation-title">Fix watcher race</div><span class="snack-time">2m</span><div class="snack-conversation-meta">Codex · snack</div></div><div class="snack-conversation"><span class="snack-state-dot"></span><div class="snack-conversation-title">Review cache invalidation</div><span class="snack-time">1h</span><div class="snack-conversation-meta">Codex · api-gateway</div></div></div><div class="snack-sidebar-foot"><span>Archive</span><span>Settings</span></div></aside>
+      <main class="snack-main"><header class="snack-header"><div class="snack-heading"><strong>Fix watcher race</strong><span>D:\Projects\snack · Codex · Running</span></div><button class="snack-chip snack-lease">Write lease</button><button class="snack-chip">gpt-5.6-terra⌄</button><button class="snack-chip">High⌄</button><button class="snack-chip">Workspace auto⌄</button><button class="snack-more">···</button></header><div class="snack-scroll"><div class="snack-thread"><div class="snack-user-row"><div class="snack-user-message">Rapid saves are occasionally recorded twice. Find the race and add a regression test.</div></div><div class="snack-agent"><div class="snack-agent-label">Codex　·　High effort</div><p>The duplicate comes from a timer callback committing an older batch after a newer native event has already opened the next batch. I’m moving the generation check inside the serialized commit.</p></div><div class="snack-tool"><div class="snack-tool-head"><div class="snack-tool-icon">✓</div><div class="snack-tool-title">Updated watcher coalescing logic</div><div class="snack-tool-meta">2 files · +34 −11　⌄</div></div></div><div class="snack-tool"><div class="snack-tool-head"><div class="snack-tool-icon">›</div><div class="snack-tool-title">Running watcher_tests</div><div class="snack-tool-meta">Running · 12s　⌃</div></div><div class="snack-tool-body">[ RUN　　　] FileWatcherTest.CoalescesRapidWrites<br>[　　　OK ] 17 tests<br>...</div></div></div></div><div class="snack-composer-zone"><div class="snack-composer"><div class="snack-composer-text">Add a follow-up, or wait for the current step…</div><div class="snack-composer-foot"><button class="snack-round">＋</button><button class="snack-round">@</button><button class="snack-round">/</button><span class="snack-send-mode">Steer now⌄</span><button class="snack-send">↑</button></div></div></div></main>
+    </div>
+  </section>
+  <section class="snack-screen" data-screen="review">
+    <div class="snack-frame snack-review-frame">
+      <aside class="snack-sidebar"><div class="snack-brand"><div class="snack-logo">S</div>零食</div><button class="snack-new">← 返回对话</button><div class="snack-section-label">未审查 · 3</div><div class="snack-file-list"><div class="snack-file-row snack-selected">M watcher.cpp <span class="snack-file-stat">+18 −9</span></div><div class="snack-file-row">M watcher_test.cpp <span class="snack-file-stat">+16 −2</span></div><div class="snack-file-row">A fixtures/rapid.txt <span class="snack-file-stat">+4</span></div></div><div class="snack-section-label">已接受 · 1</div><div class="snack-file-list"><div class="snack-file-row">M CMakeLists.txt <span class="snack-file-stat">+2</span></div></div></aside>
+      <section class="snack-diff-pane"><div class="snack-diff-toolbar"><div class="snack-diff-title">src/workspace/watcher.cpp</div><button class="snack-action">在 VS Code 打开</button><button class="snack-action snack-action-danger">拒绝文件</button><button class="snack-action snack-action-primary">接受文件</button></div><div class="snack-diff-code"><div class="snack-code-row"><span>184</span><span>184</span><span></span><code>void FileWatcher::flushPending()</code></div><div class="snack-code-row"><span>185</span><span>185</span><span></span><code>{</code></div><div class="snack-code-row snack-code-del"><span>186</span><span></span><span>−</span><code>　const auto pending = std::exchange(m_pending, {});</code></div><div class="snack-code-row snack-code-del"><span>187</span><span></span><span>−</span><code>　emit filesChanged(pending);</code></div><div class="snack-code-row snack-code-add"><span></span><span>186</span><span>+</span><code>　const auto generation = m_generation;</code></div><div class="snack-code-row snack-code-add"><span></span><span>187</span><span>+</span><code>　m_serialExecutor.enqueue([this, generation] {</code></div><div class="snack-code-row snack-code-add"><span></span><span>188</span><span>+</span><code>　　if (generation != m_generation) return;</code></div><div class="snack-code-row snack-code-add"><span></span><span>189</span><span>+</span><code>　　emit filesChanged(std::exchange(m_pending, {}));</code></div><div class="snack-code-row snack-code-add"><span></span><span>190</span><span>+</span><code>　});</code></div><div class="snack-code-row"><span>188</span><span>191</span><span></span><code>}</code></div><div class="snack-hunk-tools"><button class="snack-action snack-action-danger">拒绝此块</button><button class="snack-action snack-action-primary">接受此块</button><span class="snack-tool-meta">Agent direct · 基线已验证</span></div></div></section>
+      <aside class="snack-inspector"><div class="snack-pane-title">任务与改动</div><div class="snack-step-list"><div class="snack-step snack-step-done"><div class="snack-step-mark">✓</div><div>定位重复事件的代际竞态</div></div><div class="snack-step snack-step-done"><div class="snack-step-mark">✓</div><div>把提交移动到串行执行器</div></div><div class="snack-step snack-step-current"><div class="snack-step-mark">3</div><div><strong>审查测试稳定性</strong><br><span class="snack-tool-meta">watcher_tests 正在运行</span></div></div><div class="snack-step"><div class="snack-step-mark">4</div><div>总结改动和剩余风险</div></div></div><div class="snack-pane-title">审查摘要</div><div class="snack-step-list"><div class="snack-agent"><p>3 个文件待审查，当前没有外部编辑冲突。此会话持有工作区写权限。</p></div></div></aside>
+    </div>
+  </section>
+  <section class="snack-screen" data-screen="onboarding">
+    <div class="snack-dialog-canvas"><div class="snack-dialog"><aside class="snack-dialog-side"><div class="snack-brand"><div class="snack-logo">S</div>零食</div><h1>让 Agent<br>回到对话里</h1><p>Snack 复用你已经安装并登录的 Codex 与 Claude Code，不接管凭据。</p><div class="snack-progress-list"><div class="snack-progress-item snack-current"><span class="snack-progress-num">1</span>检查本机 Agent</div><div class="snack-progress-item"><span class="snack-progress-num">2</span>选择默认设置</div><div class="snack-progress-item"><span class="snack-progress-num">3</span>开始第一个会话</div></div></aside><main class="snack-dialog-content"><h2>检查本机 Agent</h2><p>我们只读取可执行文件版本和登录状态，不读取你的令牌。</p><div class="snack-agent-check"><div class="snack-agent-icon">C</div><div><strong>Codex CLI</strong><span>0.149.0 · C:\Users\wuji\AppData\Roaming\npm\codex</span></div><div class="snack-check-ok">已就绪 ✓</div></div><div class="snack-agent-check"><div class="snack-agent-icon">A</div><div><strong>Claude Code</strong><span>2.1.245 · C:\Users\wuji\AppData\Roaming\npm\claude</span></div><div class="snack-check-ok">已就绪 ✓</div></div><div class="snack-path-field"><label class="snack-field-label">第一个工作目录</label><div class="snack-field">D:\Projects\snack <span style="margin-left:auto;color:var(--snack-muted);font-family:inherit">浏览…</span></div></div><div class="snack-dialog-foot"><button class="snack-action">稍后设置</button><button class="snack-action snack-action-primary">继续</button></div></main></div></div>
+  </section>
+  <section class="snack-screen" data-screen="settings">
+    <div class="snack-frame snack-settings-frame"><aside class="snack-settings-nav"><h1>设置</h1><div class="snack-settings-link">常规</div><div class="snack-settings-link">Agent</div><div class="snack-settings-link">外观</div><div class="snack-settings-link snack-selected">存储与备份</div><div class="snack-settings-link">权限规则</div><div class="snack-settings-link">终端</div><div class="snack-settings-link">关于</div></aside><main class="snack-settings-main"><div class="snack-settings-wrap"><h2>存储与备份</h2><div class="snack-settings-intro">会话数据只保存在本机。Snack 不上传日志或崩溃报告。</div><section class="snack-setting-group"><div class="snack-setting-row"><div><strong>原始日志和已审查快照</strong><span>超过保留期限后优先清理，可重建缓存会更早清理。</span></div><div class="snack-select"><span>保留 30 天</span><span>⌄</span></div></div><div class="snack-setting-row"><div><strong>磁盘空间上限</strong><span>未审查 Diff 和恢复数据不会被自动删除。</span></div><div><div class="snack-select"><span>10 GB</span><span>⌄</span></div><div class="snack-storage-bar"><div class="snack-storage-used"></div></div><span>已使用 3.7 GB</span></div></div></section><section class="snack-setting-group"><div class="snack-setting-row"><div><strong>创建完整备份</strong><span>包含会话、布局、模板、标签和必要快照；不包含 CLI 凭据。</span></div><button class="snack-action snack-action-primary">创建备份…</button></div><div class="snack-setting-row"><div><strong>恢复完整备份</strong><span>完全替换当前 GUI 数据，操作前自动创建安全备份。</span></div><button class="snack-action">选择备份…</button></div></section><section class="snack-setting-group"><div class="snack-setting-row"><div><strong>本地数据</strong><span>D:\Users\wuji\AppData\Local\snack</span></div><button class="snack-action">打开目录</button></div><div class="snack-setting-row"><div><strong>立即清理可重建缓存</strong><span>不会删除聊天、未审查 Diff 或原生 Agent 会话。</span></div><button class="snack-action snack-action-danger">清理缓存</button></div></section></div></main></div>
+  </section>
+  <script>
+    const requestedScreen = new URLSearchParams(location.search).get('screen') || 'chat-light';
+    const selectedScreen = document.querySelector(`[data-screen="${requestedScreen}"]`) || document.querySelector('[data-screen="chat-light"]');
+    selectedScreen.classList.add('snack-visible');
+  </script>
+</body>
+</html>

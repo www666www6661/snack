@@ -1,0 +1,108 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows clang-cl
+            os: windows-2022
+            compiler: clang-cl
+          - name: Ubuntu Clang
+            os: ubuntu-22.04
+            compiler: clang++
+          - name: macOS Apple Clang
+            os: macos-14
+            compiler: clang++
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize MSVC environment
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.8.3"
+          cache: true
+
+      - name: Configure
+        env:
+          CXX: ${{ matrix.compiler }}
+        run: >-
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug
+          -DSNACK_BUILD_TESTS=ON
+          -DSNACK_WARNINGS_AS_ERRORS=ON
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  coverage:
+    name: Linux coverage gate
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.8.3"
+          cache: true
+
+      - name: Configure coverage
+        env:
+          CXX: clang++
+        run: >-
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug
+          -DSNACK_BUILD_TESTS=ON
+          -DSNACK_ENABLE_COVERAGE=ON
+
+      - name: Build and run tests
+        run: |
+          cmake --build build --parallel
+          mkdir -p build/coverage
+          LLVM_PROFILE_FILE="$PWD/build/coverage/%p-%m.profraw" ctest --test-dir build --output-on-failure
+
+      - name: Enforce 80 percent first-party line coverage
+        shell: bash
+        run: |
+          llvm-profdata merge -sparse build/coverage/*.profraw -o build/coverage/snack.profdata
+          objects=()
+          for binary in build/tests/snack_*_tests; do
+            if [ "$binary" != "build/tests/snack_domain_tests" ]; then
+              objects+=("-object=$binary")
+            fi
+          done
+          llvm-cov report build/tests/snack_domain_tests "${objects[@]}" \
+            -instr-profile=build/coverage/snack.profdata \
+            -ignore-filename-regex='(/tests/|moc_|qrc_)' | tee build/coverage/summary.txt
+          awk '/^TOTAL/ { found=1; value=$10; gsub("%", "", value); if (value + 0 < 80) exit 1 } END { if (!found) exit 2 }' \
+            build/coverage/summary.txt
+
+  format:
+    name: clang-format
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check formatting
+        run: |
+          clang-format --version
+          find src tests -type f \( -name '*.cpp' -o -name '*.h' \) -print0 \
+            | xargs -0 clang-format --dry-run --Werror
