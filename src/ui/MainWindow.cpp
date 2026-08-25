@@ -9,10 +9,15 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QListWidget>
+#include <QMenu>
 #include <QMenuBar>
+#include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QScreen>
 #include <QStatusBar>
+#include <QSystemTrayIcon>
+#include <QTimer>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -21,12 +26,18 @@ namespace snack::ui {
 
 MainWindow::MainWindow(session::SessionController* controller, app::AppSettings* settings,
                        QWidget* parent)
+    : MainWindow(controller, settings, QSystemTrayIcon::isSystemTrayAvailable(), parent) {}
+
+MainWindow::MainWindow(session::SessionController* controller, app::AppSettings* settings,
+                       bool closeToTrayEnabled, QWidget* parent)
     : QMainWindow(parent), controller_(controller), settings_(settings),
-      settingsSnapshot_(settings_->load()) {
+      settingsSnapshot_(settings_->load()), closeToTrayEnabled_(closeToTrayEnabled) {
     Q_ASSERT(controller_ != nullptr);
     Q_ASSERT(settings_ != nullptr);
     buildUi();
     buildMenus();
+    restoreWindowState();
+    buildTray();
 
     connect(controller_, &session::SessionController::eventRecorded, this,
             &MainWindow::appendEvent);
@@ -36,12 +47,14 @@ MainWindow::MainWindow(session::SessionController* controller, app::AppSettings*
             [this](const QString& error) {
                 statusBar()->showMessage(tr("Storage error: %1").arg(error), 8000);
             });
+    connect(qApp, &QCoreApplication::aboutToQuit, this, &MainWindow::shutdown);
 
     restoreTimeline();
     applyTheme(settingsSnapshot_.themeMode == app::ThemeMode::Dark ? ThemeDefinition::dark()
                                                                    : ThemeDefinition::light());
     applyInterfaceScale(settingsSnapshot_.interfaceScale);
     controller_->open();
+    QTimer::singleShot(0, this, &MainWindow::ensureWindowVisible);
 }
 
 void MainWindow::activateWindowForRequest(const std::optional<QString>& directory) {
@@ -49,15 +62,20 @@ void MainWindow::activateWindowForRequest(const std::optional<QString>& director
         directory.value() != controller_->conversation().workingDirectory) {
         statusBar()->showMessage(tr("Workspace request: %1").arg(directory.value()), 5000);
     }
-    showNormal();
+    setWindowState((windowState() & ~Qt::WindowMinimized) | Qt::WindowActive);
+    show();
     raise();
     activateWindow();
 }
 
 void MainWindow::closeEvent(QCloseEvent* event) {
-    // Tray behavior is added in M1's platform integration slice. Until then, close cleanly.
-    controller_->close();
-    settings_->save(settingsSnapshot_);
+    persistWindowState();
+    if (closeToTrayEnabled_ && !quitRequested_ && !qGuiApp->isSavingSession()) {
+        hide();
+        event->ignore();
+        return;
+    }
+    shutdown();
     event->accept();
 }
 
@@ -95,6 +113,18 @@ void MainWindow::applyDarkTheme() {
 void MainWindow::increaseScale() { applyInterfaceScale(settingsSnapshot_.interfaceScale + 0.1); }
 void MainWindow::decreaseScale() { applyInterfaceScale(settingsSnapshot_.interfaceScale - 0.1); }
 void MainWindow::resetScale() { applyInterfaceScale(1.0); }
+
+void MainWindow::requestQuit() {
+    if (!confirmQuit()) {
+        return;
+    }
+    quitRequested_ = true;
+    if (trayIcon_ != nullptr) {
+        trayIcon_->hide();
+    }
+    close();
+    qApp->quit();
+}
 
 void MainWindow::buildUi() {
     setWindowTitle(tr("Snack"));
@@ -212,8 +242,9 @@ void MainWindow::buildUi() {
 void MainWindow::buildMenus() {
     auto* fileMenu = menuBar()->addMenu(tr("File"));
     auto* quitAction = fileMenu->addAction(tr("Quit"));
+    quitAction->setObjectName(QStringLiteral("quitAction"));
     quitAction->setShortcut(QKeySequence::Quit);
-    connect(quitAction, &QAction::triggered, this, &QWidget::close);
+    connect(quitAction, &QAction::triggered, this, &MainWindow::requestQuit);
 
     auto* viewMenu = menuBar()->addMenu(tr("View"));
     auto* lightAction = viewMenu->addAction(tr("Light theme"));
@@ -293,6 +324,102 @@ void MainWindow::restoreTimeline() {
     }
     if (!error.isEmpty()) {
         statusBar()->showMessage(error, 8000);
+    }
+}
+
+void MainWindow::buildTray() {
+    if (!closeToTrayEnabled_) {
+        return;
+    }
+
+    trayIcon_ = new QSystemTrayIcon(qApp->windowIcon(), this);
+    trayIcon_->setToolTip(tr("Snack coding agent"));
+    auto* menu = new QMenu(this);
+    auto* openAction = menu->addAction(tr("Open Snack"));
+    menu->addSeparator();
+    auto* quitAction = menu->addAction(tr("Quit Snack"));
+    trayIcon_->setContextMenu(menu);
+
+    connect(openAction, &QAction::triggered, this,
+            [this] { activateWindowForRequest(std::nullopt); });
+    connect(quitAction, &QAction::triggered, this, &MainWindow::requestQuit);
+    connect(trayIcon_, &QSystemTrayIcon::activated, this,
+            [this](QSystemTrayIcon::ActivationReason reason) {
+                if (reason == QSystemTrayIcon::Trigger || reason == QSystemTrayIcon::DoubleClick) {
+                    activateWindowForRequest(std::nullopt);
+                }
+            });
+    trayIcon_->show();
+}
+
+void MainWindow::persistWindowState() {
+    settingsSnapshot_.mainWindowGeometry = saveGeometry();
+    settingsSnapshot_.mainWindowState = saveState(1);
+    settings_->save(settingsSnapshot_);
+}
+
+void MainWindow::restoreWindowState() {
+    if (!settingsSnapshot_.mainWindowGeometry.isEmpty()) {
+        restoreGeometry(settingsSnapshot_.mainWindowGeometry);
+    }
+    if (!settingsSnapshot_.mainWindowState.isEmpty()) {
+        restoreState(settingsSnapshot_.mainWindowState, 1);
+    }
+}
+
+void MainWindow::ensureWindowVisible() {
+    constexpr int minimumVisibleWidth = 128;
+    constexpr int minimumVisibleHeight = 80;
+    const QRect frame = frameGeometry();
+    for (const QScreen* screen : QGuiApplication::screens()) {
+        const QRect visible = frame.intersected(screen->availableGeometry());
+        if (visible.width() >= minimumVisibleWidth && visible.height() >= minimumVisibleHeight) {
+            return;
+        }
+    }
+
+    const QScreen* screen = QGuiApplication::primaryScreen();
+    if (screen == nullptr) {
+        return;
+    }
+    const QRect available = screen->availableGeometry();
+    move(available.center() - rect().center());
+}
+
+void MainWindow::shutdown() {
+    if (shutdownComplete_) {
+        return;
+    }
+    shutdownComplete_ = true;
+    persistWindowState();
+    controller_->close();
+}
+
+bool MainWindow::confirmQuit() {
+    if (!hasActiveWork()) {
+        return true;
+    }
+    QMessageBox prompt(QMessageBox::Warning, tr("Quit Snack?"),
+                       tr("The active Agent task will be interrupted and will not be sent again "
+                          "automatically."),
+                       QMessageBox::NoButton, this);
+    auto* quitButton = prompt.addButton(tr("Quit"), QMessageBox::AcceptRole);
+    auto* cancelButton = prompt.addButton(QMessageBox::Cancel);
+    prompt.setDefaultButton(cancelButton);
+    prompt.setEscapeButton(cancelButton);
+    prompt.exec();
+    return prompt.clickedButton() == quitButton;
+}
+
+bool MainWindow::hasActiveWork() const {
+    switch (controller_->status()) {
+    case domain::ConversationStatus::Connecting:
+    case domain::ConversationStatus::Running:
+    case domain::ConversationStatus::WaitingApproval:
+    case domain::ConversationStatus::WaitingInput:
+        return true;
+    default:
+        return false;
     }
 }
 

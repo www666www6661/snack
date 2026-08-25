@@ -13,6 +13,7 @@
 #include <QLocale>
 #include <QMessageBox>
 #include <QStandardPaths>
+#include <QSystemTrayIcon>
 #include <QTranslator>
 
 int main(int argc, char* argv[]) {
@@ -95,7 +96,9 @@ int main(int argc, char* argv[]) {
 
     snack::agent::FakeAgentAdapter adapter;
     snack::session::SessionController controller(conversation, &adapter, &eventStore);
-    snack::ui::MainWindow window(&controller, &settings);
+    const bool closeToTrayEnabled = QSystemTrayIcon::isSystemTrayAvailable();
+    application.setQuitOnLastWindowClosed(!closeToTrayEnabled);
+    snack::ui::MainWindow window(&controller, &settings, closeToTrayEnabled);
     QObject::connect(&singleInstance, &snack::app::SingleInstanceGuard::activationRequested,
                      &window, &snack::ui::MainWindow::activateWindowForRequest);
 

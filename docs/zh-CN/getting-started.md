@@ -78,4 +78,4 @@ ctest --test-dir build/macos-debug --output-on-failure
 
 新增行为必须同步添加 Qt Test。CI 在三个桌面平台构建并运行测试，Linux 使用 LLVM source-based coverage 执行第一方代码 80% 行覆盖率门禁。CI 不调用真实 Agent。
 
-2026-08-25 的 Windows LLVM-MinGW 基线：7/7 测试通过；单实例 IPC 连续重复 30 次通过；第一方测试目标行覆盖率 84.49%。正式 M1 验收仍需完成 Windows `clang-cl`、Linux 和 macOS 构建。
+2026-08-25 的 Windows LLVM-MinGW 基线：8/8 测试通过（包含运行库部署布局检查）；单实例 IPC 连续重复 30 次通过；第一方代码行覆盖率为 83.86%。正式 M1 验收仍需完成 Windows `clang-cl`、Linux 和 macOS 构建。

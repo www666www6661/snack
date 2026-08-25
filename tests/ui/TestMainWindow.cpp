@@ -4,13 +4,17 @@
 #include "storage/EventRepository.h"
 #include "ui/MainWindow.h"
 
+#include <QApplication>
 #include <QComboBox>
 #include <QDir>
+#include <QDockWidget>
 #include <QListWidget>
+#include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QTimer>
 
 class UiMemoryEventRepository final : public snack::storage::IEventRepository {
   public:
@@ -41,6 +45,9 @@ class TestMainWindow final : public QObject {
   private slots:
     void sendsAndRendersStreamingTurn();
     void restoresPersistedTimeline();
+    void hidesToTrayWithoutClosingSession();
+    void restoresWindowLayout();
+    void cancelsQuitWhileAgentIsRunning();
 };
 
 void TestMainWindow::sendsAndRendersStreamingTurn() {
@@ -124,6 +131,115 @@ void TestMainWindow::restoresPersistedTimeline() {
     QCOMPARE(timeline->count(), 2);
     QVERIFY(timeline->item(0)->text().contains(QStringLiteral("Persisted question")));
     QVERIFY(timeline->item(1)->text().contains(QStringLiteral("Persisted answer")));
+}
+
+void TestMainWindow::hidesToTrayWithoutClosingSession() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::app::AppSettings settings(directory.filePath(QStringLiteral("settings.ini")));
+    UiMemoryEventRepository repository;
+    snack::agent::FakeAgentAdapter adapter(nullptr, 1);
+    snack::domain::Conversation conversation;
+    conversation.title = QStringLiteral("Tray test");
+    conversation.workingDirectory = directory.path();
+    snack::session::SessionController controller(conversation, &adapter, &repository);
+    snack::ui::MainWindow window(&controller, &settings, true);
+
+    window.show();
+    QTRY_VERIFY(window.isVisible());
+    QTRY_COMPARE(controller.status(), snack::domain::ConversationStatus::Idle);
+    window.close();
+    QTRY_VERIFY(!window.isVisible());
+    QCOMPARE(controller.status(), snack::domain::ConversationStatus::Idle);
+
+    const auto saved = settings.load();
+    QVERIFY(!saved.mainWindowGeometry.isEmpty());
+    QVERIFY(!saved.mainWindowState.isEmpty());
+
+    window.activateWindowForRequest(std::nullopt);
+    QTRY_VERIFY(window.isVisible());
+    window.hide();
+    controller.close();
+}
+
+void TestMainWindow::restoresWindowLayout() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString settingsPath = directory.filePath(QStringLiteral("settings.ini"));
+    snack::app::AppSettings settings(settingsPath);
+    UiMemoryEventRepository firstRepository;
+    snack::agent::FakeAgentAdapter firstAdapter(nullptr, 1);
+    snack::domain::Conversation firstConversation;
+    firstConversation.title = QStringLiteral("Layout source");
+    firstConversation.workingDirectory = directory.path();
+
+    {
+        snack::session::SessionController controller(firstConversation, &firstAdapter,
+                                                     &firstRepository);
+        snack::ui::MainWindow window(&controller, &settings, false);
+        auto* taskDock = window.findChild<QDockWidget*>(QStringLiteral("taskDock"));
+        QVERIFY(taskDock != nullptr);
+        taskDock->setFloating(true);
+        taskDock->show();
+        window.resize(1360, 840);
+        window.show();
+        QTest::qWait(20);
+        window.close();
+    }
+
+    const auto saved = settings.load();
+    QVERIFY(!saved.mainWindowGeometry.isEmpty());
+    QVERIFY(!saved.mainWindowState.isEmpty());
+
+    UiMemoryEventRepository secondRepository;
+    snack::agent::FakeAgentAdapter secondAdapter(nullptr, 1);
+    snack::domain::Conversation secondConversation;
+    secondConversation.title = QStringLiteral("Layout target");
+    secondConversation.workingDirectory = directory.path();
+    snack::session::SessionController secondController(secondConversation, &secondAdapter,
+                                                       &secondRepository);
+    snack::ui::MainWindow restored(&secondController, &settings, false);
+    auto* restoredTaskDock = restored.findChild<QDockWidget*>(QStringLiteral("taskDock"));
+    QVERIFY(restoredTaskDock != nullptr);
+    QVERIFY(restoredTaskDock->isFloating());
+    QCOMPARE(restored.saveState(1), saved.mainWindowState);
+    restored.close();
+}
+
+void TestMainWindow::cancelsQuitWhileAgentIsRunning() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::app::AppSettings settings(directory.filePath(QStringLiteral("settings.ini")));
+    UiMemoryEventRepository repository;
+    snack::agent::FakeAgentAdapter adapter(nullptr, 20);
+    snack::domain::Conversation conversation;
+    conversation.title = QStringLiteral("Quit confirmation test");
+    conversation.workingDirectory = directory.path();
+    snack::session::SessionController controller(conversation, &adapter, &repository);
+    snack::ui::MainWindow window(&controller, &settings, false);
+
+    auto* composer = window.findChild<QPlainTextEdit*>(QStringLiteral("composer"));
+    auto* sendButton = window.findChild<QPushButton*>(QStringLiteral("sendButton"));
+    QVERIFY(composer != nullptr);
+    QVERIFY(sendButton != nullptr);
+    QTRY_VERIFY(sendButton->isEnabled());
+    composer->setPlainText(QStringLiteral("Keep running"));
+    sendButton->click();
+    QCOMPARE(controller.status(), snack::domain::ConversationStatus::Running);
+
+    bool promptFound = false;
+    QTimer::singleShot(0, [&promptFound] {
+        auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+        promptFound = prompt != nullptr;
+        if (prompt != nullptr) {
+            prompt->reject();
+        }
+    });
+    QVERIFY(QMetaObject::invokeMethod(&window, "requestQuit"));
+    QVERIFY(promptFound);
+    QVERIFY(controller.status() != snack::domain::ConversationStatus::Closed);
+    QTRY_COMPARE_WITH_TIMEOUT(controller.status(), snack::domain::ConversationStatus::Idle, 1000);
+    window.close();
 }
 
 QTEST_MAIN(TestMainWindow)

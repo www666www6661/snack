@@ -13,6 +13,7 @@ class QLabel;
 class QListWidget;
 class QPlainTextEdit;
 class QPushButton;
+class QSystemTrayIcon;
 
 namespace snack::ui {
 
@@ -22,6 +23,8 @@ class MainWindow final : public QMainWindow {
   public:
     MainWindow(session::SessionController* controller, app::AppSettings* settings,
                QWidget* parent = nullptr);
+    MainWindow(session::SessionController* controller, app::AppSettings* settings,
+               bool closeToTrayEnabled, QWidget* parent = nullptr);
 
     void activateWindowForRequest(const std::optional<QString>& directory);
 
@@ -36,6 +39,7 @@ class MainWindow final : public QMainWindow {
     void increaseScale();
     void decreaseScale();
     void resetScale();
+    void requestQuit();
 
   private:
     void buildUi();
@@ -45,6 +49,13 @@ class MainWindow final : public QMainWindow {
     void applyInterfaceScale(double scale);
     void updateStatus(domain::ConversationStatus status);
     void restoreTimeline();
+    void buildTray();
+    void persistWindowState();
+    void restoreWindowState();
+    void ensureWindowVisible();
+    void shutdown();
+    [[nodiscard]] bool confirmQuit();
+    [[nodiscard]] bool hasActiveWork() const;
 
     session::SessionController* controller_{nullptr};
     app::AppSettings* settings_{nullptr};
@@ -57,7 +68,11 @@ class MainWindow final : public QMainWindow {
     QComboBox* modelCombo_{nullptr};
     QComboBox* effortCombo_{nullptr};
     QComboBox* accessCombo_{nullptr};
+    QSystemTrayIcon* trayIcon_{nullptr};
     int activeAgentRow_{-1};
+    bool closeToTrayEnabled_{false};
+    bool quitRequested_{false};
+    bool shutdownComplete_{false};
 };
 
 } // namespace snack::ui

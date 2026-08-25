@@ -23,6 +23,9 @@ AppSettingsSnapshot AppSettings::load() const {
     result.lastWorkspace = settings_->value(QStringLiteral("session/lastWorkspace")).toString();
     result.lastConversationId =
         settings_->value(QStringLiteral("session/lastConversationId")).toString();
+    result.mainWindowGeometry =
+        settings_->value(QStringLiteral("window/mainGeometry")).toByteArray();
+    result.mainWindowState = settings_->value(QStringLiteral("window/mainState")).toByteArray();
     return result;
 }
 
@@ -33,6 +36,8 @@ void AppSettings::save(const AppSettingsSnapshot& snapshot) {
                         std::clamp(snapshot.interfaceScale, 0.8, 2.0));
     settings_->setValue(QStringLiteral("session/lastWorkspace"), snapshot.lastWorkspace);
     settings_->setValue(QStringLiteral("session/lastConversationId"), snapshot.lastConversationId);
+    settings_->setValue(QStringLiteral("window/mainGeometry"), snapshot.mainWindowGeometry);
+    settings_->setValue(QStringLiteral("window/mainState"), snapshot.mainWindowState);
     settings_->sync();
 }
 

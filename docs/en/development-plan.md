@@ -8,7 +8,7 @@ Deliver these bilingual documents, high-fidelity static designs, official capabi
 
 ## M1: skeleton and test foundation (`0.1.0-alpha.1`)
 
-Status: in progress. The first vertical slice now provides the application shell, settings and themes, single-instance IPC, the SQLite event repository, content-addressed storage, the common Agent interface, a fake streaming conversation, and Qt Test suites. A strict-warning Windows Qt 6.8.3/LLVM-MinGW build now passes 7/7 tests, 30 IPC repetitions, and 84.49% line coverage; this does not replace formal `clang-cl + MSVC ABI` verification. M1 acceptance still requires tray/window restoration, migration failure recovery, and builds with all three release toolchains.
+Status: in progress. The first vertical slice now provides the application shell, settings and themes, single-instance IPC, tray lifecycle, window/layout restoration, the SQLite event repository, content-addressed storage, the common Agent interface, a fake streaming conversation, and Qt Test suites. A strict-warning Windows Qt 6.8.3/LLVM-MinGW build now passes 8/8 tests, 30 IPC repetitions, and 83.86% first-party line coverage; this does not replace formal `clang-cl + MSVC ABI` verification. M1 acceptance still requires migration failure recovery and builds with all three release toolchains.
 
 CMake/Qt 6.8/C++20, Clang presets, Qt Test, LLVM coverage, metadata, localization, theme schema, logging, single instance, settings, mock agent, SQLite migrations, event/content interfaces, and GitHub Actions gates. Acceptance: the shell starts on all desktop platforms, a mock agent streams one turn, and UI events recover after a crash.
 

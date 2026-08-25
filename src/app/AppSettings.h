@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QByteArray>
 #include <QSettings>
 
 #include <memory>
@@ -14,6 +15,8 @@ struct AppSettingsSnapshot {
     double interfaceScale{1.0};
     QString lastWorkspace;
     QString lastConversationId;
+    QByteArray mainWindowGeometry;
+    QByteArray mainWindowState;
 };
 
 class AppSettings final {

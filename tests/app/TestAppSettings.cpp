@@ -21,6 +21,8 @@ void TestAppSettings::usesSafeDefaults() {
     QCOMPARE(snapshot.themeMode, snack::app::ThemeMode::System);
     QCOMPARE(snapshot.locale, QStringLiteral("system"));
     QCOMPARE(snapshot.interfaceScale, 1.0);
+    QVERIFY(snapshot.mainWindowGeometry.isEmpty());
+    QVERIFY(snapshot.mainWindowState.isEmpty());
 }
 
 void TestAppSettings::persistsValues() {
@@ -34,6 +36,8 @@ void TestAppSettings::persistsValues() {
         snapshot.locale = QStringLiteral("zh_CN");
         snapshot.interfaceScale = 1.4;
         snapshot.lastWorkspace = QStringLiteral("workspace");
+        snapshot.mainWindowGeometry = QByteArrayLiteral("geometry");
+        snapshot.mainWindowState = QByteArrayLiteral("state");
         settings.save(snapshot);
     }
 
@@ -43,6 +47,8 @@ void TestAppSettings::persistsValues() {
     QCOMPARE(snapshot.locale, QStringLiteral("zh_CN"));
     QCOMPARE(snapshot.interfaceScale, 1.4);
     QCOMPARE(snapshot.lastWorkspace, QStringLiteral("workspace"));
+    QCOMPARE(snapshot.mainWindowGeometry, QByteArrayLiteral("geometry"));
+    QCOMPARE(snapshot.mainWindowState, QByteArrayLiteral("state"));
 }
 
 void TestAppSettings::clampsInterfaceScale() {

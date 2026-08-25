@@ -78,4 +78,4 @@ The application stores its SQLite database, content blobs, and logs under `QStan
 
 Every behavior change includes Qt Test coverage. CI builds and tests on all three desktop platforms, while Linux enforces at least 80% first-party line coverage using LLVM source-based coverage. CI never calls a real Agent.
 
-Windows LLVM-MinGW baseline on 2026-08-25: 7/7 tests pass, the single-instance IPC test passes 30 consecutive repetitions, and first-party test targets reach 84.49% line coverage. Formal M1 acceptance still requires Windows `clang-cl`, Linux, and macOS builds.
+Windows LLVM-MinGW baseline on 2026-08-25: 8/8 tests pass, including the deployed runtime layout check, the single-instance IPC test passes 30 consecutive repetitions, and first-party line coverage is 83.86%. Formal M1 acceptance still requires Windows `clang-cl`, Linux, and macOS builds.
