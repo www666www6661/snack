@@ -93,12 +93,30 @@ QJsonObject makeTurnInterruptParameters(const QString& threadId, const QString& 
     return {{QStringLiteral("threadId"), threadId}, {QStringLiteral("turnId"), turnId}};
 }
 
+QJsonObject makeTurnSteerParameters(const QString& threadId, const QString& expectedTurnId,
+                                    const QString& message, const QString& clientUserMessageId) {
+    return {{QStringLiteral("threadId"), threadId},
+            {QStringLiteral("expectedTurnId"), expectedTurnId},
+            {QStringLiteral("input"),
+             QJsonArray{QJsonObject{{QStringLiteral("type"), QStringLiteral("text")},
+                                    {QStringLiteral("text"), message}}}},
+            {QStringLiteral("clientUserMessageId"), clientUserMessageId}};
+}
+
 std::optional<CodexTurnInfo> parseTurnStartResponse(const QJsonValue& result, QString* error) {
     if (!result.isObject()) {
         setError(error, QStringLiteral("Turn response must be an object"));
         return std::nullopt;
     }
     return parseTurnObject(result.toObject().value(QStringLiteral("turn")), error);
+}
+
+std::optional<QString> parseTurnSteerResponse(const QJsonValue& result, QString* error) {
+    if (!result.isObject()) {
+        setError(error, QStringLiteral("Turn steer response must be an object"));
+        return std::nullopt;
+    }
+    return requiredString(result.toObject(), QStringLiteral("turnId"), error);
 }
 
 std::optional<CodexTurnNotification> parseTurnNotification(const QJsonValue& params,

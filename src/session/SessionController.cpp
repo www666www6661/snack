@@ -67,6 +67,7 @@ SessionController::SessionController(domain::Conversation conversation,
     connect(adapter_, &agent::IAgentAdapter::turnFinished, this, [this](const QUuid& turnId, bool) {
         if (turnId == activeTurnId_) {
             activeTurnId_ = QUuid{};
+            activeTurnSettings_ = {};
             pendingApprovals_.clear();
             pendingUserInputs_.clear();
             setStatus(domain::ConversationStatus::Idle);
@@ -200,6 +201,7 @@ bool SessionController::sendMessage(const QString& message, QString* error) {
     }
 
     activeTurnId_ = QUuid::createUuid();
+    activeTurnSettings_ = nextTurnSettings_;
     domain::AgentEvent userEvent;
     userEvent.turnId = activeTurnId_;
     userEvent.type = domain::AgentEventType::UserMessage;
@@ -208,6 +210,37 @@ bool SessionController::sendMessage(const QString& message, QString* error) {
     recordEvent(userEvent);
     setStatus(domain::ConversationStatus::Running);
     adapter_->startTurn({activeTurnId_, trimmed, nextTurnSettings_});
+    return true;
+}
+
+bool SessionController::steerMessage(const QString& message, QString* error) {
+    const QString trimmed = message.trimmed();
+    if (trimmed.isEmpty()) {
+        if (error != nullptr) {
+            *error = QStringLiteral("Steer message cannot be empty");
+        }
+        return false;
+    }
+    if (conversation_.status != domain::ConversationStatus::Running || activeTurnId_.isNull() ||
+        !capabilities_.supportsSteering) {
+        if (error != nullptr) {
+            *error = QStringLiteral("The active turn cannot accept steering");
+        }
+        return false;
+    }
+    if (!adapter_->steerTurn({activeTurnId_, trimmed})) {
+        if (error != nullptr) {
+            *error = QStringLiteral("Failed to send steer message");
+        }
+        return false;
+    }
+    domain::AgentEvent event;
+    event.turnId = activeTurnId_;
+    event.type = domain::AgentEventType::UserMessage;
+    event.payload = {{QStringLiteral("text"), trimmed},
+                     {QStringLiteral("steered"), true},
+                     {QStringLiteral("settings"), activeTurnSettings_.toJson()}};
+    recordEvent(event);
     return true;
 }
 
@@ -283,6 +316,7 @@ void SessionController::interrupt() {
 void SessionController::close() {
     adapter_->closeAgent();
     activeTurnId_ = QUuid{};
+    activeTurnSettings_ = {};
     pendingApprovals_.clear();
     pendingUserInputs_.clear();
     setStatus(domain::ConversationStatus::Closed);

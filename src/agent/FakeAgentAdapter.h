@@ -19,8 +19,10 @@ class FakeAgentAdapter final : public IAgentAdapter {
     [[nodiscard]] domain::ApprovalDecision lastApprovalDecision() const;
     [[nodiscard]] QString lastUserInputRequestId() const;
     [[nodiscard]] QJsonObject lastUserInputAnswers() const;
+    [[nodiscard]] SteerRequest lastSteerRequest() const;
     void connectAgent(const AgentConnectionRequest& request) override;
     void startTurn(const TurnRequest& request) override;
+    bool steerTurn(const SteerRequest& request) override;
     bool respondToApproval(const QString& requestId, domain::ApprovalDecision decision) override;
     bool respondToUserInput(const QString& requestId, const QJsonObject& answers) override;
     void interruptTurn() override;
@@ -43,6 +45,7 @@ class FakeAgentAdapter final : public IAgentAdapter {
     domain::ApprovalDecision lastApprovalDecision_{domain::ApprovalDecision::Decline};
     QString lastUserInputRequestId_;
     QJsonObject lastUserInputAnswers_;
+    SteerRequest lastSteerRequest_;
 };
 
 } // namespace snack::agent

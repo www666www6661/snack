@@ -26,6 +26,7 @@ class SessionController final : public QObject {
 
     void open();
     bool sendMessage(const QString& message, QString* error = nullptr);
+    bool steerMessage(const QString& message, QString* error = nullptr);
     bool respondToApproval(const QString& requestId, domain::ApprovalDecision decision,
                            QString* error = nullptr);
     bool respondToUserInput(const QString& requestId, const QJsonObject& answers,
@@ -60,6 +61,7 @@ class SessionController final : public QObject {
     agent::CapabilitySet capabilities_;
     QString connectionDetail_;
     QUuid activeTurnId_;
+    domain::TurnSettingsSnapshot activeTurnSettings_;
     QHash<QString, QJsonObject> pendingApprovals_;
     QHash<QString, QJsonObject> pendingUserInputs_;
     quint64 nextSequence_{1};

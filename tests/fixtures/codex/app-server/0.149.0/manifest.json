@@ -38,7 +38,13 @@
     "schema/ServerRequestResolvedNotification.json",
     "schema/ToolRequestUserInputParams.json",
     "schema/ToolRequestUserInputResponse.json",
-    "schema/ThreadTokenUsageUpdatedNotification.json"
+    "schema/ThreadTokenUsageUpdatedNotification.json",
+    "schema/TurnSteerParams.json",
+    "schema/TurnSteerResponse.json",
+    "schema/ThreadListParams.json",
+    "schema/ThreadListResponse.json",
+    "schema/ThreadReadParams.json",
+    "schema/ThreadReadResponse.json"
   ],
   "fixtures": [
     "initialize-success.jsonl",
@@ -50,6 +56,7 @@
     "turn-interrupted.jsonl",
     "approval-flow.jsonl",
     "tool-reasoning-plan.jsonl",
-    "user-input-usage.jsonl"
+    "user-input-usage.jsonl",
+    "thread-catalog-steer.jsonl"
   ]
 }

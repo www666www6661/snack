@@ -47,7 +47,7 @@ CodexAdapter::CodexAdapter(CliInstallation installation, process::IProcessTransp
                                 : QStringLiteral("codex-app-server/%1").arg(installation_.version);
     capabilities_.accessLevels = {domain::AccessLevel::Strict, domain::AccessLevel::Workspace,
                                   domain::AccessLevel::Full};
-    capabilities_.supportsSteering = false;
+    capabilities_.supportsSteering = true;
     capabilities_.supportsInterrupt = true;
 
     connect(&client_, &CodexAppServerClient::handshakeCompleted, this,
@@ -66,6 +66,8 @@ CodexAdapter::CodexAdapter(CliInstallation installation, process::IProcessTransp
             connecting_ = false;
             connected_ = false;
             closing_ = false;
+            threadListRequestId_ = 0;
+            threadReadRequestId_ = 0;
             if (wasActive) {
                 emit connectionChanged(false, QStringLiteral("closed"));
             }
@@ -196,6 +198,19 @@ void CodexAdapter::startTurn(const TurnRequest& request) {
     }
 }
 
+bool CodexAdapter::steerTurn(const SteerRequest& request) {
+    const QString message = request.message.trimmed();
+    if (!connected_ || activeTurn_.turnId.isNull() || request.turnId != activeTurn_.turnId ||
+        nativeTurnId_.isEmpty() || steerRequestId_ != 0 || message.isEmpty()) {
+        return false;
+    }
+    const QString clientMessageId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    steerRequestId_ = client_.sendRequest(
+        QStringLiteral("turn/steer"),
+        makeTurnSteerParameters(nativeThreadId_, nativeTurnId_, message, clientMessageId));
+    return steerRequestId_ != 0;
+}
+
 bool CodexAdapter::respondToApproval(const QString& requestId, domain::ApprovalDecision decision) {
     const auto iterator = pendingApprovals_.find(requestId);
     if (iterator == pendingApprovals_.end() || activeTurn_.turnId.isNull()) {
@@ -226,6 +241,25 @@ bool CodexAdapter::respondToUserInput(const QString& requestId, const QJsonObjec
     userInputTokenByNativeKey_.remove(nativeRequestKey(iterator->nativeRequestId));
     pendingUserInputs_.erase(iterator);
     return true;
+}
+
+bool CodexAdapter::requestNativeThreadPage(const QString& cursor) {
+    if (!connected_ || threadListRequestId_ != 0) {
+        return false;
+    }
+    threadListRequestId_ =
+        client_.sendRequest(QStringLiteral("thread/list"),
+                            makeThreadListParameters(connectionRequest_.workingDirectory, cursor));
+    return threadListRequestId_ != 0;
+}
+
+bool CodexAdapter::requestNativeThread(const QString& threadId, bool includeTurns) {
+    if (!connected_ || threadReadRequestId_ != 0 || threadId.trimmed().isEmpty()) {
+        return false;
+    }
+    threadReadRequestId_ = client_.sendRequest(QStringLiteral("thread/read"),
+                                               makeThreadReadParameters(threadId, includeTurns));
+    return threadReadRequestId_ != 0;
 }
 
 void CodexAdapter::interruptTurn() {
@@ -299,12 +333,49 @@ void CodexAdapter::handleResponse(qint64 id, const QString& method, const QJsonV
         return;
     }
 
-    if (!connected_ || activeTurn_.turnId.isNull()) {
+    if (!connected_) {
+        return;
+    }
+    if (id == threadListRequestId_ && method == QLatin1String("thread/list")) {
+        threadListRequestId_ = 0;
+        QString error;
+        const auto page = parseThreadListResponse(result, &error);
+        if (page.has_value()) {
+            emit nativeThreadPageReceived(*page);
+        } else {
+            emit nativeThreadQueryFailed(
+                method, QStringLiteral("Invalid thread/list response: %1").arg(error));
+        }
+        return;
+    }
+    if (id == threadReadRequestId_ && method == QLatin1String("thread/read")) {
+        threadReadRequestId_ = 0;
+        QString error;
+        const auto thread = parseThreadLifecycleResponse(result, &error);
+        if (thread.has_value()) {
+            emit nativeThreadReceived(*thread);
+        } else {
+            emit nativeThreadQueryFailed(
+                method, QStringLiteral("Invalid thread/read response: %1").arg(error));
+        }
+        return;
+    }
+    if (activeTurn_.turnId.isNull()) {
         return;
     }
     if (id == turnRequestId_ && method == QLatin1String("turn/start")) {
         turnRequestId_ = 0;
         finishTurnStart(result);
+        return;
+    }
+    if (id == steerRequestId_ && method == QLatin1String("turn/steer")) {
+        steerRequestId_ = 0;
+        QString error;
+        const auto turnId = parseTurnSteerResponse(result, &error);
+        if (!turnId.has_value() || *turnId != nativeTurnId_) {
+            warnActive(QStringLiteral("Invalid Codex turn/steer response: %1")
+                           .arg(turnId.has_value() ? QStringLiteral("turn id mismatch") : error));
+        }
         return;
     }
     if (id == interruptRequestId_ && method == QLatin1String("turn/interrupt")) {
@@ -324,6 +395,18 @@ void CodexAdapter::handleRequestFailure(qint64 id, const QString& method, int co
             QStringLiteral("Codex %1 request failed (%2): %3").arg(method).arg(code).arg(message));
         return;
     }
+    if (connected_ && id == threadListRequestId_ && method == QLatin1String("thread/list")) {
+        threadListRequestId_ = 0;
+        emit nativeThreadQueryFailed(
+            method, QStringLiteral("Codex thread/list failed (%1): %2").arg(code).arg(message));
+        return;
+    }
+    if (connected_ && id == threadReadRequestId_ && method == QLatin1String("thread/read")) {
+        threadReadRequestId_ = 0;
+        emit nativeThreadQueryFailed(
+            method, QStringLiteral("Codex thread/read failed (%1): %2").arg(code).arg(message));
+        return;
+    }
     if (connected_ && !activeTurn_.turnId.isNull() && id == turnRequestId_ &&
         method == QLatin1String("turn/start")) {
         turnRequestId_ = 0;
@@ -340,6 +423,13 @@ void CodexAdapter::handleRequestFailure(qint64 id, const QString& method, int co
         interruptSent_ = false;
         warnActive(
             QStringLiteral("Codex turn/interrupt request failed (%1): %2").arg(code).arg(message));
+        return;
+    }
+    if (connected_ && !activeTurn_.turnId.isNull() && id == steerRequestId_ &&
+        method == QLatin1String("turn/steer")) {
+        steerRequestId_ = 0;
+        warnActive(
+            QStringLiteral("Codex turn/steer request failed (%1): %2").arg(code).arg(message));
     }
 }
 
@@ -1080,6 +1170,7 @@ void CodexAdapter::finishActiveTurn(domain::AgentEventType type, const QString& 
     reasoningSummaries_.clear();
     activeItems_.clear();
     turnRequestId_ = 0;
+    steerRequestId_ = 0;
     interruptRequestId_ = 0;
     turnStartedEmitted_ = false;
     interruptRequested_ = false;

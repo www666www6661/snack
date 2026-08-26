@@ -25,10 +25,18 @@ class CodexAdapter final : public IAgentAdapter {
     [[nodiscard]] CapabilitySet capabilities() const override;
     void connectAgent(const AgentConnectionRequest& request) override;
     void startTurn(const TurnRequest& request) override;
+    bool steerTurn(const SteerRequest& request) override;
     bool respondToApproval(const QString& requestId, domain::ApprovalDecision decision) override;
     bool respondToUserInput(const QString& requestId, const QJsonObject& answers) override;
+    bool requestNativeThreadPage(const QString& cursor = {});
+    bool requestNativeThread(const QString& threadId, bool includeTurns = true);
     void interruptTurn() override;
     void closeAgent() override;
+
+  signals:
+    void nativeThreadPageReceived(const snack::agent::codex::CodexThreadPage& page);
+    void nativeThreadReceived(const snack::agent::codex::CodexThreadInfo& thread);
+    void nativeThreadQueryFailed(const QString& method, const QString& detail);
 
   private:
     void requestModelPage(const QString& cursor = {});
@@ -81,7 +89,10 @@ class CodexAdapter final : public IAgentAdapter {
     QString threadRequestMethod_;
     qint64 modelRequestId_{0};
     qint64 threadRequestId_{0};
+    qint64 threadListRequestId_{0};
+    qint64 threadReadRequestId_{0};
     qint64 turnRequestId_{0};
+    qint64 steerRequestId_{0};
     qint64 interruptRequestId_{0};
     bool turnStartedEmitted_{false};
     bool interruptRequested_{false};

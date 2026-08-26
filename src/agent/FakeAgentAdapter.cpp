@@ -48,6 +48,8 @@ QString FakeAgentAdapter::lastUserInputRequestId() const { return lastUserInputR
 
 QJsonObject FakeAgentAdapter::lastUserInputAnswers() const { return lastUserInputAnswers_; }
 
+SteerRequest FakeAgentAdapter::lastSteerRequest() const { return lastSteerRequest_; }
+
 void FakeAgentAdapter::connectAgent(const AgentConnectionRequest& request) {
     lastConnectionRequest_ = request;
     QTimer::singleShot(0, this, [this] {
@@ -70,6 +72,14 @@ void FakeAgentAdapter::startTurn(const TurnRequest& request) {
               {{QStringLiteral("settings"), request.settings.toJson()}});
     emitEvent(domain::AgentEventType::AgentMessageStart);
     timer_.start(chunkDelayMs_);
+}
+
+bool FakeAgentAdapter::steerTurn(const SteerRequest& request) {
+    if (request.turnId != activeRequest_.turnId || request.message.trimmed().isEmpty()) {
+        return false;
+    }
+    lastSteerRequest_ = request;
+    return true;
 }
 
 bool FakeAgentAdapter::respondToApproval(const QString& requestId,

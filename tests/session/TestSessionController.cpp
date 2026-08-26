@@ -46,6 +46,7 @@ class TestSessionController final : public QObject {
   private slots:
     void streamsAndPersistsTurn();
     void snapshotsSettingsPerTurn();
+    void steersActiveTurn();
     void interruptsActiveTurn();
     void handlesApprovalLifecycle();
     void handlesUserInputLifecycleAndConcurrentWaitingStates();
@@ -98,6 +99,42 @@ void TestSessionController::snapshotsSettingsPerTurn() {
         repository.events_.constFirst().payload.value(QStringLiteral("settings")).toObject());
     QCOMPARE(saved.modelId, QStringLiteral("mock-fast"));
     QCOMPARE(saved.reasoningEffort, snack::domain::ReasoningEffort::Low);
+}
+
+void TestSessionController::steersActiveTurn() {
+    MemoryEventRepository repository;
+    snack::agent::FakeAgentAdapter adapter(nullptr, 1000);
+    snack::session::SessionController controller(conversation(), &adapter, &repository);
+    QString error;
+    QVERIFY(!controller.steerMessage(QStringLiteral("too early"), &error));
+    controller.open();
+    QTRY_COMPARE(controller.status(), snack::domain::ConversationStatus::Idle);
+    QVERIFY(controller.sendMessage(QStringLiteral("initial")));
+    const QUuid turnId = repository.events_.constFirst().turnId;
+    QVERIFY(!controller.steerMessage(QStringLiteral("   "), &error));
+    QVERIFY(error.contains(QStringLiteral("empty")));
+    QVERIFY(controller.steerMessage(QStringLiteral(" focus tests "), &error));
+    QCOMPARE(adapter.lastSteerRequest().turnId, turnId);
+    QCOMPARE(adapter.lastSteerRequest().message, QStringLiteral("focus tests"));
+    QCOMPARE(repository.events_.constLast().type, snack::domain::AgentEventType::UserMessage);
+    QVERIFY(repository.events_.constLast().payload.value(QStringLiteral("steered")).toBool());
+    QCOMPARE(repository.events_.constLast().payload.value(QStringLiteral("text")).toString(),
+             QStringLiteral("focus tests"));
+    QCOMPARE(repository.events_.constLast()
+                 .payload.value(QStringLiteral("settings"))
+                 .toObject()
+                 .value(QStringLiteral("modelId"))
+                 .toString(),
+             controller.nextTurnSettings().modelId);
+
+    snack::domain::AgentEvent approval;
+    approval.turnId = turnId;
+    approval.type = snack::domain::AgentEventType::ApprovalRequested;
+    approval.payload = {{QStringLiteral("requestId"), QStringLiteral("approval")}};
+    adapter.eventReceived(approval);
+    QVERIFY(!controller.steerMessage(QStringLiteral("blocked"), &error));
+    QVERIFY(error.contains(QStringLiteral("cannot accept")));
+    controller.interrupt();
 }
 
 void TestSessionController::interruptsActiveTurn() {

@@ -1,0 +1,3 @@
+{"id":101,"result":{"data":[{"id":"thread-a","sessionId":"session-a","cwd":"C:/workspace","cliVersion":"0.149.0","createdAt":1,"updatedAt":2,"ephemeral":false,"modelProvider":"openai","preview":"First thread","projectId":"project-a","source":"appServer","status":{"type":"idle"},"turns":[]}],"nextCursor":"page-2","backwardsCursor":null}}
+{"id":102,"result":{"thread":{"id":"thread-a","sessionId":"session-a","cwd":"C:/workspace","cliVersion":"0.149.0","createdAt":1,"updatedAt":2,"ephemeral":false,"modelProvider":"openai","preview":"First thread","projectId":"project-a","source":"appServer","status":{"type":"idle"},"turns":[]}}}
+{"id":103,"result":{"turnId":"turn-active"}}

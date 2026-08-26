@@ -90,6 +90,7 @@ class TestCodexAppServer final : public QObject {
     void parsesUserInputAndTokenUsage();
     void adapterPublishesPaginatedCapabilities();
     void adapterStreamsAndCompletesTurn();
+    void adapterSteersActiveTurn();
     void adapterMapsToolReasoningAndPlanEvents();
     void adapterHandlesTurnFailuresAndStaleEvents();
     void adapterInterruptsAndDeclinesServerRequests();
@@ -110,6 +111,8 @@ class TestCodexAppServer final : public QObject {
 void TestCodexAppServer::initTestCase() {
     qRegisterMetaType<snack::agent::codex::ConnectionState>();
     qRegisterMetaType<snack::agent::codex::ServerInfo>();
+    qRegisterMetaType<snack::agent::codex::CodexThreadInfo>();
+    qRegisterMetaType<snack::agent::codex::CodexThreadPage>();
 }
 
 void TestCodexAppServer::parsesProtocolEnvelopes() {
@@ -365,8 +368,8 @@ void TestCodexAppServer::loadsVersionedSchemaContract() {
     QVERIFY(manifestFile.open(QIODevice::ReadOnly));
     const QJsonObject manifest = QJsonDocument::fromJson(manifestFile.readAll()).object();
     QCOMPARE(manifest.value(QStringLiteral("cliVersion")).toString(), QStringLiteral("0.149.0"));
-    QCOMPARE(manifest.value(QStringLiteral("schemas")).toArray().size(), 36);
-    QCOMPARE(manifest.value(QStringLiteral("fixtures")).toArray().size(), 10);
+    QCOMPARE(manifest.value(QStringLiteral("schemas")).toArray().size(), 42);
+    QCOMPARE(manifest.value(QStringLiteral("fixtures")).toArray().size(), 11);
 
     const QStringList schemaNames = {QStringLiteral("JSONRPCMessage.json"),
                                      QStringLiteral("InitializeParams.json"),
@@ -403,7 +406,13 @@ void TestCodexAppServer::loadsVersionedSchemaContract() {
                                      QStringLiteral("ServerRequestResolvedNotification.json"),
                                      QStringLiteral("ToolRequestUserInputParams.json"),
                                      QStringLiteral("ToolRequestUserInputResponse.json"),
-                                     QStringLiteral("ThreadTokenUsageUpdatedNotification.json")};
+                                     QStringLiteral("ThreadTokenUsageUpdatedNotification.json"),
+                                     QStringLiteral("TurnSteerParams.json"),
+                                     QStringLiteral("TurnSteerResponse.json"),
+                                     QStringLiteral("ThreadListParams.json"),
+                                     QStringLiteral("ThreadListResponse.json"),
+                                     QStringLiteral("ThreadReadParams.json"),
+                                     QStringLiteral("ThreadReadResponse.json")};
     for (const QString& schemaName : schemaNames) {
         QFile schemaFile(fixtureRoot + QStringLiteral("/schema/") + schemaName);
         QVERIFY2(schemaFile.open(QIODevice::ReadOnly), qPrintable(schemaFile.errorString()));
@@ -587,7 +596,7 @@ void TestCodexAppServer::rejectsInvalidModelCatalog() {
 }
 
 void TestCodexAppServer::parsesThreadLifecycleResponses() {
-    using snack::agent::codex::parseThreadLifecycleResponse;
+    using namespace snack::agent::codex;
     QString error;
     const auto parsed = parseThreadLifecycleResponse(threadResult(), &error);
     QVERIFY2(parsed.has_value(), qPrintable(error));
@@ -606,6 +615,35 @@ void TestCodexAppServer::parsesThreadLifecycleResponses() {
     missingSession.insert(QStringLiteral("thread"), thread);
     QVERIFY(!parseThreadLifecycleResponse(missingSession, &error).has_value());
     QVERIFY(error.contains(QStringLiteral("sessionId")));
+
+    const QJsonObject listParams =
+        makeThreadListParameters(QStringLiteral("C:/workspace"), QStringLiteral("cursor-1"), 25);
+    QCOMPARE(listParams.value(QStringLiteral("cwd")).toString(), QStringLiteral("C:/workspace"));
+    QCOMPARE(listParams.value(QStringLiteral("cursor")).toString(), QStringLiteral("cursor-1"));
+    QCOMPARE(listParams.value(QStringLiteral("limit")).toInt(), 25);
+    QCOMPARE(listParams.value(QStringLiteral("sourceKinds")).toArray().at(0).toString(),
+             QStringLiteral("appServer"));
+    QCOMPARE(makeThreadReadParameters(QStringLiteral("thread-1"), false)
+                 .value(QStringLiteral("includeTurns"))
+                 .toBool(),
+             false);
+
+    const QJsonObject threadObject = threadResult().value(QStringLiteral("thread")).toObject();
+    const auto page = parseThreadListResponse(
+        QJsonObject{{QStringLiteral("data"), QJsonArray{threadObject}},
+                    {QStringLiteral("nextCursor"), QStringLiteral("page-2")},
+                    {QStringLiteral("backwardsCursor"), QJsonValue::Null}},
+        &error);
+    QVERIFY2(page.has_value(), qPrintable(error));
+    QCOMPARE(page->threads.size(), 1);
+    QCOMPARE(page->threads.constFirst().id, QStringLiteral("0198-thread-snack"));
+    QCOMPARE(page->nextCursor, QStringLiteral("page-2"));
+    QVERIFY(page->backwardsCursor.isEmpty());
+    QVERIFY(!parseThreadListResponse(QJsonObject{}, &error).has_value());
+    QVERIFY(!parseThreadListResponse(QJsonObject{{QStringLiteral("data"), QJsonArray{threadObject}},
+                                                 {QStringLiteral("nextCursor"), 7}},
+                                     &error)
+                 .has_value());
 }
 
 void TestCodexAppServer::mapsThreadAccessLevels() {
@@ -670,6 +708,19 @@ void TestCodexAppServer::mapsAndParsesTurnLifecycle() {
                  .value(QStringLiteral("turnId"))
                  .toString(),
              QStringLiteral("turn-1"));
+    const QJsonObject steer =
+        makeTurnSteerParameters(QStringLiteral("thread-1"), QStringLiteral("turn-1"),
+                                QStringLiteral("focus tests"), QStringLiteral("client-message-1"));
+    QCOMPARE(steer.value(QStringLiteral("expectedTurnId")).toString(), QStringLiteral("turn-1"));
+    QCOMPARE(steer.value(QStringLiteral("clientUserMessageId")).toString(),
+             QStringLiteral("client-message-1"));
+    QCOMPARE(steer.value(QStringLiteral("input"))
+                 .toArray()
+                 .at(0)
+                 .toObject()
+                 .value(QStringLiteral("text"))
+                 .toString(),
+             QStringLiteral("focus tests"));
 
     QString error;
     const auto response = parseTurnStartResponse(
@@ -678,6 +729,11 @@ void TestCodexAppServer::mapsAndParsesTurnLifecycle() {
         &error);
     QVERIFY2(response.has_value(), qPrintable(error));
     QCOMPARE(response->id, QStringLiteral("turn-1"));
+    const auto steerResponse = parseTurnSteerResponse(
+        QJsonObject{{QStringLiteral("turnId"), QStringLiteral("turn-1")}}, &error);
+    QVERIFY2(steerResponse.has_value(), qPrintable(error));
+    QCOMPARE(*steerResponse, QStringLiteral("turn-1"));
+    QVERIFY(!parseTurnSteerResponse(QJsonObject{}, &error).has_value());
     const auto completed = parseTurnNotification(
         QJsonObject{
             {QStringLiteral("threadId"), QStringLiteral("thread-1")},
@@ -914,6 +970,50 @@ void TestCodexAppServer::adapterPublishesPaginatedCapabilities() {
     QCOMPARE(connectionSpy.count(), 1);
     QVERIFY(connectionSpy.constFirst().constFirst().toBool());
 
+    QSignalSpy pageSpy(&adapter, &CodexAdapter::nativeThreadPageReceived);
+    QSignalSpy threadSpy(&adapter, &CodexAdapter::nativeThreadReceived);
+    QSignalSpy queryFailureSpy(&adapter, &CodexAdapter::nativeThreadQueryFailed);
+    QVERIFY(adapter.requestNativeThreadPage());
+    QCOMPARE(lastRequest(transport).method, QStringLiteral("thread/list"));
+    QVERIFY(!adapter.requestNativeThreadPage());
+    const QJsonObject nativeThread = threadResult().value(QStringLiteral("thread")).toObject();
+    feedResult(transport, lastRequest(transport).id.toInteger(),
+               QJsonObject{{QStringLiteral("data"), QJsonArray{nativeThread}},
+                           {QStringLiteral("nextCursor"), QJsonValue::Null},
+                           {QStringLiteral("backwardsCursor"), QJsonValue::Null}});
+    QCOMPARE(pageSpy.count(), 1);
+    QCOMPARE(pageSpy.constFirst().constFirst().value<CodexThreadPage>().threads.constFirst().id,
+             QStringLiteral("0198-thread-snack"));
+
+    QVERIFY(adapter.requestNativeThread(QStringLiteral("0198-thread-snack"), false));
+    QCOMPARE(lastRequest(transport).method, QStringLiteral("thread/read"));
+    QVERIFY(!adapter.requestNativeThread(QStringLiteral("another-thread")));
+    QCOMPARE(
+        lastRequest(transport).params.toObject().value(QStringLiteral("includeTurns")).toBool(),
+        false);
+    feedResult(transport, lastRequest(transport).id.toInteger(), threadResult());
+    QCOMPARE(threadSpy.count(), 1);
+    QCOMPARE(threadSpy.constFirst().constFirst().value<CodexThreadInfo>().sessionId,
+             QStringLiteral("0198-session-root"));
+
+    QVERIFY(adapter.requestNativeThreadPage(QStringLiteral("bad-page")));
+    feedResult(transport, lastRequest(transport).id.toInteger(), QJsonObject{});
+    QCOMPARE(queryFailureSpy.count(), 1);
+    QCOMPARE(queryFailureSpy.constFirst().constFirst().toString(), QStringLiteral("thread/list"));
+    QVERIFY(!adapter.requestNativeThread(QString{}));
+    QVERIFY(adapter.requestNativeThread(QStringLiteral("missing-thread")));
+    const qint64 missingThreadRequest = lastRequest(transport).id.toInteger();
+    transport.feedStandardOutput(
+        QJsonDocument(QJsonObject{{QStringLiteral("id"), missingThreadRequest},
+                                  {QStringLiteral("error"),
+                                   QJsonObject{{QStringLiteral("code"), -32004},
+                                               {QStringLiteral("message"),
+                                                QStringLiteral("thread not found")}}}})
+            .toJson(QJsonDocument::Compact) +
+        '\n');
+    QCOMPARE(queryFailureSpy.count(), 2);
+    QCOMPARE(queryFailureSpy.constLast().constFirst().toString(), QStringLiteral("thread/read"));
+
     adapter.closeAgent();
     QCOMPARE(connectionSpy.count(), 2);
     QVERIFY(!connectionSpy.constLast().constFirst().toBool());
@@ -1027,6 +1127,80 @@ void TestCodexAppServer::adapterStreamsAndCompletesTurn() {
          {QStringLiteral("turn"), turnObject(nativeTurnId, QStringLiteral("completed"))}});
     QCOMPARE(eventSpy.count(), expected.size());
     QCOMPARE(finishedSpy.count(), 1);
+    adapter.closeAgent();
+}
+
+void TestCodexAppServer::adapterSteersActiveTurn() {
+    using namespace snack::agent::codex;
+    using snack::domain::AgentEvent;
+    using snack::domain::AgentEventType;
+
+    FakeProcessTransport transport;
+    CodexAdapter adapter({.status = CliStatus::Available,
+                          .executablePath = QStringLiteral("codex"),
+                          .version = QStringLiteral("0.149.0")},
+                         &transport);
+    connectAdapter(adapter, transport);
+    QVERIFY(adapter.capabilities().supportsSteering);
+    QSignalSpy eventSpy(&adapter, &CodexAdapter::eventReceived);
+
+    const QUuid guiTurnId = QUuid::createUuid();
+    adapter.startTurn(codexTurnRequest(guiTurnId));
+    QVERIFY(!adapter.steerTurn({guiTurnId, QStringLiteral("too early")}));
+    const QString nativeTurnId = QStringLiteral("turn-steer-1");
+    feedResult(transport, lastRequest(transport).id.toInteger(),
+               QJsonObject{{QStringLiteral("turn"),
+                            turnObject(nativeTurnId, QStringLiteral("inProgress"))}});
+
+    QVERIFY(adapter.steerTurn({guiTurnId, QStringLiteral(" focus the tests ")}));
+    const ProtocolMessage steer = lastRequest(transport);
+    QCOMPARE(steer.method, QStringLiteral("turn/steer"));
+    QCOMPARE(steer.params.toObject().value(QStringLiteral("expectedTurnId")).toString(),
+             nativeTurnId);
+    QCOMPARE(steer.params.toObject()
+                 .value(QStringLiteral("input"))
+                 .toArray()
+                 .at(0)
+                 .toObject()
+                 .value(QStringLiteral("text"))
+                 .toString(),
+             QStringLiteral("focus the tests"));
+    QVERIFY(!adapter.steerTurn({guiTurnId, QStringLiteral("second while pending")}));
+    feedResult(transport, steer.id.toInteger(),
+               QJsonObject{{QStringLiteral("turnId"), nativeTurnId}});
+
+    QVERIFY(adapter.steerTurn({guiTurnId, QStringLiteral("failure path")}));
+    const qint64 failedId = lastRequest(transport).id.toInteger();
+    transport.feedStandardOutput(
+        QJsonDocument(
+            QJsonObject{{QStringLiteral("id"), failedId},
+                        {QStringLiteral("error"), QJsonObject{{QStringLiteral("code"), -32000},
+                                                              {QStringLiteral("message"),
+                                                               QStringLiteral("not steerable")}}}})
+            .toJson(QJsonDocument::Compact) +
+        '\n');
+    QCOMPARE(eventSpy.constLast().constFirst().value<AgentEvent>().type,
+             AgentEventType::WarningRaised);
+
+    QVERIFY(adapter.steerTurn({guiTurnId, QStringLiteral("mismatch path")}));
+    feedResult(transport, lastRequest(transport).id.toInteger(),
+               QJsonObject{{QStringLiteral("turnId"), QStringLiteral("another-turn")}});
+    QCOMPARE(eventSpy.constLast().constFirst().value<AgentEvent>().type,
+             AgentEventType::WarningRaised);
+    QVERIFY(eventSpy.constLast()
+                .constFirst()
+                .value<AgentEvent>()
+                .payload.value(QStringLiteral("message"))
+                .toString()
+                .contains(QStringLiteral("mismatch")));
+
+    feedNotification(
+        transport, QStringLiteral("turn/completed"),
+        {{QStringLiteral("threadId"), QStringLiteral("0198-thread-snack")},
+         {QStringLiteral("turn"), turnObject(nativeTurnId, QStringLiteral("completed"))}});
+    QCOMPARE(eventSpy.constLast().constFirst().value<AgentEvent>().type,
+             AgentEventType::TurnCompleted);
+    QVERIFY(!adapter.steerTurn({guiTurnId, QStringLiteral("too late")}));
     adapter.closeAgent();
 }
 

@@ -26,6 +26,10 @@ M2 的连接、Thread、文本 Turn、审批、用户提问、用量与活动事
 
 每轮 `turn/start` 发送文本输入和 GUI Turn UUID，并按该轮不可变快照覆盖 `model`、`effort`、`cwd`、`approvalPolicy` 与 `sandboxPolicy`。`turn/started`、`item/started`、`item/agentMessage/delta`、`item/completed`、`error` 与 `turn/completed` 被映射为统一领域事件。适配器同时校验原生 Thread/Turn ID、合并最终消息缺失的尾部文本、忽略重复终态，并保证 `turnFinished` 只发送一次。用户可以在原生 Turn ID 返回前取消；请求会延迟到 ID 可用时发送。`turn/interrupt` 的响应不代表终态，仍由 `turn/completed` 的 `interrupted` 状态收口。
 
+原生活动 Turn ID 确认后，`turn/steer` 可以向同一 Turn 补充一条文本指令。零食把该 ID 作为 `expectedTurnId`，为消息生成独立客户端 ID，并且每个会话同一时刻只允许一个 steer 请求等待响应。拒绝或 Turn ID 不匹配只产生警告，不会结束活动 Turn，也不会静默重发。公共 Session API 把成功受理的 steer 持久化为用户消息，并携带原 Turn 的设置快照。M3 Composer 再提供“立即引导/可编辑队列”选择；M2 协议层不会擅自推断队列行为。
+
+`thread/list` 限定当前工作目录与 app-server 来源，按更新时间排序并使用不透明的前向游标；`thread/read` 可为显式选择的原生 ID 请求完整 Turn。两条结果路径都会先校验 Thread、Session 与 cwd 身份，再通过类型化异步 Adapter 信号发布。非法分页或协议错误独立报告，绝不替换当前会话绑定的原生身份。
+
 命令、文件变更、MCP、动态工具、协作、搜索、图片查看与上下文压缩 Item 映射为统一且可持久化的工具生命周期。命令输出与 MCP 进度持续写入同一张时间线卡片；文件 Patch 更新刷新变更文件摘要。最终 `item/completed` 对状态、输出、结果、错误、退出码和耗时具有权威性。历史卡片可由事件日志恢复，界面显示的工具输出最多保留最近 64 KiB。
 
 当前切片只展示协议提供的推理摘要。`summaryTextDelta` 流入推理卡片，最终 summary 数组覆盖草稿；`reasoning/textDelta` 不会作为可见推理渲染或持久化。Plan Item Delta 可填充行内计划文本，完成 Item 覆盖草稿；`turn/plan/updated` 驱动可停靠任务列表，并显示 `pending`、`inProgress` 与 `completed` 三态。
@@ -57,7 +61,7 @@ Windows 优先探测 `codex.cmd`，并通过 `cmd.exe /c call` 启动 npm 包装
 codex app-server generate-json-schema --out <directory>
 ```
 
-普通 CI 只运行假传输与 fixture，不依赖已安装 CLI，也不调用模型。测试覆盖分页、创建/恢复身份、动态逐轮设置、文本与工具流、最终 Item 权威覆盖、命令非零退出、文件/MCP 结果、推理摘要隐私、计划三态、有界历史输出、审批决策、过期与重复事件、请求/通知错误、中断竞态、未支持 server request 与进程断开。本机可选择执行 CLI 探测、初始化、模型目录与临时 Thread 创建的烟雾测试，全程不调用模型；真实 `turn/start` 必须由开发者另行明确启用，避免测试意外产生模型调用：
+普通 CI 只运行假传输与 fixture，不依赖已安装 CLI，也不调用模型。测试覆盖分页、Thread list/read 解析、创建/恢复身份、动态逐轮设置、文本与工具流、同 Turn steer 成功/失败/ID 不匹配、最终 Item 权威覆盖、命令非零退出、文件/MCP 结果、推理摘要隐私、计划三态、有界历史输出、审批决策、过期与重复事件、请求/通知错误、中断竞态、未支持 server request 与进程断开。本机可选择执行 CLI 探测、初始化、模型目录与临时 Thread 创建的烟雾测试，全程不调用模型；真实 `turn/start` 必须由开发者另行明确启用，避免测试意外产生模型调用：
 
 ```powershell
 $env:SNACK_RUN_LIVE_CODEX_TEST = '1'

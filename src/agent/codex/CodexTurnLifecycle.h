@@ -48,6 +48,10 @@ struct CodexTurnErrorNotification {
                                                   const TurnRequest& request);
 [[nodiscard]] QJsonObject makeTurnInterruptParameters(const QString& threadId,
                                                       const QString& turnId);
+[[nodiscard]] QJsonObject makeTurnSteerParameters(const QString& threadId,
+                                                  const QString& expectedTurnId,
+                                                  const QString& message,
+                                                  const QString& clientUserMessageId);
 
 [[nodiscard]] std::optional<CodexTurnInfo> parseTurnStartResponse(const QJsonValue& result,
                                                                   QString* error = nullptr);
@@ -59,5 +63,7 @@ struct CodexTurnErrorNotification {
 parseAgentMessageDelta(const QJsonValue& params, QString* error = nullptr);
 [[nodiscard]] std::optional<CodexTurnErrorNotification>
 parseTurnErrorNotification(const QJsonValue& params, QString* error = nullptr);
+[[nodiscard]] std::optional<QString> parseTurnSteerResponse(const QJsonValue& result,
+                                                            QString* error = nullptr);
 
 } // namespace snack::agent::codex
