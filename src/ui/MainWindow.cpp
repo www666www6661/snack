@@ -1,5 +1,6 @@
 #include "ui/MainWindow.h"
 
+#include "domain/PromptTemplateEngine.h"
 #include "ui/ComposerTextEdit.h"
 
 #include <QAction>
@@ -7,9 +8,13 @@
 #include <QApplication>
 #include <QCloseEvent>
 #include <QComboBox>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QDockWidget>
+#include <QFormLayout>
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QInputDialog>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QLabel>
@@ -93,6 +98,8 @@ MainWindow::MainWindow(session::SessionController* controller, app::AppSettings*
             &MainWindow::updateConnectionDetail);
     connect(controller_, &session::SessionController::queuedMessagesChanged, this,
             &MainWindow::updateQueuedMessages);
+    connect(controller_, &session::SessionController::promptTemplatesChanged, this,
+            [this] { rebuildPromptTemplateMenu(); });
     connect(qApp, &QCoreApplication::aboutToQuit, this, &MainWindow::shutdown);
 
     restoreTimeline();
@@ -251,6 +258,133 @@ void MainWindow::cancelQueuedMessage() {
     }
 }
 
+void MainWindow::showPromptTemplateMenu() {
+    rebuildPromptTemplateMenu();
+    templateMenu_->popup(templateButton_->mapToGlobal(templateButton_->rect().topLeft()));
+}
+
+void MainWindow::rebuildPromptTemplateMenu() {
+    templateMenu_->clear();
+    QString error;
+    const auto templates = controller_->promptTemplates(&error);
+    if (!error.isEmpty()) {
+        statusBar()->showMessage(error, 5000);
+    }
+    if (templates.isEmpty()) {
+        auto* empty = templateMenu_->addAction(tr("No saved templates"));
+        empty->setEnabled(false);
+    } else {
+        for (const auto& promptTemplate : templates) {
+            auto* action = templateMenu_->addAction(
+                promptTemplate.favorite ? tr("Favorite: %1").arg(promptTemplate.name)
+                                        : promptTemplate.name);
+            action->setObjectName(QStringLiteral("promptTemplateAction_%1")
+                                      .arg(promptTemplate.id.toString(QUuid::WithoutBraces)));
+            connect(action, &QAction::triggered, this,
+                    [this, templateId = promptTemplate.id] { insertPromptTemplate(templateId); });
+        }
+    }
+    templateMenu_->addSeparator();
+    auto* save = templateMenu_->addAction(tr("Save composer as template..."));
+    save->setObjectName(QStringLiteral("savePromptTemplateAction"));
+    save->setEnabled(!composer_->toPlainText().trimmed().isEmpty());
+    connect(save, &QAction::triggered, this, &MainWindow::saveComposerAsTemplate);
+
+    if (!templates.isEmpty()) {
+        auto* removeMenu = templateMenu_->addMenu(tr("Remove template"));
+        removeMenu->setObjectName(QStringLiteral("removePromptTemplateMenu"));
+        for (const auto& promptTemplate : templates) {
+            auto* remove = removeMenu->addAction(promptTemplate.name);
+            remove->setObjectName(QStringLiteral("removePromptTemplateAction_%1")
+                                      .arg(promptTemplate.id.toString(QUuid::WithoutBraces)));
+            connect(remove, &QAction::triggered, this,
+                    [this, templateId = promptTemplate.id] { removePromptTemplate(templateId); });
+        }
+    }
+}
+
+void MainWindow::insertPromptTemplate(const QUuid& templateId) {
+    QString error;
+    const auto templates = controller_->promptTemplates(&error);
+    const auto iterator = std::find_if(
+        templates.cbegin(), templates.cend(),
+        [&templateId](const domain::PromptTemplate& value) { return value.id == templateId; });
+    if (iterator == templates.cend()) {
+        statusBar()->showMessage(error.isEmpty() ? tr("Prompt template no longer exists") : error,
+                                 4000);
+        return;
+    }
+
+    QString parseError;
+    const QStringList parameters = domain::PromptTemplateEngine::parameters(*iterator, &parseError);
+    if (!parseError.isEmpty()) {
+        statusBar()->showMessage(parseError, 5000);
+        return;
+    }
+    QHash<QString, QString> values;
+    if (!parameters.isEmpty()) {
+        QDialog dialog(this);
+        dialog.setObjectName(QStringLiteral("promptTemplateParameterDialog"));
+        dialog.setWindowTitle(tr("Fill template: %1").arg(iterator->name));
+        auto* layout = new QFormLayout(&dialog);
+        QHash<QString, QLineEdit*> editors;
+        for (const QString& parameter : parameters) {
+            auto* editor = new QLineEdit(&dialog);
+            editor->setObjectName(QStringLiteral("promptTemplateParameter_%1").arg(parameter));
+            layout->addRow(parameter, editor);
+            editors.insert(parameter, editor);
+        }
+        auto* buttons =
+            new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+        connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+        connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+        layout->addRow(buttons);
+        if (dialog.exec() != QDialog::Accepted) {
+            return;
+        }
+        for (auto editor = editors.cbegin(); editor != editors.cend(); ++editor) {
+            values.insert(editor.key(), editor.value()->text());
+        }
+    }
+    const auto rendered = domain::PromptTemplateEngine::render(*iterator, values, &error);
+    if (!rendered.has_value()) {
+        statusBar()->showMessage(error, 5000);
+        return;
+    }
+    composer_->textCursor().insertText(*rendered);
+    composer_->setFocus();
+}
+
+void MainWindow::saveComposerAsTemplate() {
+    bool accepted = false;
+    const QString name =
+        QInputDialog::getText(this, tr("Save prompt template"), tr("Template name"),
+                              QLineEdit::Normal, {}, &accepted)
+            .trimmed();
+    if (!accepted) {
+        return;
+    }
+    domain::PromptTemplate promptTemplate;
+    promptTemplate.name = name;
+    promptTemplate.content = composer_->toPlainText();
+    promptTemplate.position = controller_->promptTemplates().size();
+    QString error;
+    if (!controller_->savePromptTemplate(promptTemplate, &error)) {
+        statusBar()->showMessage(error, 5000);
+        return;
+    }
+    statusBar()->showMessage(tr("Prompt template saved"), 3000);
+}
+
+void MainWindow::removePromptTemplate(const QUuid& templateId) {
+    QString error;
+    if (!controller_->deletePromptTemplate(templateId, &error)) {
+        statusBar()->showMessage(error, 5000);
+        return;
+    }
+    statusBar()->showMessage(tr("Prompt template removed"), 3000);
+}
+
 void MainWindow::stopTurn() {
     controller_->interrupt();
     statusBar()->showMessage(tr("Stopping the current turn"), 3000);
@@ -400,6 +534,11 @@ void MainWindow::buildUi() {
     composer_ = new ComposerTextEdit(composerRow);
     composer_->setObjectName(QStringLiteral("composer"));
     composer_->setPlaceholderText(tr("Ask the agent about this workspace..."));
+    templateButton_ = new QPushButton(QStringLiteral("/"), composerRow);
+    templateButton_->setObjectName(QStringLiteral("templateButton"));
+    templateButton_->setToolTip(tr("Prompt templates"));
+    templateMenu_ = new QMenu(templateButton_);
+    templateMenu_->setObjectName(QStringLiteral("templateMenu"));
     sendModeCombo_ = new QComboBox(composerRow);
     sendModeCombo_->setObjectName(QStringLiteral("sendModeCombo"));
     sendModeCombo_->hide();
@@ -408,6 +547,7 @@ void MainWindow::buildUi() {
     stopButton_ = new QPushButton(tr("Stop"), composerRow);
     stopButton_->setObjectName(QStringLiteral("stopButton"));
     stopButton_->hide();
+    composerRowLayout->addWidget(templateButton_, 0, Qt::AlignBottom);
     composerRowLayout->addWidget(composer_, 1);
     composerRowLayout->addWidget(sendModeCombo_, 0, Qt::AlignBottom);
     composerRowLayout->addWidget(stopButton_, 0, Qt::AlignBottom);
@@ -457,6 +597,10 @@ void MainWindow::buildUi() {
     connect(composer_, &ComposerTextEdit::sendRequested, this, &MainWindow::sendMessage);
     connect(composer_, &ComposerTextEdit::queueRequested, this, &MainWindow::queueComposerMessage);
     connect(composer_, &ComposerTextEdit::stopRequested, this, &MainWindow::stopTurn);
+    connect(composer_, &ComposerTextEdit::templateMenuRequested, this,
+            &MainWindow::showPromptTemplateMenu);
+    connect(templateButton_, &QPushButton::clicked, this, &MainWindow::showPromptTemplateMenu);
+    connect(templateMenu_, &QMenu::aboutToShow, this, &MainWindow::rebuildPromptTemplateMenu);
     draftSaveTimer_ = new QTimer(this);
     draftSaveTimer_->setSingleShot(true);
     draftSaveTimer_->setInterval(350);
@@ -475,6 +619,7 @@ void MainWindow::buildUi() {
             &MainWindow::updateSessionSettings);
     connect(accessCombo_, &QComboBox::currentIndexChanged, this,
             &MainWindow::updateSessionSettings);
+    rebuildPromptTemplateMenu();
 }
 
 void MainWindow::buildMenus() {

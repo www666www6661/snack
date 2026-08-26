@@ -34,6 +34,9 @@ class EventStore final : public IEventRepository {
                                QString* error) override;
     [[nodiscard]] QList<domain::QueuedMessage>
     queuedMessagesForConversation(const QUuid& conversationId, QString* error) const override;
+    bool savePromptTemplate(const domain::PromptTemplate& promptTemplate, QString* error) override;
+    bool deletePromptTemplate(const QUuid& templateId, QString* error) override;
+    [[nodiscard]] QList<domain::PromptTemplate> promptTemplates(QString* error) const override;
 
   private:
     [[nodiscard]] int schemaVersion(QString* error) const;

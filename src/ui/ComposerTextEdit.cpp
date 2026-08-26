@@ -23,6 +23,12 @@ void ComposerTextEdit::changeEvent(QEvent* event) {
 }
 
 void ComposerTextEdit::keyPressEvent(QKeyEvent* event) {
+    if (event->key() == Qt::Key_Slash && event->modifiers() == Qt::NoModifier &&
+        toPlainText().isEmpty()) {
+        emit templateMenuRequested();
+        event->accept();
+        return;
+    }
     if (event->key() == Qt::Key_Escape) {
         emit stopRequested();
         event->accept();

@@ -23,6 +23,10 @@ class IEventRepository {
                                        QString* error) = 0;
     [[nodiscard]] virtual QList<domain::QueuedMessage>
     queuedMessagesForConversation(const QUuid& conversationId, QString* error) const = 0;
+    virtual bool savePromptTemplate(const domain::PromptTemplate& promptTemplate,
+                                    QString* error) = 0;
+    virtual bool deletePromptTemplate(const QUuid& templateId, QString* error) = 0;
+    [[nodiscard]] virtual QList<domain::PromptTemplate> promptTemplates(QString* error) const = 0;
 };
 
 } // namespace snack::storage

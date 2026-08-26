@@ -167,6 +167,10 @@ const QList<domain::QueuedMessage>& SessionController::queuedMessages() const {
     return queuedMessages_;
 }
 
+QList<domain::PromptTemplate> SessionController::promptTemplates(QString* error) const {
+    return repository_->promptTemplates(error);
+}
+
 QList<domain::AgentEvent> SessionController::restoredEvents(QString* error) {
     const auto events = repository_->eventsForConversation(conversation_.id, error);
     if (!events.isEmpty()) {
@@ -401,6 +405,33 @@ bool SessionController::sendQueuedMessageNow(const QUuid& messageId, QString* er
     }
     queuedMessages_ = std::move(remaining);
     emit queuedMessagesChanged(queuedMessages_);
+    return true;
+}
+
+bool SessionController::savePromptTemplate(domain::PromptTemplate promptTemplate, QString* error) {
+    promptTemplate.name = promptTemplate.name.trimmed();
+    if (!repository_->savePromptTemplate(promptTemplate, error)) {
+        return false;
+    }
+    QString loadError;
+    const auto templates = repository_->promptTemplates(&loadError);
+    if (!loadError.isEmpty()) {
+        emit persistenceError(loadError);
+    }
+    emit promptTemplatesChanged(templates);
+    return true;
+}
+
+bool SessionController::deletePromptTemplate(const QUuid& templateId, QString* error) {
+    if (!repository_->deletePromptTemplate(templateId, error)) {
+        return false;
+    }
+    QString loadError;
+    const auto templates = repository_->promptTemplates(&loadError);
+    if (!loadError.isEmpty()) {
+        emit persistenceError(loadError);
+    }
+    emit promptTemplatesChanged(templates);
     return true;
 }
 

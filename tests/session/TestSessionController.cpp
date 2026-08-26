@@ -48,9 +48,24 @@ class MemoryEventRepository : public snack::storage::IEventRepository {
         return queues_.value(conversationId);
     }
 
+    bool savePromptTemplate(const snack::domain::PromptTemplate& promptTemplate,
+                            QString*) override {
+        templates_.insert(promptTemplate.id, promptTemplate);
+        return true;
+    }
+
+    bool deletePromptTemplate(const QUuid& templateId, QString*) override {
+        return templates_.remove(templateId) > 0;
+    }
+
+    QList<snack::domain::PromptTemplate> promptTemplates(QString*) const override {
+        return templates_.values();
+    }
+
     snack::domain::Conversation conversation_;
     QList<snack::domain::AgentEvent> events_;
     QHash<QUuid, QList<snack::domain::QueuedMessage>> queues_;
+    QHash<QUuid, snack::domain::PromptTemplate> templates_;
 };
 
 class TestSessionController final : public QObject {
@@ -62,6 +77,7 @@ class TestSessionController final : public QObject {
     void steersActiveTurn();
     void persistsEditsAndDispatchesQueuedMessages();
     void doesNotAutoDispatchRestoredOrInterruptedQueue();
+    void managesPromptTemplates();
     void interruptsActiveTurn();
     void handlesApprovalLifecycle();
     void handlesUserInputLifecycleAndConcurrentWaitingStates();
@@ -229,6 +245,26 @@ void TestSessionController::doesNotAutoDispatchRestoredOrInterruptedQueue() {
     QCOMPARE(controller.queuedMessages().constFirst().content,
              QStringLiteral("keep after failure"));
     adapter.closeAgent();
+}
+
+void TestSessionController::managesPromptTemplates() {
+    MemoryEventRepository repository;
+    snack::agent::FakeAgentAdapter adapter;
+    snack::session::SessionController controller(conversation(), &adapter, &repository);
+    QSignalSpy templatesSpy(&controller,
+                            &snack::session::SessionController::promptTemplatesChanged);
+    snack::domain::PromptTemplate promptTemplate;
+    promptTemplate.name = QStringLiteral("  Review  ");
+    promptTemplate.content = QStringLiteral("Review {{path}}");
+    QString error;
+    QVERIFY(controller.savePromptTemplate(promptTemplate, &error));
+    QCOMPARE(controller.promptTemplates().size(), 1);
+    QCOMPARE(controller.promptTemplates().constFirst().name, QStringLiteral("Review"));
+    QCOMPARE(templatesSpy.count(), 1);
+    QVERIFY(controller.deletePromptTemplate(promptTemplate.id, &error));
+    QVERIFY(controller.promptTemplates().isEmpty());
+    QCOMPARE(templatesSpy.count(), 2);
+    QVERIFY(!controller.deletePromptTemplate(promptTemplate.id, &error));
 }
 
 void TestSessionController::interruptsActiveTurn() {

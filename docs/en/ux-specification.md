@@ -22,6 +22,8 @@ Provide attachment, `@`, template, and `/` entry points; an auto-growing editor;
 
 The current M3 composer grows with wrapped content up to a bounded reading height and follows the fixed keyboard map below. Draft text is stored locally under the conversation UUID after a short idle debounce and again when the window closes. Successful send or queue acceptance clears the draft immediately; drafts never become events or agent input until the user sends them.
 
+The `/` button and a leading `/` keystroke open favorite prompt templates. Templates are stored as plain text and use only explicit `{{parameter}}` placeholders; insertion asks for each unique value, substitutes text literally, and leaves the rendered prompt in the composer for review. The menu can save the current composer text as a template or remove an existing template. It never runs scripts, commands, or substitutions from the workspace.
+
 ## 6. Key flows
 
 - New conversation: directory → dirty-workspace warning → agent availability → model/effort/access → actual change mode/read-only capability → create. Preserve form state on failure.

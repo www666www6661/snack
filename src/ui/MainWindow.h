@@ -16,6 +16,7 @@ class QLabel;
 class QLineEdit;
 class QListWidgetItem;
 class QListWidget;
+class QMenu;
 class QPlainTextEdit;
 class QPushButton;
 class QSystemTrayIcon;
@@ -51,6 +52,8 @@ class MainWindow final : public QMainWindow {
     void moveQueuedMessageDown();
     void sendQueuedMessageNow();
     void cancelQueuedMessage();
+    void showPromptTemplateMenu();
+    void saveComposerAsTemplate();
     void updateSessionSettings();
     void applyLightTheme();
     void applyDarkTheme();
@@ -84,6 +87,9 @@ class MainWindow final : public QMainWindow {
     void updateStatus(domain::ConversationStatus status);
     void updateConnectionDetail(const QString& detail);
     void persistComposerDraft();
+    void rebuildPromptTemplateMenu();
+    void insertPromptTemplate(const QUuid& templateId);
+    void removePromptTemplate(const QUuid& templateId);
     void rebuildCapabilityControls(const domain::TurnSettingsSnapshot& settings);
     void setPreferredAgent(domain::AgentKind kind);
     [[nodiscard]] QString agentDisplayName() const;
@@ -104,6 +110,8 @@ class MainWindow final : public QMainWindow {
     QTimer* draftSaveTimer_{nullptr};
     QPushButton* sendButton_{nullptr};
     QPushButton* stopButton_{nullptr};
+    QPushButton* templateButton_{nullptr};
+    QMenu* templateMenu_{nullptr};
     QFrame* queueFrame_{nullptr};
     QListWidget* queueList_{nullptr};
     QComboBox* sendModeCombo_{nullptr};

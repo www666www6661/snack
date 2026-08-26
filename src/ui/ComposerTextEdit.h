@@ -14,6 +14,7 @@ class ComposerTextEdit final : public QPlainTextEdit {
     void sendRequested();
     void queueRequested();
     void stopRequested();
+    void templateMenuRequested();
 
   protected:
     void changeEvent(QEvent* event) override;

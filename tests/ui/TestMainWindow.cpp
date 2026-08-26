@@ -7,13 +7,16 @@
 #include <QAction>
 #include <QApplication>
 #include <QComboBox>
+#include <QDialog>
 #include <QDir>
 #include <QDockWidget>
 #include <QFrame>
+#include <QInputDialog>
 #include <QJsonArray>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMenu>
 #include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QPushButton>
@@ -58,8 +61,27 @@ class UiMemoryEventRepository final : public snack::storage::IEventRepository {
         return queues.value(conversationId);
     }
 
+    bool savePromptTemplate(const snack::domain::PromptTemplate& promptTemplate,
+                            QString*) override {
+        templates.insert(promptTemplate.id, promptTemplate);
+        return true;
+    }
+
+    bool deletePromptTemplate(const QUuid& templateId, QString*) override {
+        return templates.remove(templateId) > 0;
+    }
+
+    QList<snack::domain::PromptTemplate> promptTemplates(QString*) const override {
+        QList<snack::domain::PromptTemplate> result = templates.values();
+        std::sort(result.begin(), result.end(), [](const auto& left, const auto& right) {
+            return left.position < right.position;
+        });
+        return result;
+    }
+
     QList<snack::domain::AgentEvent> events;
     QHash<QUuid, QList<snack::domain::QueuedMessage>> queues;
+    QHash<QUuid, snack::domain::PromptTemplate> templates;
 };
 
 class TestMainWindow final : public QObject {
@@ -74,6 +96,7 @@ class TestMainWindow final : public QObject {
     void interruptsRunningTurnFromSendButton();
     void editsAndControlsQueuedMessages();
     void supportsComposerShortcutsGrowthAndDrafts();
+    void insertsAndManagesPromptTemplates();
     void handlesApprovalCard();
     void handlesUserInputCardAndUsage();
     void cancelsQuitWhileAgentIsRunning();
@@ -576,6 +599,92 @@ void TestMainWindow::supportsComposerShortcutsGrowthAndDrafts() {
     composer->setPlainText(QStringLiteral("saved on close"));
     window.close();
     QCOMPARE(settings.composerDraft(conversation.id), QStringLiteral("saved on close"));
+}
+
+void TestMainWindow::insertsAndManagesPromptTemplates() {
+    QTemporaryDir directory;
+    snack::app::AppSettings settings(directory.filePath(QStringLiteral("settings.ini")));
+    UiMemoryEventRepository repository;
+    snack::domain::PromptTemplate quick;
+    quick.name = QStringLiteral("Explain");
+    quick.content = QStringLiteral("Explain this code");
+    quick.position = 0;
+    repository.templates.insert(quick.id, quick);
+    snack::domain::PromptTemplate parameterized;
+    parameterized.name = QStringLiteral("Review");
+    parameterized.content = QStringLiteral("Review {{path}} for {{focus}}");
+    parameterized.position = 1;
+    repository.templates.insert(parameterized.id, parameterized);
+
+    snack::agent::FakeAgentAdapter adapter(nullptr, 1000);
+    snack::domain::Conversation conversation;
+    conversation.title = QStringLiteral("Template UI");
+    conversation.workingDirectory = directory.path();
+    snack::session::SessionController controller(conversation, &adapter, &repository);
+    snack::ui::MainWindow window(&controller, &settings, false);
+    auto* composer = window.findChild<QPlainTextEdit*>(QStringLiteral("composer"));
+    auto* templateButton = window.findChild<QPushButton*>(QStringLiteral("templateButton"));
+    auto* templateMenu = window.findChild<QMenu*>(QStringLiteral("templateMenu"));
+    QVERIFY(composer != nullptr);
+    QVERIFY(templateButton != nullptr);
+    QVERIFY(templateMenu != nullptr);
+
+    const QString quickActionName =
+        QStringLiteral("promptTemplateAction_%1").arg(quick.id.toString(QUuid::WithoutBraces));
+    auto* quickAction = window.findChild<QAction*>(quickActionName);
+    QVERIFY(quickAction != nullptr);
+    quickAction->trigger();
+    QCOMPARE(composer->toPlainText(), QStringLiteral("Explain this code"));
+
+    composer->clear();
+    composer->setFocus();
+    QTest::keyClick(composer, Qt::Key_Slash);
+    QTRY_VERIFY(templateMenu->isVisible());
+    QVERIFY(composer->toPlainText().isEmpty());
+    templateMenu->hide();
+
+    const QString parameterActionName = QStringLiteral("promptTemplateAction_%1")
+                                            .arg(parameterized.id.toString(QUuid::WithoutBraces));
+    auto* parameterAction = window.findChild<QAction*>(parameterActionName);
+    QVERIFY(parameterAction != nullptr);
+    QTimer::singleShot(0, [] {
+        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        QVERIFY(dialog != nullptr);
+        auto* path = dialog->findChild<QLineEdit*>(QStringLiteral("promptTemplateParameter_path"));
+        auto* focus =
+            dialog->findChild<QLineEdit*>(QStringLiteral("promptTemplateParameter_focus"));
+        QVERIFY(path != nullptr);
+        QVERIFY(focus != nullptr);
+        path->setText(QStringLiteral("src/main.cpp"));
+        focus->setText(QStringLiteral("correctness"));
+        dialog->accept();
+    });
+    parameterAction->trigger();
+    QCOMPARE(composer->toPlainText(), QStringLiteral("Review src/main.cpp for correctness"));
+
+    composer->setPlainText(QStringLiteral("Summarize {{topic}}"));
+    templateButton->click();
+    QTRY_VERIFY(templateMenu->isVisible());
+    templateMenu->hide();
+    auto* saveAction = window.findChild<QAction*>(QStringLiteral("savePromptTemplateAction"));
+    QVERIFY(saveAction != nullptr);
+    QVERIFY(saveAction->isEnabled());
+    QTimer::singleShot(0, [] {
+        auto* dialog = qobject_cast<QInputDialog*>(QApplication::activeModalWidget());
+        QVERIFY(dialog != nullptr);
+        dialog->setTextValue(QStringLiteral("Summarize"));
+        dialog->accept();
+    });
+    saveAction->trigger();
+    QCOMPARE(repository.templates.size(), 3);
+
+    const QString removeActionName = QStringLiteral("removePromptTemplateAction_%1")
+                                         .arg(quick.id.toString(QUuid::WithoutBraces));
+    auto* removeAction = window.findChild<QAction*>(removeActionName);
+    QVERIFY(removeAction != nullptr);
+    removeAction->trigger();
+    QVERIFY(!repository.templates.contains(quick.id));
+    window.close();
 }
 
 void TestMainWindow::handlesApprovalCard() {

@@ -35,6 +35,8 @@ set(SNACK_CORE_SOURCES
     app/SingleInstanceGuard.h
     domain/DomainTypes.cpp
     domain/DomainTypes.h
+    domain/PromptTemplateEngine.cpp
+    domain/PromptTemplateEngine.h
     session/SessionController.cpp
     session/SessionController.h
     storage/ContentStore.cpp

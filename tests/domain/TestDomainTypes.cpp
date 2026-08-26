@@ -1,4 +1,5 @@
 #include "domain/DomainTypes.h"
+#include "domain/PromptTemplateEngine.h"
 
 #include <QTest>
 
@@ -13,6 +14,8 @@ class TestDomainTypes final : public QObject {
     void eventTypeNamesRoundTrip();
     void approvalDecisionNamesRoundTrip();
     void queuedMessageStateNamesRoundTrip();
+    void validatesAndRendersPromptTemplates();
+    void rejectsInvalidPromptTemplates();
 };
 
 void TestDomainTypes::settingsSnapshotRoundTrips() {
@@ -89,6 +92,50 @@ void TestDomainTypes::queuedMessageStateNamesRoundTrip() {
     QCOMPARE(snack::domain::enumName(pending), QStringLiteral("pending"));
     QCOMPARE(snack::domain::queuedMessageStateFromString(QStringLiteral("pending")), pending);
     QCOMPARE(snack::domain::queuedMessageStateFromString(QStringLiteral("future")), pending);
+}
+
+void TestDomainTypes::validatesAndRendersPromptTemplates() {
+    snack::domain::PromptTemplate promptTemplate;
+    promptTemplate.name = QStringLiteral("Review change");
+    promptTemplate.content = QStringLiteral("Review {{path}} for {{focus}}. Recheck {{path}}.");
+    QString error;
+    QCOMPARE(snack::domain::PromptTemplateEngine::parameters(promptTemplate, &error),
+             QStringList({QStringLiteral("path"), QStringLiteral("focus")}));
+    QVERIFY2(snack::domain::PromptTemplateEngine::validate(promptTemplate, &error),
+             qPrintable(error));
+    const auto rendered = snack::domain::PromptTemplateEngine::render(
+        promptTemplate,
+        {{QStringLiteral("path"), QStringLiteral("src/main.cpp")},
+         {QStringLiteral("focus"), QStringLiteral("correctness")}},
+        &error);
+    QVERIFY2(rendered.has_value(), qPrintable(error));
+    QCOMPARE(*rendered,
+             QStringLiteral("Review src/main.cpp for correctness. Recheck src/main.cpp."));
+
+    promptTemplate.content = QStringLiteral("{{first}} then {{second}} / {{主题}}");
+    const auto literal = snack::domain::PromptTemplateEngine::render(
+        promptTemplate,
+        {{QStringLiteral("first"), QStringLiteral("{{second}}")},
+         {QStringLiteral("second"), QStringLiteral("done")},
+         {QStringLiteral("主题"), QStringLiteral("模板")}},
+        &error);
+    QVERIFY2(literal.has_value(), qPrintable(error));
+    QCOMPARE(*literal, QStringLiteral("{{second}} then done / 模板"));
+}
+
+void TestDomainTypes::rejectsInvalidPromptTemplates() {
+    snack::domain::PromptTemplate promptTemplate;
+    promptTemplate.name = QStringLiteral("Invalid");
+    promptTemplate.content = QStringLiteral("Broken {{bad name}} and }}");
+    QString error;
+    QVERIFY(!snack::domain::PromptTemplateEngine::validate(promptTemplate, &error));
+    QVERIFY(error.contains(QStringLiteral("invalid")));
+
+    promptTemplate.content = QStringLiteral("Use {{missing}}");
+    QVERIFY(!snack::domain::PromptTemplateEngine::render(promptTemplate, {}, &error).has_value());
+    QVERIFY(error.contains(QStringLiteral("missing")));
+    promptTemplate.name.clear();
+    QVERIFY(!snack::domain::PromptTemplateEngine::validate(promptTemplate, &error));
 }
 
 QTEST_APPLESS_MAIN(TestDomainTypes)

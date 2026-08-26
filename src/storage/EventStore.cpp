@@ -1,5 +1,7 @@
 #include "storage/EventStore.h"
 
+#include "domain/PromptTemplateEngine.h"
+
 #include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
@@ -12,7 +14,7 @@
 namespace snack::storage {
 namespace {
 
-constexpr int currentSchemaVersion = 4;
+constexpr int currentSchemaVersion = 5;
 
 struct Migration {
     int version;
@@ -76,7 +78,20 @@ QList<Migration> migrations() {
               QStringLiteral("UPDATE schema_migrations SET "
                              "applied_at = CAST(strftime('%s','now') AS INTEGER) * 1000, "
                              "completed_at = CAST(strftime('%s','now') AS INTEGER) * 1000 "
-                             "WHERE version = 4")}}};
+                             "WHERE version = 4")}},
+            {5,
+             {QStringLiteral("INSERT INTO schema_migrations "
+                             "(version, applied_at, started_at, completed_at) VALUES "
+                             "(5, 0, CAST(strftime('%s','now') AS INTEGER) * 1000, NULL)"),
+              QStringLiteral("CREATE TABLE prompt_templates ("
+                             "id TEXT PRIMARY KEY, name TEXT NOT NULL, content TEXT NOT NULL, "
+                             "favorite INTEGER NOT NULL DEFAULT 1, position INTEGER NOT NULL)"),
+              QStringLiteral("CREATE INDEX prompt_templates_order "
+                             "ON prompt_templates(favorite DESC, position ASC, name ASC)"),
+              QStringLiteral("UPDATE schema_migrations SET "
+                             "applied_at = CAST(strftime('%s','now') AS INTEGER) * 1000, "
+                             "completed_at = CAST(strftime('%s','now') AS INTEGER) * 1000 "
+                             "WHERE version = 5")}}};
 }
 
 QString compactJson(const QJsonObject& object) {
@@ -384,6 +399,75 @@ QList<domain::QueuedMessage> EventStore::queuedMessagesForConversation(const QUu
     return messages;
 }
 
+bool EventStore::savePromptTemplate(const domain::PromptTemplate& promptTemplate, QString* error) {
+    if (!ensureWritable(error) || !domain::PromptTemplateEngine::validate(promptTemplate, error)) {
+        return false;
+    }
+    QSqlQuery query(database_);
+    query.prepare(QStringLiteral(
+        "INSERT INTO prompt_templates (id, name, content, favorite, position) VALUES (?, ?, ?, ?, "
+        "?) "
+        "ON CONFLICT(id) DO UPDATE SET name = excluded.name, content = excluded.content, "
+        "favorite = excluded.favorite, position = excluded.position"));
+    query.addBindValue(promptTemplate.id.toString(QUuid::WithoutBraces));
+    query.addBindValue(promptTemplate.name.trimmed());
+    query.addBindValue(promptTemplate.content);
+    query.addBindValue(promptTemplate.favorite);
+    query.addBindValue(promptTemplate.position);
+    if (!query.exec()) {
+        setSqlError(error, QStringLiteral("Cannot save prompt template"), query.lastError());
+        return false;
+    }
+    return true;
+}
+
+bool EventStore::deletePromptTemplate(const QUuid& templateId, QString* error) {
+    if (!ensureWritable(error)) {
+        return false;
+    }
+    if (templateId.isNull()) {
+        if (error != nullptr) {
+            *error = QStringLiteral("Cannot delete prompt template: invalid ID");
+        }
+        return false;
+    }
+    QSqlQuery query(database_);
+    query.prepare(QStringLiteral("DELETE FROM prompt_templates WHERE id = ?"));
+    query.addBindValue(templateId.toString(QUuid::WithoutBraces));
+    if (!query.exec()) {
+        setSqlError(error, QStringLiteral("Cannot delete prompt template"), query.lastError());
+        return false;
+    }
+    if (query.numRowsAffected() != 1) {
+        if (error != nullptr) {
+            *error = QStringLiteral("Prompt template no longer exists");
+        }
+        return false;
+    }
+    return true;
+}
+
+QList<domain::PromptTemplate> EventStore::promptTemplates(QString* error) const {
+    QList<domain::PromptTemplate> templates;
+    QSqlQuery query(database_);
+    if (!query.exec(QStringLiteral("SELECT id, name, content, favorite, position "
+                                   "FROM prompt_templates "
+                                   "ORDER BY favorite DESC, position ASC, name ASC"))) {
+        setSqlError(error, QStringLiteral("Cannot load prompt templates"), query.lastError());
+        return templates;
+    }
+    while (query.next()) {
+        domain::PromptTemplate promptTemplate;
+        promptTemplate.id = QUuid(query.value(0).toString());
+        promptTemplate.name = query.value(1).toString();
+        promptTemplate.content = query.value(2).toString();
+        promptTemplate.favorite = query.value(3).toBool();
+        promptTemplate.position = query.value(4).toLongLong();
+        templates.append(promptTemplate);
+    }
+    return templates;
+}
+
 int EventStore::schemaVersion(QString* error) const {
     QSqlQuery tableQuery(database_);
     if (!tableQuery.exec(QStringLiteral(
@@ -461,10 +545,10 @@ bool EventStore::validateSchema(bool checkIntegrity, QString* error) const {
     if (!objectsQuery.exec(QStringLiteral(
             "SELECT COUNT(*) FROM sqlite_master WHERE "
             "(type = 'table' AND name IN ('schema_migrations', 'conversations', 'events', "
-            "'queued_messages')) OR "
+            "'queued_messages', 'prompt_templates')) OR "
             "(type = 'index' AND name IN ('events_conversation_sequence', "
-            "'conversations_working_directory'))")) ||
-        !objectsQuery.next() || objectsQuery.value(0).toInt() != 6) {
+            "'conversations_working_directory', 'prompt_templates_order'))")) ||
+        !objectsQuery.next() || objectsQuery.value(0).toInt() != 8) {
         if (error != nullptr) {
             *error = QStringLiteral("Database schema validation failed: required objects are "
                                     "missing");
@@ -474,9 +558,9 @@ bool EventStore::validateSchema(bool checkIntegrity, QString* error) const {
 
     QSqlQuery completionQuery(database_);
     if (!completionQuery.exec(
-            QStringLiteral("SELECT COUNT(*) FROM schema_migrations WHERE version IN (2, 3, 4) "
+            QStringLiteral("SELECT COUNT(*) FROM schema_migrations WHERE version IN (2, 3, 4, 5) "
                            "AND completed_at IS NOT NULL")) ||
-        !completionQuery.next() || completionQuery.value(0).toInt() != 3) {
+        !completionQuery.next() || completionQuery.value(0).toInt() != 4) {
         if (error != nullptr) {
             *error = QStringLiteral("Database schema validation failed: migrations are incomplete");
         }

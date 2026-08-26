@@ -194,6 +194,32 @@ void TestStorage::eventStorePersistsOrderedEvents() {
     queued = store.queuedMessagesForConversation(conversation.id, &error);
     QCOMPARE(queued.size(), 1);
     QCOMPARE(queued.constFirst().content, QStringLiteral("Edited and moved"));
+
+    snack::domain::PromptTemplate favorite;
+    favorite.name = QStringLiteral("Review");
+    favorite.content = QStringLiteral("Review {{path}}");
+    favorite.position = 1;
+    QVERIFY2(store.savePromptTemplate(favorite, &error), qPrintable(error));
+    snack::domain::PromptTemplate other;
+    other.name = QStringLiteral("Explain");
+    other.content = QStringLiteral("Explain this code");
+    other.favorite = false;
+    QVERIFY2(store.savePromptTemplate(other, &error), qPrintable(error));
+    auto templates = store.promptTemplates(&error);
+    QCOMPARE(templates.size(), 2);
+    QCOMPARE(templates.constFirst().id, favorite.id);
+    favorite.content = QStringLiteral("Review {{path}} for {{focus}}");
+    favorite.position = 0;
+    QVERIFY2(store.savePromptTemplate(favorite, &error), qPrintable(error));
+    templates = store.promptTemplates(&error);
+    QCOMPARE(templates.constFirst().content, favorite.content);
+    QVERIFY(store.deletePromptTemplate(other.id, &error));
+    QCOMPARE(store.promptTemplates(&error).size(), 1);
+    QVERIFY(!store.deletePromptTemplate(other.id, &error));
+    snack::domain::PromptTemplate invalid;
+    invalid.name = QStringLiteral("Invalid");
+    invalid.content = QStringLiteral("Broken {{bad name}}");
+    QVERIFY(!store.savePromptTemplate(invalid, &error));
 }
 
 void TestStorage::contentStoreDeduplicatesAndVerifies() {
@@ -284,7 +310,7 @@ void TestStorage::eventStoreBacksUpAndMigratesLegacySchema() {
     QCOMPARE(queryScalar(databasePath, QStringLiteral("SELECT MAX(version) FROM schema_migrations"),
                          &error)
                  .toInt(),
-             4);
+             5);
     QCOMPARE(queryScalar(databasePath,
                          QStringLiteral("SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' "
                                         "AND name = 'conversations_working_directory'"),
@@ -317,7 +343,7 @@ void TestStorage::eventStoreMigratesV2NativeIdentity() {
     QCOMPARE(queryScalar(databasePath, QStringLiteral("SELECT MAX(version) FROM schema_migrations"),
                          &error)
                  .toInt(),
-             4);
+             5);
     const auto restored = store.conversationById(
         QUuid(QStringLiteral("11111111-1111-1111-1111-111111111111")), &error);
     QVERIFY2(restored.has_value(), qPrintable(error));
@@ -410,7 +436,7 @@ void TestStorage::eventStoreRejectsIncompleteCurrentSchema() {
     const QStringList incompleteSchema = {
         QStringLiteral("CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, "
                        "applied_at INTEGER NOT NULL, started_at INTEGER, completed_at INTEGER)"),
-        QStringLiteral("INSERT INTO schema_migrations VALUES (4, 1, 1, 1)")};
+        QStringLiteral("INSERT INTO schema_migrations VALUES (5, 1, 1, 1)")};
     QVERIFY2(executeSql(databasePath, incompleteSchema, &error), qPrintable(error));
 
     snack::storage::EventStore store;

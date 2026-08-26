@@ -23,6 +23,7 @@ class SessionController final : public QObject {
     [[nodiscard]] qsizetype pendingApprovalCount() const;
     [[nodiscard]] qsizetype pendingInputCount() const;
     [[nodiscard]] const QList<domain::QueuedMessage>& queuedMessages() const;
+    [[nodiscard]] QList<domain::PromptTemplate> promptTemplates(QString* error = nullptr) const;
     [[nodiscard]] QList<domain::AgentEvent> restoredEvents(QString* error = nullptr);
 
     void open();
@@ -34,6 +35,8 @@ class SessionController final : public QObject {
     bool moveQueuedMessage(const QUuid& messageId, qsizetype position, QString* error = nullptr);
     bool cancelQueuedMessage(const QUuid& messageId, QString* error = nullptr);
     bool sendQueuedMessageNow(const QUuid& messageId, QString* error = nullptr);
+    bool savePromptTemplate(domain::PromptTemplate promptTemplate, QString* error = nullptr);
+    bool deletePromptTemplate(const QUuid& templateId, QString* error = nullptr);
     bool respondToApproval(const QString& requestId, domain::ApprovalDecision decision,
                            QString* error = nullptr);
     bool respondToUserInput(const QString& requestId, const QJsonObject& answers,
@@ -51,6 +54,7 @@ class SessionController final : public QObject {
     void connectionDetailChanged(const QString& detail);
     void nativeIdentityChanged(const QString& threadId, const QString& sessionId);
     void queuedMessagesChanged(const QList<snack::domain::QueuedMessage>& messages);
+    void promptTemplatesChanged(const QList<snack::domain::PromptTemplate>& templates);
 
   private:
     void handleCapabilitiesChanged(const agent::CapabilitySet& capabilities);

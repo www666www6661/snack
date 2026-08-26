@@ -99,6 +99,16 @@ struct QueuedMessage {
     bool operator==(const QueuedMessage&) const = default;
 };
 
+struct PromptTemplate {
+    QUuid id{QUuid::createUuid()};
+    QString name;
+    QString content;
+    bool favorite{true};
+    qsizetype position{0};
+
+    bool operator==(const PromptTemplate&) const = default;
+};
+
 [[nodiscard]] QString enumName(AgentKind value);
 [[nodiscard]] QString enumName(ReasoningEffort value);
 [[nodiscard]] QString enumName(AccessLevel value);
@@ -121,3 +131,4 @@ Q_DECLARE_METATYPE(snack::domain::AgentEvent)
 Q_DECLARE_METATYPE(snack::domain::ConversationStatus)
 Q_DECLARE_METATYPE(snack::domain::TurnSettingsSnapshot)
 Q_DECLARE_METATYPE(snack::domain::QueuedMessage)
+Q_DECLARE_METATYPE(snack::domain::PromptTemplate)
