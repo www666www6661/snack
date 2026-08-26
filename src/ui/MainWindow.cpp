@@ -1,5 +1,7 @@
 #include "ui/MainWindow.h"
 
+#include "ui/ComposerTextEdit.h"
+
 #include <QAction>
 #include <QActionGroup>
 #include <QApplication>
@@ -67,6 +69,7 @@ MainWindow::MainWindow(session::SessionController* controller, app::AppSettings*
     Q_ASSERT(controller_ != nullptr);
     Q_ASSERT(settings_ != nullptr);
     buildUi();
+    composer_->setPlainText(settings_->composerDraft(controller_->conversation().id));
     buildMenus();
     restoreWindowState();
     buildTray();
@@ -146,6 +149,20 @@ void MainWindow::sendMessage() {
         return;
     }
     composer_->clear();
+    persistComposerDraft();
+}
+
+void MainWindow::queueComposerMessage() {
+    const bool active = controller_->status() == domain::ConversationStatus::Running ||
+                        controller_->status() == domain::ConversationStatus::WaitingApproval ||
+                        controller_->status() == domain::ConversationStatus::WaitingInput;
+    if (active) {
+        const int queueIndex = sendModeCombo_->findData(QStringLiteral("queue"));
+        if (queueIndex >= 0) {
+            sendModeCombo_->setCurrentIndex(queueIndex);
+        }
+    }
+    sendMessage();
 }
 
 void MainWindow::updateQueuedMessages(const QList<domain::QueuedMessage>& messages) {
@@ -380,10 +397,9 @@ void MainWindow::buildUi() {
     auto* composerRow = new QWidget(composerFrame);
     auto* composerRowLayout = new QHBoxLayout(composerRow);
     composerRowLayout->setContentsMargins(0, 0, 0, 0);
-    composer_ = new QPlainTextEdit(composerRow);
+    composer_ = new ComposerTextEdit(composerRow);
     composer_->setObjectName(QStringLiteral("composer"));
     composer_->setPlaceholderText(tr("Ask the agent about this workspace..."));
-    composer_->setMaximumHeight(120);
     sendModeCombo_ = new QComboBox(composerRow);
     sendModeCombo_->setObjectName(QStringLiteral("sendModeCombo"));
     sendModeCombo_->hide();
@@ -438,6 +454,14 @@ void MainWindow::buildUi() {
 
     connect(sendButton_, &QPushButton::clicked, this, &MainWindow::sendMessage);
     connect(stopButton_, &QPushButton::clicked, this, &MainWindow::stopTurn);
+    connect(composer_, &ComposerTextEdit::sendRequested, this, &MainWindow::sendMessage);
+    connect(composer_, &ComposerTextEdit::queueRequested, this, &MainWindow::queueComposerMessage);
+    connect(composer_, &ComposerTextEdit::stopRequested, this, &MainWindow::stopTurn);
+    draftSaveTimer_ = new QTimer(this);
+    draftSaveTimer_->setSingleShot(true);
+    draftSaveTimer_->setInterval(350);
+    connect(composer_, &QPlainTextEdit::textChanged, draftSaveTimer_, qOverload<>(&QTimer::start));
+    connect(draftSaveTimer_, &QTimer::timeout, this, &MainWindow::persistComposerDraft);
     connect(sendModeCombo_, &QComboBox::currentIndexChanged, this,
             [this] { updateStatus(controller_->status()); });
     connect(queueList_, &QListWidget::itemChanged, this, &MainWindow::editQueuedMessage);
@@ -479,6 +503,11 @@ void MainWindow::buildMenus() {
     auto* viewMenu = menuBar()->addMenu(tr("View"));
     auto* lightAction = viewMenu->addAction(tr("Light theme"));
     auto* darkAction = viewMenu->addAction(tr("Dark theme"));
+    viewMenu->addSeparator();
+    auto* focusComposer = viewMenu->addAction(tr("Focus composer"));
+    focusComposer->setObjectName(QStringLiteral("focusComposerAction"));
+    focusComposer->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_L));
+    connect(focusComposer, &QAction::triggered, composer_, qOverload<>(&QWidget::setFocus));
     viewMenu->addSeparator();
     auto* zoomIn = viewMenu->addAction(tr("Zoom in"));
     auto* zoomOut = viewMenu->addAction(tr("Zoom out"));
@@ -1168,6 +1197,10 @@ void MainWindow::updateConnectionDetail(const QString& detail) {
     }
 }
 
+void MainWindow::persistComposerDraft() {
+    settings_->saveComposerDraft(controller_->conversation().id, composer_->toPlainText());
+}
+
 void MainWindow::rebuildCapabilityControls(const domain::TurnSettingsSnapshot& settings) {
     const QSignalBlocker modelBlocker(modelCombo_);
     const QSignalBlocker effortBlocker(effortCombo_);
@@ -1289,6 +1322,7 @@ void MainWindow::buildTray() {
 }
 
 void MainWindow::persistWindowState() {
+    persistComposerDraft();
     settingsSnapshot_.mainWindowGeometry = saveGeometry();
     settingsSnapshot_.mainWindowState = saveState(1);
     settings_->save(settingsSnapshot_);

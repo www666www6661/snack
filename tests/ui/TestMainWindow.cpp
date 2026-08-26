@@ -73,6 +73,7 @@ class TestMainWindow final : public QObject {
     void restoresWindowLayout();
     void interruptsRunningTurnFromSendButton();
     void editsAndControlsQueuedMessages();
+    void supportsComposerShortcutsGrowthAndDrafts();
     void handlesApprovalCard();
     void handlesUserInputCardAndUsage();
     void cancelsQuitWhileAgentIsRunning();
@@ -507,6 +508,74 @@ void TestMainWindow::editsAndControlsQueuedMessages() {
     QCOMPARE(adapter.lastSteerRequest().message, QStringLiteral("Queued one"));
     window.findChild<QPushButton*>(QStringLiteral("stopButton"))->click();
     window.close();
+}
+
+void TestMainWindow::supportsComposerShortcutsGrowthAndDrafts() {
+    QTemporaryDir directory;
+    const QString settingsPath = directory.filePath(QStringLiteral("settings.ini"));
+    snack::app::AppSettings settings(settingsPath);
+    UiMemoryEventRepository repository;
+    snack::agent::FakeAgentAdapter adapter(nullptr, 1000);
+    snack::domain::Conversation conversation;
+    conversation.title = QStringLiteral("Composer UX");
+    conversation.workingDirectory = directory.path();
+    settings.saveComposerDraft(conversation.id, QStringLiteral("restored draft"));
+
+    snack::session::SessionController controller(conversation, &adapter, &repository);
+    snack::ui::MainWindow window(&controller, &settings, false);
+    auto* composer = window.findChild<QPlainTextEdit*>(QStringLiteral("composer"));
+    auto* sendButton = window.findChild<QPushButton*>(QStringLiteral("sendButton"));
+    auto* focusAction = window.findChild<QAction*>(QStringLiteral("focusComposerAction"));
+    QVERIFY(composer != nullptr);
+    QVERIFY(sendButton != nullptr);
+    QVERIFY(focusAction != nullptr);
+    QCOMPARE(composer->toPlainText(), QStringLiteral("restored draft"));
+    QCOMPARE(focusAction->shortcut(), QKeySequence(Qt::CTRL | Qt::Key_L));
+
+    window.show();
+    QTRY_COMPARE(controller.status(), snack::domain::ConversationStatus::Idle);
+    composer->setPlainText(QStringLiteral("debounced draft"));
+    QTRY_COMPARE_WITH_TIMEOUT(settings.composerDraft(conversation.id),
+                              QStringLiteral("debounced draft"), 1000);
+    composer->clear();
+    composer->setFocus();
+    QTest::keyClicks(composer, QStringLiteral("x"));
+    QCOMPARE(composer->toPlainText(), QStringLiteral("x"));
+    composer->clear();
+    QCoreApplication::processEvents();
+    const int singleLineHeight = composer->height();
+    composer->setPlainText(QStringList(12, QStringLiteral("line")).join(QLatin1Char('\n')));
+    QCoreApplication::processEvents();
+    QVERIFY(composer->height() > singleLineHeight);
+    QVERIFY(composer->height() <= composer->fontMetrics().lineSpacing() * 8 + 40);
+
+    composer->clear();
+    composer->setFocus();
+    QTest::keyClick(composer, Qt::Key_Return, Qt::ShiftModifier);
+    QCOMPARE(composer->toPlainText(), QStringLiteral("\n"));
+    QCOMPARE(controller.status(), snack::domain::ConversationStatus::Idle);
+
+    composer->setPlainText(QStringLiteral("Keyboard send"));
+    QTest::keyClick(composer, Qt::Key_Return);
+    QCOMPARE(controller.status(), snack::domain::ConversationStatus::Running);
+    QVERIFY(composer->toPlainText().isEmpty());
+    QVERIFY(settings.composerDraft(conversation.id).isEmpty());
+
+    composer->setPlainText(QStringLiteral("Keyboard queue"));
+    QTest::keyClick(composer, Qt::Key_Return, Qt::ControlModifier);
+    QCOMPARE(controller.queuedMessages().size(), 1);
+    QCOMPARE(controller.queuedMessages().constFirst().content, QStringLiteral("Keyboard queue"));
+    QVERIFY(composer->toPlainText().isEmpty());
+
+    sendButton->setFocus();
+    focusAction->trigger();
+    QVERIFY(composer->hasFocus());
+    QTest::keyClick(composer, Qt::Key_Escape);
+    QTRY_COMPARE(controller.status(), snack::domain::ConversationStatus::Idle);
+
+    composer->setPlainText(QStringLiteral("saved on close"));
+    window.close();
+    QCOMPARE(settings.composerDraft(conversation.id), QStringLiteral("saved on close"));
 }
 
 void TestMainWindow::handlesApprovalCard() {

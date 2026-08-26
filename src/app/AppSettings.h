@@ -30,6 +30,8 @@ class AppSettings final {
 
     [[nodiscard]] AppSettingsSnapshot load() const;
     void save(const AppSettingsSnapshot& snapshot);
+    [[nodiscard]] QString composerDraft(const QUuid& conversationId) const;
+    void saveComposerDraft(const QUuid& conversationId, const QString& draft);
 
   private:
     explicit AppSettings(std::unique_ptr<QSettings> settings);

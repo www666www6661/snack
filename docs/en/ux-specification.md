@@ -20,6 +20,8 @@ Use a quiet user-message surface and a broad reading column for the agent. Tool 
 
 Provide attachment, `@`, template, and `/` entry points; an auto-growing editor; send mode; and send/stop controls. While running, choose steer-now or queue. Show an editable, reorderable queue above the composer. Approval or question requests take focus priority.
 
+The current M3 composer grows with wrapped content up to a bounded reading height and follows the fixed keyboard map below. Draft text is stored locally under the conversation UUID after a short idle debounce and again when the window closes. Successful send or queue acceptance clears the draft immediately; drafts never become events or agent input until the user sends them.
+
 ## 6. Key flows
 
 - New conversation: directory → dirty-workspace warning → agent availability → model/effort/access → actual change mode/read-only capability → create. Preserve form state on failure.

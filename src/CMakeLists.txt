@@ -60,7 +60,13 @@ target_compile_definitions(
 )
 snack_set_project_warnings(snack_core)
 
-add_library(snack_ui STATIC ui/MainWindow.cpp ui/MainWindow.h)
+add_library(
+    snack_ui STATIC
+    ui/ComposerTextEdit.cpp
+    ui/ComposerTextEdit.h
+    ui/MainWindow.cpp
+    ui/MainWindow.h
+)
 add_library(Snack::Ui ALIAS snack_ui)
 target_include_directories(snack_ui PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(snack_ui PUBLIC Snack::Core Qt6::Widgets)

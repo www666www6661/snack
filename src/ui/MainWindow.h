@@ -19,8 +19,11 @@ class QListWidget;
 class QPlainTextEdit;
 class QPushButton;
 class QSystemTrayIcon;
+class QTimer;
 
 namespace snack::ui {
+
+class ComposerTextEdit;
 
 class MainWindow final : public QMainWindow {
     Q_OBJECT
@@ -39,6 +42,7 @@ class MainWindow final : public QMainWindow {
 
   private slots:
     void sendMessage();
+    void queueComposerMessage();
     void stopTurn();
     void updateQueuedMessages(const QList<domain::QueuedMessage>& messages);
     void updateQueueControls();
@@ -79,6 +83,7 @@ class MainWindow final : public QMainWindow {
     void applyInterfaceScale(double scale);
     void updateStatus(domain::ConversationStatus status);
     void updateConnectionDetail(const QString& detail);
+    void persistComposerDraft();
     void rebuildCapabilityControls(const domain::TurnSettingsSnapshot& settings);
     void setPreferredAgent(domain::AgentKind kind);
     [[nodiscard]] QString agentDisplayName() const;
@@ -95,7 +100,8 @@ class MainWindow final : public QMainWindow {
     app::AppSettings* settings_{nullptr};
     app::AppSettingsSnapshot settingsSnapshot_;
     QListWidget* timeline_{nullptr};
-    QPlainTextEdit* composer_{nullptr};
+    ComposerTextEdit* composer_{nullptr};
+    QTimer* draftSaveTimer_{nullptr};
     QPushButton* sendButton_{nullptr};
     QPushButton* stopButton_{nullptr};
     QFrame* queueFrame_{nullptr};

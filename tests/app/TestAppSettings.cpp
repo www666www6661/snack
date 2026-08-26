@@ -10,6 +10,7 @@ class TestAppSettings final : public QObject {
     void usesSafeDefaults();
     void persistsValues();
     void clampsInterfaceScale();
+    void persistsConversationDrafts();
 };
 
 void TestAppSettings::usesSafeDefaults() {
@@ -70,6 +71,28 @@ void TestAppSettings::clampsInterfaceScale() {
     raw.setValue(QStringLiteral("agent/preferred"), QStringLiteral("future-agent"));
     raw.sync();
     QCOMPARE(settings.load().preferredAgentKind, snack::domain::AgentKind::Codex);
+}
+
+void TestAppSettings::persistsConversationDrafts() {
+    QTemporaryDir directory;
+    const QString path = directory.filePath(QStringLiteral("settings.ini"));
+    const QUuid first = QUuid::createUuid();
+    const QUuid second = QUuid::createUuid();
+    {
+        snack::app::AppSettings settings(path);
+        settings.saveComposerDraft(first, QStringLiteral("first\nmultiline draft"));
+        settings.saveComposerDraft(second, QStringLiteral("second draft"));
+        QCOMPARE(settings.composerDraft(first), QStringLiteral("first\nmultiline draft"));
+        QVERIFY(settings.composerDraft(QUuid{}).isEmpty());
+        settings.saveComposerDraft(QUuid{}, QStringLiteral("ignored"));
+    }
+
+    snack::app::AppSettings reloaded(path);
+    QCOMPARE(reloaded.composerDraft(first), QStringLiteral("first\nmultiline draft"));
+    QCOMPARE(reloaded.composerDraft(second), QStringLiteral("second draft"));
+    reloaded.saveComposerDraft(first, {});
+    QVERIFY(reloaded.composerDraft(first).isEmpty());
+    QCOMPARE(reloaded.composerDraft(second), QStringLiteral("second draft"));
 }
 
 QTEST_APPLESS_MAIN(TestAppSettings)

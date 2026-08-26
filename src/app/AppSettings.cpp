@@ -47,6 +47,30 @@ void AppSettings::save(const AppSettingsSnapshot& snapshot) {
     settings_->sync();
 }
 
+QString AppSettings::composerDraft(const QUuid& conversationId) const {
+    if (conversationId.isNull()) {
+        return {};
+    }
+    return settings_
+        ->value(
+            QStringLiteral("composerDrafts/%1").arg(conversationId.toString(QUuid::WithoutBraces)))
+        .toString();
+}
+
+void AppSettings::saveComposerDraft(const QUuid& conversationId, const QString& draft) {
+    if (conversationId.isNull()) {
+        return;
+    }
+    const QString key =
+        QStringLiteral("composerDrafts/%1").arg(conversationId.toString(QUuid::WithoutBraces));
+    if (draft.isEmpty()) {
+        settings_->remove(key);
+    } else {
+        settings_->setValue(key, draft);
+    }
+    settings_->sync();
+}
+
 QString themeModeName(ThemeMode mode) {
     switch (mode) {
     case ThemeMode::System:
