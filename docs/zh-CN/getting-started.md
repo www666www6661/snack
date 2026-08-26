@@ -2,7 +2,7 @@
 
 ## 当前垂直切片
 
-`0.1.0-alpha.1` 工程骨架包含 Qt Widgets 主窗口、单实例 IPC、设置、声明式主题校验、SQLite 事件仓库、SHA-256 内容存储、统一 Agent 接口、模拟 Agent、会话状态机和 Qt Test 测试。M2 已加入真实 Codex 的 CLI 探测、stdio JSONL 传输、初始化握手、分页模型能力、带身份持久化的原生 Thread 创建/恢复、文本 Turn 流与中断，并将 Codex 作为主应用默认 Agent。CLI 不可用时界面明确回退 Mock；普通测试仍不调用真实模型。
+`0.1.0-alpha.1` 工程骨架包含 Qt Widgets 主窗口、单实例 IPC、设置、声明式主题校验、SQLite 事件仓库、SHA-256 内容存储、统一 Agent 接口、模拟 Agent、会话状态机和 Qt Test 测试。M2 已加入真实 Codex 的 CLI 探测、stdio JSONL 传输、初始化握手、分页模型能力、带身份持久化的原生 Thread 创建/恢复、文本 Turn 流与中断、命令/文件审批卡片，并将 Codex 作为主应用默认 Agent。CLI 不可用时界面明确回退 Mock；普通测试仍不调用真实模型。
 
 Agent 菜单中的偏好只影响下一会话。重启后，如果偏好 Agent 或工作目录与最后会话不同，零食会创建新的隔离会话，不会把现有原生 Thread ID切换给另一个 Agent。Codex CLI 的自定义路径可预先写入设置键 `agent/codexExecutable`；空值表示从系统 `PATH` 自动探测。
 

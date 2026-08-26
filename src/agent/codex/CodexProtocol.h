@@ -22,6 +22,7 @@ struct ProtocolMessage {
 [[nodiscard]] ProtocolMessage parseMessage(const QByteArray& line);
 [[nodiscard]] QByteArray encodeRequest(qint64 id, const QString& method, const QJsonObject& params);
 [[nodiscard]] QByteArray encodeNotification(const QString& method, const QJsonObject& params);
+[[nodiscard]] QByteArray encodeResponse(const QJsonValue& id, const QJsonValue& result);
 [[nodiscard]] QByteArray encodeErrorResponse(const QJsonValue& id, int code,
                                              const QString& message);
 

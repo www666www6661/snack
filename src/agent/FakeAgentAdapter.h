@@ -15,8 +15,11 @@ class FakeAgentAdapter final : public IAgentAdapter {
     [[nodiscard]] domain::AgentKind kind() const override;
     [[nodiscard]] CapabilitySet capabilities() const override;
     [[nodiscard]] AgentConnectionRequest lastConnectionRequest() const;
+    [[nodiscard]] QString lastApprovalRequestId() const;
+    [[nodiscard]] domain::ApprovalDecision lastApprovalDecision() const;
     void connectAgent(const AgentConnectionRequest& request) override;
     void startTurn(const TurnRequest& request) override;
+    bool respondToApproval(const QString& requestId, domain::ApprovalDecision decision) override;
     void interruptTurn() override;
     void closeAgent() override;
 
@@ -33,6 +36,8 @@ class FakeAgentAdapter final : public IAgentAdapter {
     qsizetype chunkIndex_{0};
     bool connected_{false};
     AgentConnectionRequest lastConnectionRequest_;
+    QString lastApprovalRequestId_;
+    domain::ApprovalDecision lastApprovalDecision_{domain::ApprovalDecision::Decline};
 };
 
 } // namespace snack::agent

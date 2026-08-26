@@ -10,6 +10,7 @@ namespace snack::domain {
 enum class AgentKind { Codex, Claude, Mock };
 enum class ReasoningEffort { Minimal, Low, Medium, High, ExtraHigh, Maximum, Ultra };
 enum class AccessLevel { Strict, Workspace, Full };
+enum class ApprovalDecision { Accept, AcceptForSession, Decline, Cancel };
 enum class ConversationStatus {
     Dormant,
     Connecting,
@@ -26,6 +27,8 @@ enum class AgentEventType {
     AgentMessageStart,
     AgentMessageDelta,
     AgentMessageComplete,
+    ApprovalRequested,
+    ApprovalResolved,
     TurnStarted,
     TurnCompleted,
     TurnInterrupted,
@@ -76,12 +79,14 @@ struct AgentEvent {
 [[nodiscard]] QString enumName(AgentKind value);
 [[nodiscard]] QString enumName(ReasoningEffort value);
 [[nodiscard]] QString enumName(AccessLevel value);
+[[nodiscard]] QString enumName(ApprovalDecision value);
 [[nodiscard]] QString enumName(ConversationStatus value);
 [[nodiscard]] QString enumName(AgentEventType value);
 
 [[nodiscard]] AgentKind agentKindFromString(const QString& value);
 [[nodiscard]] ReasoningEffort reasoningEffortFromString(const QString& value);
 [[nodiscard]] AccessLevel accessLevelFromString(const QString& value);
+[[nodiscard]] ApprovalDecision approvalDecisionFromString(const QString& value);
 [[nodiscard]] ConversationStatus conversationStatusFromString(const QString& value);
 [[nodiscard]] AgentEventType agentEventTypeFromString(const QString& value);
 

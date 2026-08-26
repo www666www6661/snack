@@ -4,6 +4,7 @@
 #include "session/SessionController.h"
 #include "ui/ThemeDefinition.h"
 
+#include <QHash>
 #include <QMainWindow>
 
 #include <optional>
@@ -48,6 +49,8 @@ class MainWindow final : public QMainWindow {
     void buildUi();
     void buildMenus();
     void appendEvent(const domain::AgentEvent& event);
+    void appendApprovalRequest(const domain::AgentEvent& event);
+    void resolveApprovalCard(const domain::AgentEvent& event);
     void applyTheme(const ThemeDefinition& theme);
     void applyInterfaceScale(double scale);
     void updateStatus(domain::ConversationStatus status);
@@ -78,7 +81,13 @@ class MainWindow final : public QMainWindow {
     QComboBox* accessCombo_{nullptr};
     QSystemTrayIcon* trayIcon_{nullptr};
     QString startupNotice_;
+    struct ApprovalCardState {
+        QLabel* status{nullptr};
+        QList<QPushButton*> buttons;
+    };
+    QHash<QString, ApprovalCardState> approvalCards_;
     int activeAgentRow_{-1};
+    bool restoringTimeline_{false};
     bool closeToTrayEnabled_{false};
     bool quitRequested_{false};
     bool shutdownComplete_{false};

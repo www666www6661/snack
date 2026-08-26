@@ -9,6 +9,8 @@
 #include <QComboBox>
 #include <QDir>
 #include <QDockWidget>
+#include <QFrame>
+#include <QJsonArray>
 #include <QLabel>
 #include <QListWidget>
 #include <QMessageBox>
@@ -55,6 +57,7 @@ class TestMainWindow final : public QObject {
     void hidesToTrayWithoutClosingSession();
     void restoresWindowLayout();
     void interruptsRunningTurnFromSendButton();
+    void handlesApprovalCard();
     void cancelsQuitWhileAgentIsRunning();
 };
 
@@ -166,14 +169,26 @@ void TestMainWindow::restoresPersistedTimeline() {
     deltaEvent.type = snack::domain::AgentEventType::AgentMessageDelta;
     deltaEvent.payload = {{QStringLiteral("text"), QStringLiteral("Persisted answer")}};
     repository.events.append(deltaEvent);
+    snack::domain::AgentEvent approvalEvent;
+    approvalEvent.conversationId = conversation.id;
+    approvalEvent.turnId = QUuid::createUuid();
+    approvalEvent.sequence = 4;
+    approvalEvent.type = snack::domain::AgentEventType::ApprovalRequested;
+    approvalEvent.payload = {{QStringLiteral("requestId"), QStringLiteral("restored-approval")},
+                             {QStringLiteral("kind"), QStringLiteral("fileChange")},
+                             {QStringLiteral("grantRoot"), QStringLiteral("/outside")}};
+    repository.events.append(approvalEvent);
 
     snack::session::SessionController controller(conversation, &adapter, &repository);
     snack::ui::MainWindow window(&controller, &settings);
     auto* timeline = window.findChild<QListWidget*>(QStringLiteral("timeline"));
     QVERIFY(timeline != nullptr);
-    QCOMPARE(timeline->count(), 2);
+    QCOMPARE(timeline->count(), 3);
     QVERIFY(timeline->item(0)->text().contains(QStringLiteral("Persisted question")));
     QVERIFY(timeline->item(1)->text().contains(QStringLiteral("Persisted answer")));
+    auto* restoredApproval = window.findChild<QPushButton*>(QStringLiteral("approvalAcceptButton"));
+    QVERIFY(restoredApproval != nullptr);
+    QVERIFY(!restoredApproval->isEnabled());
 }
 
 void TestMainWindow::hidesToTrayWithoutClosingSession() {
@@ -273,6 +288,66 @@ void TestMainWindow::interruptsRunningTurnFromSendButton() {
     QCOMPARE(controller.status(), snack::domain::ConversationStatus::Idle);
     QCOMPARE(repository.events.constLast().type, snack::domain::AgentEventType::TurnInterrupted);
     QCOMPARE(sendButton->text(), QStringLiteral("Send"));
+    window.close();
+}
+
+void TestMainWindow::handlesApprovalCard() {
+    using snack::domain::AgentEvent;
+    using snack::domain::AgentEventType;
+    using snack::domain::ApprovalDecision;
+    using snack::domain::ConversationStatus;
+
+    QTemporaryDir directory;
+    snack::app::AppSettings settings(directory.filePath(QStringLiteral("settings.ini")));
+    UiMemoryEventRepository repository;
+    snack::agent::FakeAgentAdapter adapter(nullptr, 1000);
+    snack::domain::Conversation conversation;
+    conversation.title = QStringLiteral("Approval UI");
+    conversation.workingDirectory = directory.path();
+    snack::session::SessionController controller(conversation, &adapter, &repository);
+    snack::ui::MainWindow window(&controller, &settings, false);
+
+    auto* composer = window.findChild<QPlainTextEdit*>(QStringLiteral("composer"));
+    auto* sendButton = window.findChild<QPushButton*>(QStringLiteral("sendButton"));
+    QTRY_COMPARE(controller.status(), ConversationStatus::Idle);
+    composer->setPlainText(QStringLiteral("Run a command"));
+    sendButton->click();
+    QCOMPARE(controller.status(), ConversationStatus::Running);
+
+    AgentEvent request;
+    request.turnId = repository.events.constFirst().turnId;
+    request.type = AgentEventType::ApprovalRequested;
+    request.payload = {{QStringLiteral("requestId"), QStringLiteral("ui-approval")},
+                       {QStringLiteral("kind"), QStringLiteral("commandExecution")},
+                       {QStringLiteral("command"), QStringLiteral("git status")},
+                       {QStringLiteral("cwd"), directory.path()},
+                       {QStringLiteral("reason"), QStringLiteral("Inspect the workspace")},
+                       {QStringLiteral("availableDecisions"),
+                        QJsonArray{QStringLiteral("accept"), QStringLiteral("decline")}}};
+    adapter.eventReceived(request);
+
+    QCOMPARE(controller.status(), ConversationStatus::WaitingApproval);
+    QCOMPARE(sendButton->text(), QStringLiteral("Stop"));
+    auto* card = window.findChild<QFrame*>(QStringLiteral("approvalCard"));
+    auto* allow = window.findChild<QPushButton*>(QStringLiteral("approvalAcceptButton"));
+    auto* allowSession = window.findChild<QPushButton*>(QStringLiteral("approvalSessionButton"));
+    auto* approvalStatus = window.findChild<QLabel*>(QStringLiteral("approvalStatus"));
+    QVERIFY(card != nullptr);
+    QVERIFY(allow != nullptr);
+    QVERIFY(allowSession != nullptr);
+    QVERIFY(approvalStatus != nullptr);
+    QVERIFY(allow->isEnabled());
+    QVERIFY(!allowSession->isEnabled());
+    allow->click();
+
+    QCOMPARE(adapter.lastApprovalRequestId(), QStringLiteral("ui-approval"));
+    QCOMPARE(adapter.lastApprovalDecision(), ApprovalDecision::Accept);
+    QCOMPARE(controller.status(), ConversationStatus::Running);
+    QVERIFY(!allow->isEnabled());
+    QVERIFY(approvalStatus->text().contains(QStringLiteral("accept")));
+
+    sendButton->click();
+    QCOMPARE(controller.status(), ConversationStatus::Idle);
     window.close();
 }
 

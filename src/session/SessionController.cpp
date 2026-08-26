@@ -1,5 +1,7 @@
 #include "session/SessionController.h"
 
+#include <QJsonArray>
+
 #include <algorithm>
 #include <optional>
 #include <utility>
@@ -49,6 +51,9 @@ SessionController::SessionController(domain::Conversation conversation,
                     connectionDetail_ = detail;
                     emit connectionDetailChanged(connectionDetail_);
                 }
+                if (!connected) {
+                    pendingApprovals_.clear();
+                }
                 setStatus(connected ? domain::ConversationStatus::Idle
                                     : domain::ConversationStatus::Disconnected);
             });
@@ -61,6 +66,7 @@ SessionController::SessionController(domain::Conversation conversation,
     connect(adapter_, &agent::IAgentAdapter::turnFinished, this, [this](const QUuid& turnId, bool) {
         if (turnId == activeTurnId_) {
             activeTurnId_ = QUuid{};
+            pendingApprovals_.clear();
             setStatus(domain::ConversationStatus::Idle);
         }
     });
@@ -146,6 +152,7 @@ domain::TurnSettingsSnapshot SessionController::nextTurnSettings() const {
 }
 const agent::CapabilitySet& SessionController::capabilities() const { return capabilities_; }
 QString SessionController::connectionDetail() const { return connectionDetail_; }
+qsizetype SessionController::pendingApprovalCount() const { return pendingApprovals_.size(); }
 
 QList<domain::AgentEvent> SessionController::restoredEvents(QString* error) {
     const auto events = repository_->eventsForConversation(conversation_.id, error);
@@ -201,8 +208,48 @@ bool SessionController::sendMessage(const QString& message, QString* error) {
     return true;
 }
 
+bool SessionController::respondToApproval(const QString& requestId,
+                                          domain::ApprovalDecision decision, QString* error) {
+    if (conversation_.status != domain::ConversationStatus::WaitingApproval ||
+        !pendingApprovals_.contains(requestId)) {
+        if (error != nullptr) {
+            *error = QStringLiteral("Approval request is no longer active");
+        }
+        return false;
+    }
+    const QJsonArray availableDecisions =
+        pendingApprovals_.value(requestId).value(QStringLiteral("availableDecisions")).toArray();
+    if (!availableDecisions.isEmpty() && !availableDecisions.contains(domain::enumName(decision))) {
+        if (error != nullptr) {
+            *error = QStringLiteral("Approval decision is not available for this request");
+        }
+        return false;
+    }
+    if (!adapter_->respondToApproval(requestId, decision)) {
+        if (error != nullptr) {
+            *error = QStringLiteral("Failed to send approval response");
+        }
+        return false;
+    }
+
+    pendingApprovals_.remove(requestId);
+    domain::AgentEvent resolved;
+    resolved.turnId = activeTurnId_;
+    resolved.type = domain::AgentEventType::ApprovalResolved;
+    resolved.payload = {{QStringLiteral("requestId"), requestId},
+                        {QStringLiteral("decision"), domain::enumName(decision)},
+                        {QStringLiteral("resolution"), QStringLiteral("answered")}};
+    recordEvent(resolved);
+    if (pendingApprovals_.isEmpty() && !activeTurnId_.isNull()) {
+        setStatus(domain::ConversationStatus::Running);
+    }
+    return true;
+}
+
 void SessionController::interrupt() {
-    if (conversation_.status == domain::ConversationStatus::Running) {
+    if (conversation_.status == domain::ConversationStatus::Running ||
+        conversation_.status == domain::ConversationStatus::WaitingApproval ||
+        conversation_.status == domain::ConversationStatus::WaitingInput) {
         adapter_->interruptTurn();
     }
 }
@@ -210,6 +257,7 @@ void SessionController::interrupt() {
 void SessionController::close() {
     adapter_->closeAgent();
     activeTurnId_ = QUuid{};
+    pendingApprovals_.clear();
     setStatus(domain::ConversationStatus::Closed);
 }
 
@@ -232,6 +280,27 @@ void SessionController::handleAdapterEvent(domain::AgentEvent event) {
         warning.rawPayload = event.payload;
         recordEvent(warning);
         return;
+    }
+    if (event.type == domain::AgentEventType::ApprovalRequested) {
+        const QString requestId = event.payload.value(QStringLiteral("requestId")).toString();
+        if (requestId.isEmpty() || pendingApprovals_.contains(requestId)) {
+            domain::AgentEvent warning;
+            warning.turnId = activeTurnId_;
+            warning.type = domain::AgentEventType::WarningRaised;
+            warning.payload = {{QStringLiteral("message"),
+                                QStringLiteral("Ignored invalid or duplicate approval request")}};
+            warning.rawPayload = event.rawPayload;
+            recordEvent(warning);
+            return;
+        }
+        pendingApprovals_.insert(requestId, event.payload);
+        setStatus(domain::ConversationStatus::WaitingApproval);
+    } else if (event.type == domain::AgentEventType::ApprovalResolved) {
+        const QString requestId = event.payload.value(QStringLiteral("requestId")).toString();
+        if (pendingApprovals_.remove(requestId) > 0 && pendingApprovals_.isEmpty() &&
+            !activeTurnId_.isNull()) {
+            setStatus(domain::ConversationStatus::Running);
+        }
     }
     recordEvent(std::move(event));
 }

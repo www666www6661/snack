@@ -22,7 +22,12 @@
     "schema/AgentMessageDeltaNotification.json",
     "schema/TurnInterruptParams.json",
     "schema/TurnInterruptResponse.json",
-    "schema/ErrorNotification.json"
+    "schema/ErrorNotification.json",
+    "schema/CommandExecutionRequestApprovalParams.json",
+    "schema/CommandExecutionRequestApprovalResponse.json",
+    "schema/FileChangeRequestApprovalParams.json",
+    "schema/FileChangeRequestApprovalResponse.json",
+    "schema/ServerRequestResolvedNotification.json"
   ],
   "fixtures": [
     "initialize-success.jsonl",
@@ -31,6 +36,7 @@
     "thread-start-success.json",
     "turn-stream-success.jsonl",
     "turn-failed.jsonl",
-    "turn-interrupted.jsonl"
+    "turn-interrupted.jsonl",
+    "approval-flow.jsonl"
   ]
 }

@@ -1,6 +1,7 @@
 #include "agent/FakeAgentAdapter.h"
 #include "session/SessionController.h"
 
+#include <QJsonArray>
 #include <QSignalSpy>
 #include <QTest>
 
@@ -45,6 +46,7 @@ class TestSessionController final : public QObject {
     void streamsAndPersistsTurn();
     void snapshotsSettingsPerTurn();
     void interruptsActiveTurn();
+    void handlesApprovalLifecycle();
     void validatesStateAndNormalizesSettings();
     void followsDynamicCapabilities();
     void persistsNativeIdentityForResume();
@@ -106,6 +108,59 @@ void TestSessionController::interruptsActiveTurn() {
     controller.interrupt();
     QTRY_COMPARE(controller.status(), snack::domain::ConversationStatus::Idle);
     QCOMPARE(repository.events_.constLast().type, snack::domain::AgentEventType::TurnInterrupted);
+}
+
+void TestSessionController::handlesApprovalLifecycle() {
+    using snack::domain::AgentEvent;
+    using snack::domain::AgentEventType;
+    using snack::domain::ApprovalDecision;
+    using snack::domain::ConversationStatus;
+
+    MemoryEventRepository repository;
+    snack::agent::FakeAgentAdapter adapter(nullptr, 1000);
+    snack::session::SessionController controller(conversation(), &adapter, &repository);
+    controller.open();
+    QTRY_COMPARE(controller.status(), ConversationStatus::Idle);
+    QVERIFY(controller.sendMessage(QStringLiteral("needs approval")));
+    const QUuid turnId = repository.events_.constFirst().turnId;
+
+    AgentEvent request;
+    request.turnId = turnId;
+    request.type = AgentEventType::ApprovalRequested;
+    request.payload = {{QStringLiteral("requestId"), QStringLiteral("approval-token")},
+                       {QStringLiteral("kind"), QStringLiteral("commandExecution")},
+                       {QStringLiteral("command"), QStringLiteral("git status")}};
+    adapter.eventReceived(request);
+    QCOMPARE(controller.status(), ConversationStatus::WaitingApproval);
+    QCOMPARE(controller.pendingApprovalCount(), 1);
+
+    adapter.eventReceived(request);
+    QCOMPARE(controller.pendingApprovalCount(), 1);
+    QCOMPARE(repository.events_.constLast().type, AgentEventType::WarningRaised);
+
+    QString error;
+    QVERIFY(controller.respondToApproval(QStringLiteral("approval-token"),
+                                         ApprovalDecision::AcceptForSession, &error));
+    QCOMPARE(adapter.lastApprovalRequestId(), QStringLiteral("approval-token"));
+    QCOMPARE(adapter.lastApprovalDecision(), ApprovalDecision::AcceptForSession);
+    QCOMPARE(controller.pendingApprovalCount(), 0);
+    QCOMPARE(controller.status(), ConversationStatus::Running);
+    QCOMPARE(repository.events_.constLast().type, AgentEventType::ApprovalResolved);
+    QVERIFY(!controller.respondToApproval(QStringLiteral("approval-token"),
+                                          ApprovalDecision::Decline, &error));
+    QVERIFY(!error.isEmpty());
+
+    request.payload.insert(QStringLiteral("requestId"), QStringLiteral("approval-token-2"));
+    request.payload.insert(QStringLiteral("availableDecisions"),
+                           QJsonArray{QStringLiteral("decline")});
+    adapter.eventReceived(request);
+    QCOMPARE(controller.status(), ConversationStatus::WaitingApproval);
+    QVERIFY(!controller.respondToApproval(QStringLiteral("approval-token-2"),
+                                          ApprovalDecision::Accept, &error));
+    QVERIFY(error.contains(QStringLiteral("not available")));
+    controller.interrupt();
+    QCOMPARE(controller.status(), ConversationStatus::Idle);
+    QCOMPARE(controller.pendingApprovalCount(), 0);
 }
 
 void TestSessionController::validatesStateAndNormalizesSettings() {

@@ -3,6 +3,7 @@
 #include "agent/IAgentAdapter.h"
 #include "storage/EventRepository.h"
 
+#include <QHash>
 #include <QObject>
 
 namespace snack::session {
@@ -19,10 +20,13 @@ class SessionController final : public QObject {
     [[nodiscard]] domain::TurnSettingsSnapshot nextTurnSettings() const;
     [[nodiscard]] const agent::CapabilitySet& capabilities() const;
     [[nodiscard]] QString connectionDetail() const;
+    [[nodiscard]] qsizetype pendingApprovalCount() const;
     [[nodiscard]] QList<domain::AgentEvent> restoredEvents(QString* error = nullptr);
 
     void open();
     bool sendMessage(const QString& message, QString* error = nullptr);
+    bool respondToApproval(const QString& requestId, domain::ApprovalDecision decision,
+                           QString* error = nullptr);
     void interrupt();
     void close();
     void setNextTurnSettings(const domain::TurnSettingsSnapshot& settings);
@@ -52,6 +56,7 @@ class SessionController final : public QObject {
     agent::CapabilitySet capabilities_;
     QString connectionDetail_;
     QUuid activeTurnId_;
+    QHash<QString, QJsonObject> pendingApprovals_;
     quint64 nextSequence_{1};
 };
 

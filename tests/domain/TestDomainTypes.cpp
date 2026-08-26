@@ -11,6 +11,7 @@ class TestDomainTypes final : public QObject {
     void conversationStatusNamesRoundTrip();
     void unknownValuesUseSafeDefaults();
     void eventTypeNamesRoundTrip();
+    void approvalDecisionNamesRoundTrip();
 };
 
 void TestDomainTypes::settingsSnapshotRoundTrips() {
@@ -60,10 +61,21 @@ void TestDomainTypes::unknownValuesUseSafeDefaults() {
 void TestDomainTypes::eventTypeNamesRoundTrip() {
     using enum snack::domain::AgentEventType;
     const QList<snack::domain::AgentEventType> values = {
-        UserMessage, AgentMessageDelta, TurnCompleted, WarningRaised, RawProtocolObserved};
+        UserMessage,   AgentMessageDelta, ApprovalRequested,  ApprovalResolved,
+        TurnCompleted, WarningRaised,     RawProtocolObserved};
     for (const auto value : values) {
         QCOMPARE(snack::domain::agentEventTypeFromString(snack::domain::enumName(value)), value);
     }
+}
+
+void TestDomainTypes::approvalDecisionNamesRoundTrip() {
+    using enum snack::domain::ApprovalDecision;
+    const QList<snack::domain::ApprovalDecision> values = {Accept, AcceptForSession, Decline,
+                                                           Cancel};
+    for (const auto value : values) {
+        QCOMPARE(snack::domain::approvalDecisionFromString(snack::domain::enumName(value)), value);
+    }
+    QCOMPARE(snack::domain::approvalDecisionFromString(QStringLiteral("future")), Decline);
 }
 
 QTEST_APPLESS_MAIN(TestDomainTypes)

@@ -38,6 +38,12 @@ AgentConnectionRequest FakeAgentAdapter::lastConnectionRequest() const {
     return lastConnectionRequest_;
 }
 
+QString FakeAgentAdapter::lastApprovalRequestId() const { return lastApprovalRequestId_; }
+
+domain::ApprovalDecision FakeAgentAdapter::lastApprovalDecision() const {
+    return lastApprovalDecision_;
+}
+
 void FakeAgentAdapter::connectAgent(const AgentConnectionRequest& request) {
     lastConnectionRequest_ = request;
     QTimer::singleShot(0, this, [this] {
@@ -60,6 +66,16 @@ void FakeAgentAdapter::startTurn(const TurnRequest& request) {
               {{QStringLiteral("settings"), request.settings.toJson()}});
     emitEvent(domain::AgentEventType::AgentMessageStart);
     timer_.start(chunkDelayMs_);
+}
+
+bool FakeAgentAdapter::respondToApproval(const QString& requestId,
+                                         domain::ApprovalDecision decision) {
+    if (requestId.isEmpty() || activeRequest_.turnId.isNull()) {
+        return false;
+    }
+    lastApprovalRequestId_ = requestId;
+    lastApprovalDecision_ = decision;
+    return true;
 }
 
 void FakeAgentAdapter::interruptTurn() {

@@ -19,7 +19,7 @@
 
 ## M2：Codex 协议垂直链路（`0.1.0-alpha.2`）
 
-状态：进行中。CLI 探测、可注入 `QProcess` 传输、JSONL 分帧、初始化握手、请求 ID 关联、有界诊断、分页 `model/list`、逐模型能力、`thread/start`/`thread/resume`、Thread/Session 身份持久化、逐轮模型/推理强度/访问层级覆盖、文本 `turn/start` 流、错误收口、`turn/interrupt`、主应用 Codex/Mock 选择与 Codex CLI `0.149.0` 版本化 Schema/fixture 已完成；尚未完成审批、工具、推理与计划事件。
+状态：进行中。CLI 探测、可注入 `QProcess` 传输、JSONL 分帧、初始化握手、请求 ID 关联、有界诊断、分页 `model/list`、逐模型能力、`thread/start`/`thread/resume`、Thread/Session 身份持久化、逐轮模型/推理强度/访问层级覆盖、文本 `turn/start` 流、错误收口、`turn/interrupt`、命令/文件审批卡片与响应、主应用 Codex/Mock 选择与 Codex CLI `0.149.0` 版本化 Schema/fixture 已完成；尚未完成工具进度、推理与计划事件。
 
 - `codex app-server` stdio transport、Schema生成与握手。
 - model/list、thread start/resume/read/list、turn start/steer/interrupt。

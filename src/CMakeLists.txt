@@ -3,6 +3,8 @@ set(SNACK_CORE_SOURCES
     agent/AgentRuntime.h
     agent/codex/CodexAdapter.cpp
     agent/codex/CodexAdapter.h
+    agent/codex/CodexApprovalLifecycle.cpp
+    agent/codex/CodexApprovalLifecycle.h
     agent/codex/CodexAppServerClient.cpp
     agent/codex/CodexAppServerClient.h
     agent/codex/CodexCliDiscovery.cpp

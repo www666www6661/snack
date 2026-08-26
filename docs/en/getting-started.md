@@ -2,7 +2,7 @@
 
 ## Current vertical slice
 
-The `0.1.0-alpha.1` foundation includes a Qt Widgets shell, single-instance IPC, settings, declarative theme validation, an SQLite event repository, a SHA-256 content store, the common Agent interface, a fake streaming Agent, the session state machine, and Qt Test coverage. M2 now includes real Codex CLI discovery, stdio JSONL transport, initialization, paginated model capabilities, native thread start/resume with persisted identity, text turns and interruption, and Codex as the main application's default Agent. The UI explicitly falls back to Mock when the CLI is unavailable, while normal tests still never invoke a real model.
+The `0.1.0-alpha.1` foundation includes a Qt Widgets shell, single-instance IPC, settings, declarative theme validation, an SQLite event repository, a SHA-256 content store, the common Agent interface, a fake streaming Agent, the session state machine, and Qt Test coverage. M2 now includes real Codex CLI discovery, stdio JSONL transport, initialization, paginated model capabilities, native thread start/resume with persisted identity, text turns and interruption, command/file approval cards, and Codex as the main application's default Agent. The UI explicitly falls back to Mock when the CLI is unavailable, while normal tests still never invoke a real model.
 
 The Agent menu preference applies only to the next conversation. On restart, a different preferred Agent or workspace creates an isolated conversation instead of moving an existing native thread ID across Agents. A custom Codex CLI path can be placed in the `agent/codexExecutable` settings key; an empty value probes the system `PATH`.
 

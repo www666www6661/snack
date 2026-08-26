@@ -1,5 +1,6 @@
 #include "agent/codex/CodexAdapter.h"
 #include "agent/codex/CodexAppServerClient.h"
+#include "agent/codex/CodexApprovalLifecycle.h"
 #include "agent/codex/CodexCliDiscovery.h"
 #include "agent/codex/CodexModelCatalog.h"
 #include "agent/codex/CodexProtocol.h"
@@ -84,10 +85,12 @@ class TestCodexAppServer final : public QObject {
     void parsesThreadLifecycleResponses();
     void mapsThreadAccessLevels();
     void mapsAndParsesTurnLifecycle();
+    void parsesApprovalLifecycle();
     void adapterPublishesPaginatedCapabilities();
     void adapterStreamsAndCompletesTurn();
     void adapterHandlesTurnFailuresAndStaleEvents();
     void adapterInterruptsAndDeclinesServerRequests();
+    void adapterHandlesApprovalRequests();
     void adapterFinishesTurnWhenProcessDisconnects();
     void adapterHandlesCatalogFailures();
     void streamsQProcessIoAndReportsStartFailure();
@@ -358,7 +361,7 @@ void TestCodexAppServer::loadsVersionedSchemaContract() {
     QVERIFY(manifestFile.open(QIODevice::ReadOnly));
     const QJsonObject manifest = QJsonDocument::fromJson(manifestFile.readAll()).object();
     QCOMPARE(manifest.value(QStringLiteral("cliVersion")).toString(), QStringLiteral("0.149.0"));
-    QCOMPARE(manifest.value(QStringLiteral("schemas")).toArray().size(), 20);
+    QCOMPARE(manifest.value(QStringLiteral("schemas")).toArray().size(), 25);
 
     const QStringList schemaNames = {QStringLiteral("JSONRPCMessage.json"),
                                      QStringLiteral("InitializeParams.json"),
@@ -379,7 +382,12 @@ void TestCodexAppServer::loadsVersionedSchemaContract() {
                                      QStringLiteral("AgentMessageDeltaNotification.json"),
                                      QStringLiteral("TurnInterruptParams.json"),
                                      QStringLiteral("TurnInterruptResponse.json"),
-                                     QStringLiteral("ErrorNotification.json")};
+                                     QStringLiteral("ErrorNotification.json"),
+                                     QStringLiteral("CommandExecutionRequestApprovalParams.json"),
+                                     QStringLiteral("CommandExecutionRequestApprovalResponse.json"),
+                                     QStringLiteral("FileChangeRequestApprovalParams.json"),
+                                     QStringLiteral("FileChangeRequestApprovalResponse.json"),
+                                     QStringLiteral("ServerRequestResolvedNotification.json")};
     for (const QString& schemaName : schemaNames) {
         QFile schemaFile(fixtureRoot + QStringLiteral("/schema/") + schemaName);
         QVERIFY2(schemaFile.open(QIODevice::ReadOnly), qPrintable(schemaFile.errorString()));
@@ -421,6 +429,14 @@ static void feedNotification(FakeProcessTransport& transport, const QString& met
     const QJsonObject notification{{QStringLiteral("method"), method},
                                    {QStringLiteral("params"), params}};
     transport.feedStandardOutput(QJsonDocument(notification).toJson(QJsonDocument::Compact) + '\n');
+}
+
+static void feedServerRequest(FakeProcessTransport& transport, const QJsonValue& id,
+                              const QString& method, const QJsonObject& params) {
+    const QJsonObject request{{QStringLiteral("id"), id},
+                              {QStringLiteral("method"), method},
+                              {QStringLiteral("params"), params}};
+    transport.feedStandardOutput(QJsonDocument(request).toJson(QJsonDocument::Compact) + '\n');
 }
 
 static QJsonObject threadResult(const QString& threadId = QStringLiteral("0198-thread-snack"),
@@ -678,6 +694,58 @@ void TestCodexAppServer::mapsAndParsesTurnLifecycle() {
     QVERIFY(!parseItemNotification(QJsonObject{}, &error).has_value());
     QVERIFY(!parseAgentMessageDelta(QJsonObject{}, &error).has_value());
     QVERIFY(!parseTurnErrorNotification(QJsonObject{}, &error).has_value());
+}
+
+void TestCodexAppServer::parsesApprovalLifecycle() {
+    using namespace snack::agent::codex;
+
+    const QJsonObject params{{QStringLiteral("threadId"), QStringLiteral("thread-1")},
+                             {QStringLiteral("turnId"), QStringLiteral("turn-1")},
+                             {QStringLiteral("itemId"), QStringLiteral("item-1")},
+                             {QStringLiteral("reason"), QStringLiteral("needs network")},
+                             {QStringLiteral("command"), QStringLiteral("curl example.com")},
+                             {QStringLiteral("cwd"), QStringLiteral("C:/workspace")},
+                             {QStringLiteral("networkApprovalContext"),
+                              QJsonObject{{QStringLiteral("host"), QStringLiteral("example.com")},
+                                          {QStringLiteral("protocol"), QStringLiteral("https")}}}};
+    QString error;
+    const auto command = parseApprovalRequest(
+        QStringLiteral("approval-1"), QStringLiteral("item/commandExecution/requestApproval"),
+        params, &error);
+    QVERIFY2(command.has_value(), qPrintable(error));
+    QCOMPARE(command->kind, CodexApprovalKind::CommandExecution);
+    QCOMPARE(command->command, QStringLiteral("curl example.com"));
+    QCOMPARE(command->networkApprovalContext.value(QStringLiteral("host")).toString(),
+             QStringLiteral("example.com"));
+
+    QJsonObject fileParams = params;
+    fileParams.insert(QStringLiteral("grantRoot"), QStringLiteral("C:/outside"));
+    const auto file = parseApprovalRequest(17, QStringLiteral("item/fileChange/requestApproval"),
+                                           fileParams, &error);
+    QVERIFY2(file.has_value(), qPrintable(error));
+    QCOMPARE(file->kind, CodexApprovalKind::FileChange);
+    QCOMPARE(file->grantRoot, QStringLiteral("C:/outside"));
+    QVERIFY(nativeRequestKey(17) != nativeRequestKey(QStringLiteral("17")));
+    QCOMPARE(approvalEventPayload(QStringLiteral("opaque"), *file)
+                 .value(QStringLiteral("kind"))
+                 .toString(),
+             QStringLiteral("fileChange"));
+    QCOMPARE(approvalResponse(snack::domain::ApprovalDecision::AcceptForSession)
+                 .value(QStringLiteral("decision"))
+                 .toString(),
+             QStringLiteral("acceptForSession"));
+
+    QVERIFY(!parseApprovalRequest(QJsonValue::Null,
+                                  QStringLiteral("item/commandExecution/requestApproval"), params,
+                                  &error)
+                 .has_value());
+    QVERIFY(!parseApprovalRequest(QStringLiteral("approval-2"),
+                                  QStringLiteral("item/commandExecution/requestApproval"),
+                                  QJsonObject{}, &error)
+                 .has_value());
+    QVERIFY(!parseApprovalRequest(QStringLiteral("approval-3"), QStringLiteral("future/request"),
+                                  params, &error)
+                 .has_value());
 }
 
 void TestCodexAppServer::adapterPublishesPaginatedCapabilities() {
@@ -988,6 +1056,98 @@ void TestCodexAppServer::adapterInterruptsAndDeclinesServerRequests() {
     const qsizetype writesAfterFinish = transport.writes.size();
     adapter.interruptTurn();
     QCOMPARE(transport.writes.size(), writesAfterFinish);
+    adapter.closeAgent();
+}
+
+void TestCodexAppServer::adapterHandlesApprovalRequests() {
+    using namespace snack::agent::codex;
+    using snack::domain::AgentEvent;
+    using snack::domain::AgentEventType;
+    using snack::domain::ApprovalDecision;
+
+    FakeProcessTransport transport;
+    CodexAdapter adapter({.status = CliStatus::Available,
+                          .executablePath = QStringLiteral("codex"),
+                          .version = QStringLiteral("0.149.0")},
+                         &transport);
+    connectAdapter(adapter, transport);
+    QSignalSpy eventSpy(&adapter, &CodexAdapter::eventReceived);
+
+    adapter.startTurn(codexTurnRequest(QUuid::createUuid()));
+    const auto startRequest = lastRequest(transport);
+    const QString nativeTurnId = QStringLiteral("turn-approval-1");
+    feedResult(transport, startRequest.id.toInteger(),
+               QJsonObject{{QStringLiteral("turn"),
+                            turnObject(nativeTurnId, QStringLiteral("inProgress"))}});
+
+    const QJsonObject baseParams{
+        {QStringLiteral("threadId"), QStringLiteral("0198-thread-snack")},
+        {QStringLiteral("turnId"), nativeTurnId},
+        {QStringLiteral("itemId"), QStringLiteral("command-item")},
+        {QStringLiteral("startedAtMs"), 1},
+        {QStringLiteral("command"), QStringLiteral("git status")},
+        {QStringLiteral("cwd"), QStringLiteral("C:/workspace")},
+        {QStringLiteral("availableDecisions"), QJsonArray{QStringLiteral("acceptForSession")}}};
+    feedServerRequest(transport, QStringLiteral("approval-command"),
+                      QStringLiteral("item/commandExecution/requestApproval"), baseParams);
+    QCOMPARE(eventSpy.count(), 1);
+    const AgentEvent commandEvent = eventSpy.constFirst().constFirst().value<AgentEvent>();
+    QCOMPARE(commandEvent.type, AgentEventType::ApprovalRequested);
+    const QString commandToken = commandEvent.payload.value(QStringLiteral("requestId")).toString();
+    QVERIFY(!commandToken.isEmpty());
+    QVERIFY(adapter.respondToApproval(commandToken, ApprovalDecision::AcceptForSession));
+    const auto commandResponse = parseMessage(transport.writes.constLast().trimmed());
+    QCOMPARE(commandResponse.kind, MessageKind::Response);
+    QCOMPARE(commandResponse.id.toString(), QStringLiteral("approval-command"));
+    QCOMPARE(commandResponse.result.toObject().value(QStringLiteral("decision")).toString(),
+             QStringLiteral("acceptForSession"));
+    QVERIFY(!adapter.respondToApproval(commandToken, ApprovalDecision::Decline));
+
+    QJsonObject fileParams = baseParams;
+    fileParams.insert(QStringLiteral("itemId"), QStringLiteral("file-item"));
+    fileParams.insert(QStringLiteral("grantRoot"), QStringLiteral("C:/outside"));
+    fileParams.remove(QStringLiteral("availableDecisions"));
+    const QJsonObject fileItem{
+        {QStringLiteral("id"), QStringLiteral("file-item")},
+        {QStringLiteral("type"), QStringLiteral("fileChange")},
+        {QStringLiteral("status"), QStringLiteral("inProgress")},
+        {QStringLiteral("changes"),
+         QJsonArray{QJsonObject{{QStringLiteral("path"), QStringLiteral("src/main.cpp")},
+                                {QStringLiteral("kind"), QStringLiteral("update")},
+                                {QStringLiteral("diff"), QStringLiteral("@@")}}}}};
+    feedNotification(transport, QStringLiteral("item/started"),
+                     {{QStringLiteral("threadId"), QStringLiteral("0198-thread-snack")},
+                      {QStringLiteral("turnId"), nativeTurnId},
+                      {QStringLiteral("item"), fileItem}});
+    feedServerRequest(transport, 77, QStringLiteral("item/fileChange/requestApproval"), fileParams);
+    QCOMPARE(eventSpy.count(), 2);
+    const AgentEvent fileEvent = eventSpy.constLast().constFirst().value<AgentEvent>();
+    QCOMPARE(fileEvent.type, AgentEventType::ApprovalRequested);
+    QCOMPARE(fileEvent.payload.value(QStringLiteral("changes")).toArray().size(), 1);
+    feedNotification(transport, QStringLiteral("serverRequest/resolved"),
+                     {{QStringLiteral("threadId"), QStringLiteral("0198-thread-snack")},
+                      {QStringLiteral("requestId"), 77}});
+    QCOMPARE(eventSpy.count(), 3);
+    QCOMPARE(eventSpy.constLast().constFirst().value<AgentEvent>().type,
+             AgentEventType::ApprovalResolved);
+
+    QJsonObject wrongContext = baseParams;
+    wrongContext.insert(QStringLiteral("threadId"), QStringLiteral("another-thread"));
+    feedServerRequest(transport, QStringLiteral("wrong-context"),
+                      QStringLiteral("item/commandExecution/requestApproval"), wrongContext);
+    const auto declined = parseMessage(transport.writes.constLast().trimmed());
+    QCOMPARE(declined.result.toObject().value(QStringLiteral("decision")).toString(),
+             QStringLiteral("decline"));
+
+    feedServerRequest(transport, QStringLiteral("invalid-approval"),
+                      QStringLiteral("item/fileChange/requestApproval"), QJsonObject{});
+    const auto invalid = parseMessage(transport.writes.constLast().trimmed());
+    QCOMPARE(invalid.error.value(QStringLiteral("code")).toInt(), -32602);
+
+    feedNotification(
+        transport, QStringLiteral("turn/completed"),
+        {{QStringLiteral("threadId"), QStringLiteral("0198-thread-snack")},
+         {QStringLiteral("turn"), turnObject(nativeTurnId, QStringLiteral("completed"))}});
     adapter.closeAgent();
 }
 

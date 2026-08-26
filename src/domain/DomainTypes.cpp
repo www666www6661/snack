@@ -18,11 +18,18 @@ constexpr EnumName<ReasoningEffort> reasoningEfforts[] = {
 constexpr EnumName<AccessLevel> accessLevels[] = {{AccessLevel::Strict, "strict"},
                                                   {AccessLevel::Workspace, "workspace"},
                                                   {AccessLevel::Full, "full"}};
+constexpr EnumName<ApprovalDecision> approvalDecisions[] = {
+    {ApprovalDecision::Accept, "accept"},
+    {ApprovalDecision::AcceptForSession, "acceptForSession"},
+    {ApprovalDecision::Decline, "decline"},
+    {ApprovalDecision::Cancel, "cancel"}};
 constexpr EnumName<AgentEventType> eventTypes[] = {
     {AgentEventType::UserMessage, "user-message"},
     {AgentEventType::AgentMessageStart, "agent-message-start"},
     {AgentEventType::AgentMessageDelta, "agent-message-delta"},
     {AgentEventType::AgentMessageComplete, "agent-message-complete"},
+    {AgentEventType::ApprovalRequested, "approval-requested"},
+    {AgentEventType::ApprovalResolved, "approval-resolved"},
     {AgentEventType::TurnStarted, "turn-started"},
     {AgentEventType::TurnCompleted, "turn-completed"},
     {AgentEventType::TurnInterrupted, "turn-interrupted"},
@@ -81,6 +88,7 @@ TurnSettingsSnapshot TurnSettingsSnapshot::fromJson(const QJsonObject& object) {
 QString enumName(AgentKind value) { return enumToString(value, agentKinds); }
 QString enumName(ReasoningEffort value) { return enumToString(value, reasoningEfforts); }
 QString enumName(AccessLevel value) { return enumToString(value, accessLevels); }
+QString enumName(ApprovalDecision value) { return enumToString(value, approvalDecisions); }
 
 QString enumName(ConversationStatus value) {
     switch (value) {
@@ -121,6 +129,10 @@ ReasoningEffort reasoningEffortFromString(const QString& value) {
 
 AccessLevel accessLevelFromString(const QString& value) {
     return enumFromString(value, accessLevels, AccessLevel::Strict);
+}
+
+ApprovalDecision approvalDecisionFromString(const QString& value) {
+    return enumFromString(value, approvalDecisions, ApprovalDecision::Decline);
 }
 
 ConversationStatus conversationStatusFromString(const QString& value) {

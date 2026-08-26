@@ -61,6 +61,12 @@ QByteArray encodeNotification(const QString& method, const QJsonObject& params) 
         .toJson(QJsonDocument::Compact);
 }
 
+QByteArray encodeResponse(const QJsonValue& id, const QJsonValue& result) {
+    return QJsonDocument(
+               QJsonObject{{QStringLiteral("id"), id}, {QStringLiteral("result"), result}})
+        .toJson(QJsonDocument::Compact);
+}
+
 QByteArray encodeErrorResponse(const QJsonValue& id, int code, const QString& message) {
     return QJsonDocument(QJsonObject{{QStringLiteral("id"), id},
                                      {QStringLiteral("error"),

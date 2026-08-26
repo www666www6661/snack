@@ -1,0 +1,4 @@
+{"method":"item/commandExecution/requestApproval","id":"approval-command-1","params":{"threadId":"0198-thread-snack","turnId":"turn-approval-1","itemId":"command-item-1","startedAtMs":1,"reason":"Needs network access","command":"curl https://example.invalid","cwd":"C:/workspace","networkApprovalContext":{"host":"example.invalid","protocol":"https"}}}
+{"id":"approval-command-1","result":{"decision":"acceptForSession"}}
+{"method":"item/fileChange/requestApproval","id":77,"params":{"threadId":"0198-thread-snack","turnId":"turn-approval-1","itemId":"file-item-1","startedAtMs":2,"reason":"Write outside the workspace","grantRoot":"C:/outside"}}
+{"method":"serverRequest/resolved","params":{"threadId":"0198-thread-snack","requestId":77}}

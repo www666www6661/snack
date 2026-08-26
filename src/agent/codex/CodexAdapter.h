@@ -2,6 +2,7 @@
 
 #include "agent/IAgentAdapter.h"
 #include "agent/codex/CodexAppServerClient.h"
+#include "agent/codex/CodexApprovalLifecycle.h"
 #include "agent/codex/CodexCliDiscovery.h"
 #include "agent/codex/CodexModelCatalog.h"
 #include "agent/codex/CodexThreadLifecycle.h"
@@ -23,6 +24,7 @@ class CodexAdapter final : public IAgentAdapter {
     [[nodiscard]] CapabilitySet capabilities() const override;
     void connectAgent(const AgentConnectionRequest& request) override;
     void startTurn(const TurnRequest& request) override;
+    bool respondToApproval(const QString& requestId, domain::ApprovalDecision decision) override;
     void interruptTurn() override;
     void closeAgent() override;
 
@@ -39,6 +41,7 @@ class CodexAdapter final : public IAgentAdapter {
                             const QJsonObject& raw);
     void handleServerRequest(const QJsonValue& id, const QString& method, const QJsonValue& params,
                              const QJsonObject& raw);
+    void handleServerRequestResolved(const QJsonValue& params, const QJsonObject& raw);
     [[nodiscard]] bool acceptNativeContext(const QString& threadId, const QString& turnId,
                                            const QJsonObject& raw);
     void sendInterruptRequest();
@@ -62,6 +65,9 @@ class CodexAdapter final : public IAgentAdapter {
     QSet<QString> startedAgentMessages_;
     QSet<QString> completedAgentMessages_;
     QHash<QString, QString> streamedAgentText_;
+    QHash<QString, QJsonObject> activeItems_;
+    QHash<QString, CodexApprovalRequest> pendingApprovals_;
+    QHash<QString, QString> approvalTokenByNativeKey_;
     QString threadRequestMethod_;
     qint64 modelRequestId_{0};
     qint64 threadRequestId_{0};

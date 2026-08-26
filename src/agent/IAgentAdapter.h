@@ -57,6 +57,7 @@ class IAgentAdapter : public QObject {
     [[nodiscard]] virtual CapabilitySet capabilities() const = 0;
     virtual void connectAgent(const AgentConnectionRequest& request) = 0;
     virtual void startTurn(const TurnRequest& request) = 0;
+    virtual bool respondToApproval(const QString& requestId, domain::ApprovalDecision decision) = 0;
     virtual void interruptTurn() = 0;
     virtual void closeAgent() = 0;
 

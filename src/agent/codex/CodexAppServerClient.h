@@ -41,6 +41,7 @@ class CodexAppServerClient final : public QObject {
                int handshakeTimeoutMs = 5000);
     [[nodiscard]] qint64 sendRequest(const QString& method, const QJsonObject& params = {});
     void sendNotification(const QString& method, const QJsonObject& params = {});
+    [[nodiscard]] bool sendResponse(const QJsonValue& id, const QJsonValue& result);
     void sendErrorResponse(const QJsonValue& id, int code, const QString& message);
     void stop();
 

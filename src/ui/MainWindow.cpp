@@ -8,6 +8,7 @@
 #include <QDockWidget>
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QJsonArray>
 #include <QLabel>
 #include <QListWidget>
 #include <QMenu>
@@ -99,7 +100,9 @@ void MainWindow::closeEvent(QCloseEvent* event) {
 }
 
 void MainWindow::sendMessage() {
-    if (controller_->status() == domain::ConversationStatus::Running) {
+    if (controller_->status() == domain::ConversationStatus::Running ||
+        controller_->status() == domain::ConversationStatus::WaitingApproval ||
+        controller_->status() == domain::ConversationStatus::WaitingInput) {
         controller_->interrupt();
         statusBar()->showMessage(tr("Stopping the current turn"), 3000);
         return;
@@ -316,6 +319,12 @@ void MainWindow::appendEvent(const domain::AgentEvent& event) {
             item->setText(item->text() + event.payload.value(QStringLiteral("text")).toString());
         }
         break;
+    case domain::AgentEventType::ApprovalRequested:
+        appendApprovalRequest(event);
+        break;
+    case domain::AgentEventType::ApprovalResolved:
+        resolveApprovalCard(event);
+        break;
     case domain::AgentEventType::TurnInterrupted:
         timeline_->addItem(tr("Turn interrupted"));
         activeAgentRow_ = -1;
@@ -328,6 +337,124 @@ void MainWindow::appendEvent(const domain::AgentEvent& event) {
         break;
     }
     timeline_->scrollToBottom();
+}
+
+void MainWindow::appendApprovalRequest(const domain::AgentEvent& event) {
+    const QString requestId = event.payload.value(QStringLiteral("requestId")).toString();
+    if (requestId.isEmpty() || approvalCards_.contains(requestId)) {
+        return;
+    }
+
+    auto* item = new QListWidgetItem(timeline_);
+    auto* card = new QFrame(timeline_);
+    card->setObjectName(QStringLiteral("approvalCard"));
+    auto* layout = new QVBoxLayout(card);
+    layout->setContentsMargins(14, 12, 14, 12);
+
+    const bool commandApproval =
+        event.payload.value(QStringLiteral("kind")).toString() == QLatin1String("commandExecution");
+    auto* title =
+        new QLabel(commandApproval ? tr("Command approval") : tr("File change approval"), card);
+    title->setObjectName(QStringLiteral("approvalTitle"));
+    layout->addWidget(title);
+
+    QStringList details;
+    const QJsonObject network =
+        event.payload.value(QStringLiteral("networkApprovalContext")).toObject();
+    if (!network.isEmpty()) {
+        details.append(tr("Network: %1 (%2)")
+                           .arg(network.value(QStringLiteral("host")).toString(),
+                                network.value(QStringLiteral("protocol")).toString()));
+    } else if (commandApproval) {
+        details.append(event.payload.value(QStringLiteral("command")).toString());
+    } else {
+        const QString grantRoot = event.payload.value(QStringLiteral("grantRoot")).toString();
+        if (!grantRoot.isEmpty()) {
+            details.append(tr("Write access: %1").arg(grantRoot));
+        }
+        QStringList changedFiles;
+        const QJsonArray changes = event.payload.value(QStringLiteral("changes")).toArray();
+        for (const QJsonValue& changeValue : changes) {
+            const QJsonObject change = changeValue.toObject();
+            const QString path = change.value(QStringLiteral("path")).toString();
+            if (!path.isEmpty()) {
+                changedFiles.append(path);
+            }
+        }
+        if (!changedFiles.isEmpty()) {
+            details.append(tr("Proposed files: %1").arg(changedFiles.join(QStringLiteral(", "))));
+        }
+    }
+    const QString cwd = event.payload.value(QStringLiteral("cwd")).toString();
+    if (!cwd.isEmpty()) {
+        details.append(tr("Working directory: %1").arg(cwd));
+    }
+    const QString reason = event.payload.value(QStringLiteral("reason")).toString();
+    if (!reason.isEmpty()) {
+        details.append(tr("Reason: %1").arg(reason));
+    }
+    auto* detail = new QLabel(details.join(QLatin1Char('\n')), card);
+    detail->setObjectName(QStringLiteral("approvalDetail"));
+    detail->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    detail->setWordWrap(true);
+    layout->addWidget(detail);
+
+    auto* stateLabel = new QLabel(
+        restoringTimeline_ ? tr("Expired approval") : tr("Waiting for your decision"), card);
+    stateLabel->setObjectName(QStringLiteral("approvalStatus"));
+    layout->addWidget(stateLabel);
+
+    auto* actions = new QHBoxLayout();
+    const QJsonArray availableDecisions =
+        event.payload.value(QStringLiteral("availableDecisions")).toArray();
+    const auto addDecision = [this, card, actions, requestId,
+                              availableDecisions](const QString& text, const QString& objectName,
+                                                  domain::ApprovalDecision decision) {
+        auto* button = new QPushButton(text, card);
+        button->setObjectName(objectName);
+        button->setEnabled(!restoringTimeline_ &&
+                           (availableDecisions.isEmpty() ||
+                            availableDecisions.contains(domain::enumName(decision))));
+        connect(button, &QPushButton::clicked, this, [this, requestId, decision] {
+            QString error;
+            if (!controller_->respondToApproval(requestId, decision, &error)) {
+                statusBar()->showMessage(error, 5000);
+            }
+        });
+        actions->addWidget(button);
+        return button;
+    };
+
+    ApprovalCardState state;
+    state.status = stateLabel;
+    state.buttons = {addDecision(tr("Allow once"), QStringLiteral("approvalAcceptButton"),
+                                 domain::ApprovalDecision::Accept),
+                     addDecision(tr("Allow for session"), QStringLiteral("approvalSessionButton"),
+                                 domain::ApprovalDecision::AcceptForSession),
+                     addDecision(tr("Deny"), QStringLiteral("approvalDeclineButton"),
+                                 domain::ApprovalDecision::Decline),
+                     addDecision(tr("Cancel turn"), QStringLiteral("approvalCancelButton"),
+                                 domain::ApprovalDecision::Cancel)};
+    layout->addLayout(actions);
+
+    approvalCards_.insert(requestId, state);
+    item->setSizeHint(card->sizeHint());
+    timeline_->setItemWidget(item, card);
+}
+
+void MainWindow::resolveApprovalCard(const domain::AgentEvent& event) {
+    const QString requestId = event.payload.value(QStringLiteral("requestId")).toString();
+    const auto iterator = approvalCards_.find(requestId);
+    if (iterator == approvalCards_.end()) {
+        return;
+    }
+    for (QPushButton* button : iterator->buttons) {
+        button->setEnabled(false);
+    }
+    const QString decision = event.payload.value(QStringLiteral("decision")).toString();
+    const QString resolution = event.payload.value(QStringLiteral("resolution")).toString();
+    iterator->status->setText(decision.isEmpty() ? tr("Approval closed: %1").arg(resolution)
+                                                 : tr("Decision sent: %1").arg(decision));
 }
 
 void MainWindow::applyTheme(const ThemeDefinition& theme) {
@@ -346,9 +473,18 @@ void MainWindow::applyInterfaceScale(double scale) {
 void MainWindow::updateStatus(domain::ConversationStatus status) {
     statusLabel_->setText(domain::enumName(status));
     const bool idle = status == domain::ConversationStatus::Idle;
-    const bool running = status == domain::ConversationStatus::Running;
-    sendButton_->setEnabled(idle || running);
-    sendButton_->setText(running ? tr("Stop") : tr("Send"));
+    const bool active = status == domain::ConversationStatus::Running ||
+                        status == domain::ConversationStatus::WaitingApproval ||
+                        status == domain::ConversationStatus::WaitingInput;
+    sendButton_->setEnabled(idle || active);
+    sendButton_->setText(active ? tr("Stop") : tr("Send"));
+    if (!active) {
+        for (auto iterator = approvalCards_.begin(); iterator != approvalCards_.end(); ++iterator) {
+            for (QPushButton* button : iterator->buttons) {
+                button->setEnabled(false);
+            }
+        }
+    }
 }
 
 void MainWindow::updateConnectionDetail(const QString& detail) {
@@ -445,9 +581,11 @@ QString MainWindow::agentDisplayName() const {
 void MainWindow::restoreTimeline() {
     QString error;
     const auto events = controller_->restoredEvents(&error);
+    restoringTimeline_ = true;
     for (const auto& event : events) {
         appendEvent(event);
     }
+    restoringTimeline_ = false;
     if (!error.isEmpty()) {
         statusBar()->showMessage(error, 8000);
     }
