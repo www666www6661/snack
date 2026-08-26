@@ -40,8 +40,10 @@ QJsonObject withoutReasoningContent(const QJsonObject& raw) {
 } // namespace
 
 CodexAdapter::CodexAdapter(CliInstallation installation, process::IProcessTransport* transport,
-                           QObject* parent)
-    : IAgentAdapter(parent), installation_(std::move(installation)), client_(transport, this) {
+                           QObject* parent, int requestTimeoutMs)
+    : IAgentAdapter(parent), installation_(std::move(installation)),
+      client_(transport, this, CodexAppServerClient::defaultMaximumFrameBytes,
+              CodexAppServerClient::defaultMaximumDiagnosticBytes, requestTimeoutMs) {
     capabilities_.version = installation_.version.isEmpty()
                                 ? QStringLiteral("codex-app-server/unknown")
                                 : QStringLiteral("codex-app-server/%1").arg(installation_.version);

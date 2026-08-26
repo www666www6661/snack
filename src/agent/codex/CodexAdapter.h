@@ -19,7 +19,8 @@ class CodexAdapter final : public IAgentAdapter {
 
   public:
     CodexAdapter(CliInstallation installation, process::IProcessTransport* transport,
-                 QObject* parent = nullptr);
+                 QObject* parent = nullptr,
+                 int requestTimeoutMs = CodexAppServerClient::defaultRequestTimeoutMs);
 
     [[nodiscard]] domain::AgentKind kind() const override;
     [[nodiscard]] CapabilitySet capabilities() const override;

@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <optional>
+#include <utility>
 
 namespace snack::agent::codex {
 namespace {
@@ -22,12 +23,14 @@ std::optional<qint64> numericId(const QJsonValue& value) {
 } // namespace
 
 CodexAppServerClient::CodexAppServerClient(process::IProcessTransport* transport, QObject* parent,
-                                           qsizetype maxFrameBytes, qsizetype maxDiagnosticBytes)
+                                           qsizetype maxFrameBytes, qsizetype maxDiagnosticBytes,
+                                           int requestTimeoutMs)
     : QObject(parent), transport_(transport), maxFrameBytes_(maxFrameBytes),
-      maxDiagnosticBytes_(maxDiagnosticBytes) {
+      maxDiagnosticBytes_(maxDiagnosticBytes), requestTimeoutMs_(requestTimeoutMs) {
     Q_ASSERT(transport_ != nullptr);
     Q_ASSERT(maxFrameBytes_ > 0);
     Q_ASSERT(maxDiagnosticBytes_ > 0);
+    Q_ASSERT(requestTimeoutMs_ > 0);
     handshakeTimer_.setSingleShot(true);
     connect(&handshakeTimer_, &QTimer::timeout, this,
             [this] { fail(QStringLiteral("Codex app-server initialization timed out")); });
@@ -63,7 +66,7 @@ void CodexAppServerClient::start(const process::LaunchSpec& launchSpec,
     serverInfo_ = {};
     outputBuffer_.clear();
     diagnostics_.clear();
-    pendingRequests_.clear();
+    clearPendingRequests();
     initializeRequestId_ = 0;
     nextRequestId_ = 1;
     setState(ConnectionState::Starting);
@@ -78,8 +81,13 @@ qint64 CodexAppServerClient::sendRequest(const QString& method, const QJsonObjec
     }
     const qint64 id = nextRequestId_++;
     pendingRequests_.insert(id, method);
+    auto* timer = new QTimer(this);
+    timer->setSingleShot(true);
+    connect(timer, &QTimer::timeout, this, [this, id] { expireRequest(id); });
+    requestTimers_.insert(id, timer);
+    timer->start(requestTimeoutMs_);
     if (!writeMessage(encodeRequest(id, method, params))) {
-        pendingRequests_.remove(id);
+        static_cast<void>(takePendingRequest(id));
         return 0;
     }
     return id;
@@ -125,6 +133,7 @@ void CodexAppServerClient::stop() {
         return;
     }
     handshakeTimer_.stop();
+    clearPendingRequests();
     setState(ConnectionState::Stopping);
     if (transport_->isRunning()) {
         transport_->closeWriteChannel();
@@ -237,7 +246,7 @@ void CodexAppServerClient::processResponse(const ProtocolMessage& message) {
         emit protocolWarning(QStringLiteral("Received a response with an unknown request id"));
         return;
     }
-    const QString method = pendingRequests_.take(*id);
+    const QString method = takePendingRequest(*id);
     if (message.raw.contains(QStringLiteral("error"))) {
         const int code = message.error.value(QStringLiteral("code")).toInt();
         const QString errorMessage = message.error.value(QStringLiteral("message")).toString();
@@ -271,6 +280,34 @@ void CodexAppServerClient::processResponse(const ProtocolMessage& message) {
     emit responseReceived(*id, method, message.result);
 }
 
+void CodexAppServerClient::expireRequest(qint64 id) {
+    if (state_ != ConnectionState::Ready || !pendingRequests_.contains(id)) {
+        return;
+    }
+    const QString method = takePendingRequest(id);
+    emit requestFailed(
+        id, method, -32098,
+        QStringLiteral("Codex app-server request timed out after %1 ms").arg(requestTimeoutMs_));
+}
+
+QString CodexAppServerClient::takePendingRequest(qint64 id) {
+    const QString method = pendingRequests_.take(id);
+    if (QTimer* timer = requestTimers_.take(id); timer != nullptr) {
+        timer->stop();
+        timer->deleteLater();
+    }
+    return method;
+}
+
+void CodexAppServerClient::clearPendingRequests() {
+    pendingRequests_.clear();
+    for (QTimer* timer : std::as_const(requestTimers_)) {
+        timer->stop();
+        timer->deleteLater();
+    }
+    requestTimers_.clear();
+}
+
 bool CodexAppServerClient::writeMessage(const QByteArray& message) {
     QByteArray frame = message;
     frame.append('\n');
@@ -294,6 +331,7 @@ void CodexAppServerClient::fail(const QString& detail) {
         return;
     }
     handshakeTimer_.stop();
+    clearPendingRequests();
     setState(ConnectionState::Failed);
     if (transport_->isRunning()) {
         transport_->closeWriteChannel();

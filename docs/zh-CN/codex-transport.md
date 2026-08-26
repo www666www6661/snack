@@ -55,6 +55,7 @@ Windows 优先探测 `codex.cmd`，并通过 `cmd.exe /c call` 启动 npm 包装
 ## 失效与资源边界
 
 - 初始化默认 5 秒超时；进程提前退出、写失败或非法 JSON 都进入 `Failed`。
+- 初始化后的每个请求都有 15 秒响应上限。模型目录和 Thread 生命周期请求超时会让连接失败；`turn/start` 只让当前 GUI Turn 失败；历史查询、steer 与 interrupt 只报告局部失败并释放请求槽位。成功、协议错误、关闭、进程失败和重启都会取消对应计时器。超时后的迟到响应按未知 ID 隔离，不能满足后续请求。
 - 单个 JSONL 帧上限 4 MiB，防止无换行输出无限增长。
 - stderr 诊断只保留最近 64 KiB，同时继续发出增量诊断信号。
 - 未知通知不会让连接失败。未支持的 server request 会收到明确的 JSON-RPC `-32601`；格式错误的审批请求收到 `-32602`。两条路径都会产生警告，避免 app-server 请求静默悬挂。
@@ -69,7 +70,7 @@ Windows 优先探测 `codex.cmd`，并通过 `cmd.exe /c call` 启动 npm 包装
 codex app-server generate-json-schema --out <directory>
 ```
 
-普通 CI 只运行假传输与 fixture，不依赖已安装 CLI，也不调用模型。测试覆盖分页、Thread list/read 解析、创建/恢复身份、动态逐轮设置、文本与工具流、同 Turn steer 成功/失败/ID 不匹配、最终 Item 权威覆盖、命令非零退出、文件/MCP 结果、推理摘要隐私、计划三态、有界历史输出、审批决策、过期与重复事件、请求/通知错误、中断竞态、未支持 server request 与进程断开。本机可选择执行 CLI 探测、初始化、模型目录与临时 Thread 创建的烟雾测试，全程不调用模型；真实 `turn/start` 必须由开发者另行明确启用，避免测试意外产生模型调用：
+普通 CI 只运行假传输与 fixture，不依赖已安装 CLI，也不调用模型。测试覆盖分页、Thread list/read 解析、创建/恢复身份、动态逐轮设置、文本与工具流、同 Turn steer 成功/失败/ID 不匹配、最终 Item 权威覆盖、命令非零退出、文件/MCP 结果、推理摘要隐私、计划三态、有界历史输出、审批决策、过期与重复事件、请求/通知错误与超时、计时器清理、迟到响应隔离、中断竞态、未支持 server request 与进程断开。本机可选择执行 CLI 探测、初始化、模型目录与临时 Thread 创建的烟雾测试，全程不调用模型；真实 `turn/start` 必须由开发者另行明确启用，避免测试意外产生模型调用：
 
 ```powershell
 $env:SNACK_RUN_LIVE_CODEX_TEST = '1'

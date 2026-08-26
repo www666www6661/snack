@@ -29,9 +29,14 @@ class CodexAppServerClient final : public QObject {
     Q_OBJECT
 
   public:
+    static constexpr qsizetype defaultMaximumFrameBytes = 4 * 1024 * 1024;
+    static constexpr qsizetype defaultMaximumDiagnosticBytes = 64 * 1024;
+    static constexpr int defaultRequestTimeoutMs = 15'000;
+
     explicit CodexAppServerClient(process::IProcessTransport* transport, QObject* parent = nullptr,
-                                  qsizetype maxFrameBytes = 4 * 1024 * 1024,
-                                  qsizetype maxDiagnosticBytes = 64 * 1024);
+                                  qsizetype maxFrameBytes = defaultMaximumFrameBytes,
+                                  qsizetype maxDiagnosticBytes = defaultMaximumDiagnosticBytes,
+                                  int requestTimeoutMs = defaultRequestTimeoutMs);
 
     [[nodiscard]] ConnectionState state() const;
     [[nodiscard]] ServerInfo serverInfo() const;
@@ -66,6 +71,9 @@ class CodexAppServerClient final : public QObject {
     void handleProcessError(process::Error error, const QString& detail);
     void processLine(const QByteArray& line);
     void processResponse(const ProtocolMessage& message);
+    void expireRequest(qint64 id);
+    [[nodiscard]] QString takePendingRequest(qint64 id);
+    void clearPendingRequests();
     bool writeMessage(const QByteArray& message);
     void setState(ConnectionState state);
     void fail(const QString& detail);
@@ -78,10 +86,12 @@ class CodexAppServerClient final : public QObject {
     QByteArray outputBuffer_;
     QByteArray diagnostics_;
     QHash<qint64, QString> pendingRequests_;
+    QHash<qint64, QTimer*> requestTimers_;
     qint64 initializeRequestId_{0};
     qint64 nextRequestId_{1};
     qsizetype maxFrameBytes_;
     qsizetype maxDiagnosticBytes_;
+    int requestTimeoutMs_;
 };
 
 } // namespace snack::agent::codex

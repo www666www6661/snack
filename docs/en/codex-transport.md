@@ -55,6 +55,7 @@ Discovery parses the CLI SemVer before probing `app-server`. Versions below `0.1
 ## Failure and resource boundaries
 
 - Initialization times out after five seconds by default. Early exit, write failure, and invalid JSON enter `Failed`.
+- Every post-initialization request has a 15-second response timeout. Model-catalog and thread-lifecycle timeouts fail the connection; `turn/start` fails only that GUI turn; history queries, steer, and interrupt report scoped failures and release their request slots. Success, protocol error, shutdown, process failure, and restart all cancel their timers. A late response after timeout has an unknown ID and cannot satisfy a newer request.
 - A JSONL frame is limited to 4 MiB so missing newlines cannot grow memory without bound.
 - Only the latest 64 KiB of stderr diagnostics is retained, while incremental diagnostic signals still stream.
 - Unknown notifications remain forward-compatible. Unsupported server requests receive an explicit JSON-RPC `-32601` response; malformed approval requests receive `-32602`. Both paths produce a warning so the app-server request cannot hang silently.
@@ -69,7 +70,7 @@ Discovery parses the CLI SemVer before probing `app-server`. Versions below `0.1
 codex app-server generate-json-schema --out <directory>
 ```
 
-Normal CI uses only fake transports and fixtures, requires no installed CLI, and never invokes a model. It covers pagination, thread list/read parsing, start/resume identity, dynamic per-turn settings, text and tool streaming, same-turn steer success/failure/mismatch, final-item authority, non-zero command exits, file/MCP results, reasoning-summary privacy, plan states, bounded restored output, approval decisions, stale and duplicate events, request and notification failures, interrupt races, unsupported server requests, and process loss. A local smoke test can opt into CLI discovery, initialization, model discovery, and an ephemeral thread start without invoking a model. A real `turn/start` must remain separately and explicitly enabled so tests cannot accidentally consume a model call:
+Normal CI uses only fake transports and fixtures, requires no installed CLI, and never invokes a model. It covers pagination, thread list/read parsing, start/resume identity, dynamic per-turn settings, text and tool streaming, same-turn steer success/failure/mismatch, final-item authority, non-zero command exits, file/MCP results, reasoning-summary privacy, plan states, bounded restored output, approval decisions, stale and duplicate events, request/notification failures and timeouts, timer cleanup, late-response isolation, interrupt races, unsupported server requests, and process loss. A local smoke test can opt into CLI discovery, initialization, model discovery, and an ephemeral thread start without invoking a model. A real `turn/start` must remain separately and explicitly enabled so tests cannot accidentally consume a model call:
 
 ```powershell
 $env:SNACK_RUN_LIVE_CODEX_TEST = '1'

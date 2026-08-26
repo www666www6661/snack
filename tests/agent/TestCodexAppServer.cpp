@@ -98,6 +98,7 @@ class TestCodexAppServer final : public QObject {
     void adapterHandlesApprovalRequests();
     void adapterHandlesUserInputAndTokenUsage();
     void adapterFinishesTurnWhenProcessDisconnects();
+    void adapterScopesRequestTimeouts();
     void adapterHandlesCatalogFailures();
     void streamsQProcessIoAndReportsStartFailure();
     void completesHandshakeFromFragmentedFixture();
@@ -105,6 +106,7 @@ class TestCodexAppServer final : public QObject {
     void rejectsMalformedAndOversizedFrames();
     void boundsDiagnosticsAndReportsEarlyExit();
     void handlesTimeoutCancellationAndWriteFailure();
+    void timesOutRequestsAndIsolatesLateResponses();
     void guardsStateAndHandshakeErrors();
     void liveLocalHandshakeWhenEnabled();
 };
@@ -1767,6 +1769,49 @@ void TestCodexAppServer::adapterFinishesTurnWhenProcessDisconnects() {
     QVERIFY(!connectionSpy.constLast().constFirst().toBool());
 }
 
+void TestCodexAppServer::adapterScopesRequestTimeouts() {
+    using namespace snack::agent::codex;
+    using snack::domain::AgentEvent;
+    using snack::domain::AgentEventType;
+
+    FakeProcessTransport connectingTransport;
+    CodexAdapter connecting({.status = CliStatus::Available,
+                             .executablePath = QStringLiteral("codex"),
+                             .version = QStringLiteral("0.149.0")},
+                            &connectingTransport, nullptr, 5);
+    QSignalSpy connectingSpy(&connecting, &CodexAdapter::connectionChanged);
+    connecting.connectAgent({.workingDirectory = QStringLiteral("C:/workspace")});
+    QTRY_COMPARE(connectingTransport.writes.size(), 1);
+    completeHandshake(connectingTransport);
+    QTRY_COMPARE(connectingSpy.count(), 1);
+    QVERIFY(!connectingSpy.constFirst().constFirst().toBool());
+    QVERIFY(connectingSpy.constFirst().at(1).toString().contains(QStringLiteral("timed out")));
+
+    FakeProcessTransport turnTransport;
+    CodexAdapter turnAdapter({.status = CliStatus::Available,
+                              .executablePath = QStringLiteral("codex"),
+                              .version = QStringLiteral("0.149.0")},
+                             &turnTransport, nullptr, 20);
+    connectAdapter(turnAdapter, turnTransport);
+    QSignalSpy eventSpy(&turnAdapter, &CodexAdapter::eventReceived);
+    QSignalSpy finishedSpy(&turnAdapter, &CodexAdapter::turnFinished);
+    const QUuid turnId = QUuid::createUuid();
+    turnAdapter.startTurn(codexTurnRequest(turnId));
+    QTRY_COMPARE(finishedSpy.count(), 1);
+    QCOMPARE(finishedSpy.constFirst().constFirst().toUuid(), turnId);
+    QVERIFY(!finishedSpy.constFirst().at(2).toBool());
+    QCOMPARE(eventSpy.constLast().constFirst().value<AgentEvent>().type,
+             AgentEventType::TurnFailed);
+    QVERIFY(eventSpy.constLast()
+                .constFirst()
+                .value<AgentEvent>()
+                .payload.value(QStringLiteral("message"))
+                .toString()
+                .contains(QStringLiteral("timed out")));
+    QVERIFY(turnAdapter.requestNativeThreadPage());
+    turnAdapter.closeAgent();
+}
+
 void TestCodexAppServer::adapterHandlesCatalogFailures() {
     using namespace snack::agent::codex;
     FakeProcessTransport unavailableTransport;
@@ -2023,6 +2068,35 @@ void TestCodexAppServer::handlesTimeoutCancellationAndWriteFailure() {
     writeClient.start({.program = QStringLiteral("codex")});
     QCOMPARE(writeClient.state(), ConnectionState::Failed);
     QCOMPARE(writeTransport.terminateCalls, 1);
+}
+
+void TestCodexAppServer::timesOutRequestsAndIsolatesLateResponses() {
+    using namespace snack::agent::codex;
+    FakeProcessTransport transport;
+    CodexAppServerClient client(&transport, nullptr, CodexAppServerClient::defaultMaximumFrameBytes,
+                                CodexAppServerClient::defaultMaximumDiagnosticBytes, 5);
+    QSignalSpy failedSpy(&client, &CodexAppServerClient::requestFailed);
+    QSignalSpy warningSpy(&client, &CodexAppServerClient::protocolWarning);
+
+    client.start({.program = QStringLiteral("codex")});
+    completeHandshake(transport);
+    const qint64 requestId = client.sendRequest(QStringLiteral("model/list"));
+    QTRY_COMPARE(failedSpy.count(), 1);
+    QCOMPARE(client.state(), ConnectionState::Ready);
+    QCOMPARE(failedSpy.constFirst().at(0).toLongLong(), requestId);
+    QCOMPARE(failedSpy.constFirst().at(1).toString(), QStringLiteral("model/list"));
+    QCOMPARE(failedSpy.constFirst().at(2).toInt(), -32098);
+    QVERIFY(failedSpy.constFirst().at(3).toString().contains(QStringLiteral("timed out")));
+
+    feedResult(transport, requestId, QJsonObject{});
+    QCOMPARE(warningSpy.count(), 1);
+    QVERIFY(warningSpy.constFirst().constFirst().toString().contains(QStringLiteral("unknown")));
+
+    QVERIFY(client.sendRequest(QStringLiteral("thread/read")) > requestId);
+    client.stop();
+    QTest::qWait(10);
+    QCOMPARE(failedSpy.count(), 1);
+    QCOMPARE(client.state(), ConnectionState::Stopped);
 }
 
 void TestCodexAppServer::guardsStateAndHandshakeErrors() {
