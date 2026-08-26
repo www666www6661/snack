@@ -65,6 +65,12 @@ class CodexAdapter final : public IAgentAdapter {
     QSet<QString> startedAgentMessages_;
     QSet<QString> completedAgentMessages_;
     QHash<QString, QString> streamedAgentText_;
+    QSet<QString> startedToolItems_;
+    QSet<QString> completedToolItems_;
+    QSet<QString> startedReasoningItems_;
+    QSet<QString> completedReasoningItems_;
+    QSet<QString> completedPlanItems_;
+    QHash<QString, QStringList> reasoningSummaries_;
     QHash<QString, QJsonObject> activeItems_;
     QHash<QString, CodexApprovalRequest> pendingApprovals_;
     QHash<QString, QString> approvalTokenByNativeKey_;

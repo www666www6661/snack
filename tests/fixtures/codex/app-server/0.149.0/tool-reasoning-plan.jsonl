@@ -1,0 +1,19 @@
+{"method":"turn/started","params":{"threadId":"0198-thread-snack","turn":{"id":"turn-tool-plan-1","status":"inProgress","items":[],"error":null}}}
+{"method":"item/started","params":{"threadId":"0198-thread-snack","turnId":"turn-tool-plan-1","item":{"id":"command-1","type":"commandExecution","command":"cmake --build build","cwd":"C:/workspace","status":"inProgress","commandActions":[]}}}
+{"method":"item/commandExecution/outputDelta","params":{"threadId":"0198-thread-snack","turnId":"turn-tool-plan-1","itemId":"command-1","delta":"building\n"}}
+{"method":"item/completed","params":{"threadId":"0198-thread-snack","turnId":"turn-tool-plan-1","item":{"id":"command-1","type":"commandExecution","command":"cmake --build build","cwd":"C:/workspace","status":"failed","commandActions":[],"aggregatedOutput":"building\nfailed\n","exitCode":7,"durationMs":42}}}
+{"method":"item/started","params":{"threadId":"0198-thread-snack","turnId":"turn-tool-plan-1","item":{"id":"reasoning-1","type":"reasoning","summary":[],"content":[]}}}
+{"method":"item/reasoning/summaryPartAdded","params":{"threadId":"0198-thread-snack","turnId":"turn-tool-plan-1","itemId":"reasoning-1","summaryIndex":0}}
+{"method":"item/reasoning/summaryTextDelta","params":{"threadId":"0198-thread-snack","turnId":"turn-tool-plan-1","itemId":"reasoning-1","summaryIndex":0,"delta":"Inspecting the build failure"}}
+{"method":"item/reasoning/textDelta","params":{"threadId":"0198-thread-snack","turnId":"turn-tool-plan-1","itemId":"reasoning-1","contentIndex":0,"delta":"private reasoning must stay hidden"}}
+{"method":"item/completed","params":{"threadId":"0198-thread-snack","turnId":"turn-tool-plan-1","item":{"id":"reasoning-1","type":"reasoning","summary":["The build command failed."],"content":["private reasoning must stay hidden"]}}}
+{"method":"item/started","params":{"threadId":"0198-thread-snack","turnId":"turn-tool-plan-1","item":{"id":"plan-1","type":"plan","text":""}}}
+{"method":"item/plan/delta","params":{"threadId":"0198-thread-snack","turnId":"turn-tool-plan-1","itemId":"plan-1","delta":"Draft plan"}}
+{"method":"turn/plan/updated","params":{"threadId":"0198-thread-snack","turnId":"turn-tool-plan-1","explanation":"Fix and verify","plan":[{"step":"Inspect failure","status":"completed"},{"step":"Apply fix","status":"inProgress"},{"step":"Run tests","status":"pending"}]}}
+{"method":"item/completed","params":{"threadId":"0198-thread-snack","turnId":"turn-tool-plan-1","item":{"id":"plan-1","type":"plan","text":"Final plan"}}}
+{"method":"item/started","params":{"threadId":"0198-thread-snack","turnId":"turn-tool-plan-1","item":{"id":"file-1","type":"fileChange","changes":[],"status":"inProgress"}}}
+{"method":"item/fileChange/patchUpdated","params":{"threadId":"0198-thread-snack","turnId":"turn-tool-plan-1","itemId":"file-1","changes":[{"path":"src/main.cpp","kind":{"type":"update"},"diff":"@@"}]}}
+{"method":"item/completed","params":{"threadId":"0198-thread-snack","turnId":"turn-tool-plan-1","item":{"id":"file-1","type":"fileChange","changes":[{"path":"src/main.cpp","kind":{"type":"update"},"diff":"@@"}],"status":"completed"}}}
+{"method":"item/started","params":{"threadId":"0198-thread-snack","turnId":"turn-tool-plan-1","item":{"id":"mcp-1","type":"mcpToolCall","server":"docs","tool":"search","status":"inProgress","arguments":{"query":"Qt"},"result":null,"error":null}}}
+{"method":"item/mcpToolCall/progress","params":{"threadId":"0198-thread-snack","turnId":"turn-tool-plan-1","itemId":"mcp-1","message":"Searching documentation"}}
+{"method":"item/completed","params":{"threadId":"0198-thread-snack","turnId":"turn-tool-plan-1","item":{"id":"mcp-1","type":"mcpToolCall","server":"docs","tool":"search","status":"completed","arguments":{"query":"Qt"},"result":{"content":[{"type":"text","text":"Found"}]},"error":null,"durationMs":12}}}

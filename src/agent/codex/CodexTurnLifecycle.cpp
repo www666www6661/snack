@@ -139,7 +139,7 @@ std::optional<CodexItemNotification> parseItemNotification(const QJsonValue& par
         return std::nullopt;
     }
     QString text;
-    if (*itemType == QLatin1String("agentMessage")) {
+    if (*itemType == QLatin1String("agentMessage") || *itemType == QLatin1String("plan")) {
         const auto parsedText = requiredString(item, QStringLiteral("text"), error, true);
         if (!parsedText.has_value()) {
             return std::nullopt;

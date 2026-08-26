@@ -9,6 +9,7 @@
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QJsonArray>
+#include <QJsonDocument>
 #include <QLabel>
 #include <QListWidget>
 #include <QMenu>
@@ -26,6 +27,32 @@
 #include <algorithm>
 
 namespace snack::ui {
+namespace {
+
+constexpr qsizetype maximumToolOutput = 64 * 1024;
+constexpr qsizetype maximumSummaryText = 32 * 1024;
+
+QString boundedText(const QString& text, qsizetype maximumSize) {
+    if (text.size() <= maximumSize) {
+        return text;
+    }
+    return QStringLiteral("[earlier output hidden]\n") + text.sliced(text.size() - maximumSize);
+}
+
+QString compactJson(const QJsonValue& value) {
+    if (value.isUndefined() || value.isNull()) {
+        return {};
+    }
+    if (value.isObject()) {
+        return QString::fromUtf8(QJsonDocument(value.toObject()).toJson(QJsonDocument::Compact));
+    }
+    if (value.isArray()) {
+        return QString::fromUtf8(QJsonDocument(value.toArray()).toJson(QJsonDocument::Compact));
+    }
+    return value.toVariant().toString();
+}
+
+} // namespace
 
 MainWindow::MainWindow(session::SessionController* controller, app::AppSettings* settings,
                        QWidget* parent)
@@ -240,11 +267,28 @@ void MainWindow::buildUi() {
     rootLayout->addWidget(conversation, 1);
     setCentralWidget(central);
 
-    auto* taskDock = new QDockWidget(tr("Tasks"), this);
-    taskDock->setObjectName(QStringLiteral("taskDock"));
-    taskDock->setWidget(new QLabel(tr("Agent plans will appear here."), taskDock));
-    addDockWidget(Qt::RightDockWidgetArea, taskDock);
-    taskDock->hide();
+    taskDock_ = new QDockWidget(tr("Tasks"), this);
+    taskDock_->setObjectName(QStringLiteral("taskDock"));
+    auto* planPanel = new QWidget(taskDock_);
+    auto* planLayout = new QVBoxLayout(planPanel);
+    planExplanation_ = new QLabel(tr("Agent plans will appear here."), planPanel);
+    planExplanation_->setObjectName(QStringLiteral("planExplanation"));
+    planExplanation_->setWordWrap(true);
+    planItemText_ = new QLabel(planPanel);
+    planItemText_->setObjectName(QStringLiteral("planItemText"));
+    planItemText_->setWordWrap(true);
+    planItemText_->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    planItemText_->hide();
+    planList_ = new QListWidget(planPanel);
+    planList_->setObjectName(QStringLiteral("planList"));
+    planList_->setWordWrap(true);
+    planList_->setSelectionMode(QAbstractItemView::NoSelection);
+    planLayout->addWidget(planExplanation_);
+    planLayout->addWidget(planItemText_);
+    planLayout->addWidget(planList_, 1);
+    taskDock_->setWidget(planPanel);
+    addDockWidget(Qt::RightDockWidgetArea, taskDock_);
+    taskDock_->hide();
 
     auto* terminalDock = new QDockWidget(tr("Terminal"), this);
     terminalDock->setObjectName(QStringLiteral("terminalDock"));
@@ -318,6 +362,27 @@ void MainWindow::appendEvent(const domain::AgentEvent& event) {
             auto* item = timeline_->item(activeAgentRow_);
             item->setText(item->text() + event.payload.value(QStringLiteral("text")).toString());
         }
+        break;
+    case domain::AgentEventType::ToolStarted:
+        appendToolStarted(event);
+        break;
+    case domain::AgentEventType::ToolOutputDelta:
+        appendToolProgress(event);
+        break;
+    case domain::AgentEventType::ToolCompleted:
+        completeTool(event);
+        break;
+    case domain::AgentEventType::ReasoningStarted:
+        appendReasoningStarted(event);
+        break;
+    case domain::AgentEventType::ReasoningSummaryDelta:
+        appendReasoningDelta(event);
+        break;
+    case domain::AgentEventType::ReasoningCompleted:
+        completeReasoning(event);
+        break;
+    case domain::AgentEventType::PlanUpdated:
+        updatePlan(event);
         break;
     case domain::AgentEventType::ApprovalRequested:
         appendApprovalRequest(event);
@@ -455,6 +520,258 @@ void MainWindow::resolveApprovalCard(const domain::AgentEvent& event) {
     const QString resolution = event.payload.value(QStringLiteral("resolution")).toString();
     iterator->status->setText(decision.isEmpty() ? tr("Approval closed: %1").arg(resolution)
                                                  : tr("Decision sent: %1").arg(decision));
+}
+
+QString MainWindow::toolTitle(const QJsonObject& payload) const {
+    const QString kind = payload.value(QStringLiteral("kind")).toString();
+    if (kind == QLatin1String("commandExecution")) {
+        return tr("Command");
+    }
+    if (kind == QLatin1String("fileChange")) {
+        return tr("File changes");
+    }
+    if (kind == QLatin1String("mcpToolCall")) {
+        return tr("MCP tool: %1 / %2")
+            .arg(payload.value(QStringLiteral("server")).toString(),
+                 payload.value(QStringLiteral("tool")).toString());
+    }
+    if (kind == QLatin1String("dynamicToolCall")) {
+        return tr("Tool: %1").arg(payload.value(QStringLiteral("tool")).toString());
+    }
+    if (kind == QLatin1String("collabToolCall")) {
+        return tr("Collaboration tool");
+    }
+    if (kind == QLatin1String("webSearch")) {
+        return tr("Web search");
+    }
+    if (kind == QLatin1String("imageView")) {
+        return tr("Image view");
+    }
+    if (kind == QLatin1String("contextCompaction")) {
+        return tr("Context compaction");
+    }
+    return tr("Tool execution");
+}
+
+QString MainWindow::toolDetails(const QJsonObject& payload) const {
+    QStringList details;
+    const QString kind = payload.value(QStringLiteral("kind")).toString();
+    if (kind == QLatin1String("commandExecution")) {
+        details.append(payload.value(QStringLiteral("command")).toString());
+        const QString cwd = payload.value(QStringLiteral("cwd")).toString();
+        if (!cwd.isEmpty()) {
+            details.append(tr("Working directory: %1").arg(cwd));
+        }
+    } else if (kind == QLatin1String("fileChange")) {
+        for (const QJsonValue& value : payload.value(QStringLiteral("changes")).toArray()) {
+            const QJsonObject change = value.toObject();
+            QString changeKind = change.value(QStringLiteral("kind")).toString();
+            if (changeKind.isEmpty()) {
+                changeKind = change.value(QStringLiteral("kind"))
+                                 .toObject()
+                                 .value(QStringLiteral("type"))
+                                 .toString();
+            }
+            details.append(QStringLiteral("%1 (%2)").arg(
+                change.value(QStringLiteral("path")).toString(), changeKind));
+        }
+    } else if (kind == QLatin1String("mcpToolCall")) {
+        details.append(
+            tr("Arguments: %1").arg(compactJson(payload.value(QStringLiteral("arguments")))));
+    } else if (kind == QLatin1String("dynamicToolCall")) {
+        const QString nameSpace = payload.value(QStringLiteral("namespace")).toString();
+        if (!nameSpace.isEmpty()) {
+            details.append(tr("Namespace: %1").arg(nameSpace));
+        }
+        details.append(
+            tr("Arguments: %1").arg(compactJson(payload.value(QStringLiteral("arguments")))));
+    } else if (kind == QLatin1String("webSearch")) {
+        details.append(payload.value(QStringLiteral("query")).toString());
+    } else if (kind == QLatin1String("imageView")) {
+        details.append(payload.value(QStringLiteral("path")).toString());
+    } else {
+        const QString prompt = payload.value(QStringLiteral("prompt")).toString();
+        if (!prompt.isEmpty()) {
+            details.append(prompt);
+        }
+    }
+    details.removeAll(QString{});
+    return details.join(QLatin1Char('\n'));
+}
+
+void MainWindow::appendToolStarted(const domain::AgentEvent& event) {
+    const QString itemId = event.payload.value(QStringLiteral("itemId")).toString();
+    if (itemId.isEmpty() || toolCards_.contains(itemId)) {
+        return;
+    }
+
+    auto* item = new QListWidgetItem(timeline_);
+    auto* card = new QFrame(timeline_);
+    card->setObjectName(QStringLiteral("toolCard"));
+    auto* layout = new QVBoxLayout(card);
+    layout->setContentsMargins(14, 12, 14, 12);
+    auto* title = new QLabel(toolTitle(event.payload), card);
+    title->setObjectName(QStringLiteral("toolTitle"));
+    auto* detail = new QLabel(toolDetails(event.payload), card);
+    detail->setObjectName(QStringLiteral("toolDetail"));
+    detail->setWordWrap(true);
+    detail->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    auto* output = new QPlainTextEdit(card);
+    output->setObjectName(QStringLiteral("toolOutput"));
+    output->setReadOnly(true);
+    output->setMaximumHeight(150);
+    output->hide();
+    auto* status =
+        new QLabel(event.payload.value(QStringLiteral("status")).toString(tr("Running")), card);
+    status->setObjectName(QStringLiteral("toolStatus"));
+    layout->addWidget(title);
+    layout->addWidget(detail);
+    layout->addWidget(output);
+    layout->addWidget(status);
+    toolCards_.insert(
+        itemId, {.item = item, .card = card, .detail = detail, .status = status, .output = output});
+    item->setSizeHint(card->sizeHint());
+    timeline_->setItemWidget(item, card);
+}
+
+void MainWindow::appendToolProgress(const domain::AgentEvent& event) {
+    const QString itemId = event.payload.value(QStringLiteral("itemId")).toString();
+    const auto iterator = toolCards_.find(itemId);
+    if (iterator == toolCards_.end()) {
+        return;
+    }
+    if (event.payload.value(QStringLiteral("changes")).isArray()) {
+        QJsonObject details = event.payload;
+        details.insert(QStringLiteral("kind"), QStringLiteral("fileChange"));
+        iterator->detail->setText(toolDetails(details));
+    }
+    const QString text = event.payload.value(QStringLiteral("text")).toString();
+    if (!text.isEmpty()) {
+        iterator->output->setPlainText(
+            boundedText(iterator->output->toPlainText() + text, maximumToolOutput));
+        iterator->output->show();
+    }
+    iterator->item->setSizeHint(iterator->card->sizeHint());
+}
+
+void MainWindow::completeTool(const domain::AgentEvent& event) {
+    const QString itemId = event.payload.value(QStringLiteral("itemId")).toString();
+    if (!toolCards_.contains(itemId)) {
+        appendToolStarted(event);
+    }
+    const auto iterator = toolCards_.find(itemId);
+    if (iterator == toolCards_.end()) {
+        return;
+    }
+    iterator->detail->setText(toolDetails(event.payload));
+    const QString status = event.payload.value(QStringLiteral("status")).toString();
+    iterator->status->setText(status.isEmpty() ? tr("Completed") : status);
+
+    QString output = event.payload.value(QStringLiteral("aggregatedOutput")).toString();
+    if (output.isEmpty()) {
+        output = compactJson(event.payload.value(QStringLiteral("result")));
+    }
+    if (output.isEmpty()) {
+        output = compactJson(event.payload.value(QStringLiteral("error")));
+    }
+    if (output.isEmpty()) {
+        output = compactJson(event.payload.value(QStringLiteral("contentItems")));
+    }
+    if (!output.isEmpty()) {
+        iterator->output->setPlainText(boundedText(output, maximumToolOutput));
+        iterator->output->show();
+    }
+    iterator->item->setSizeHint(iterator->card->sizeHint());
+}
+
+void MainWindow::appendReasoningStarted(const domain::AgentEvent& event) {
+    const QString itemId = event.payload.value(QStringLiteral("itemId")).toString();
+    if (itemId.isEmpty() || reasoningCards_.contains(itemId)) {
+        return;
+    }
+    auto* item = new QListWidgetItem(timeline_);
+    auto* card = new QFrame(timeline_);
+    card->setObjectName(QStringLiteral("reasoningCard"));
+    auto* layout = new QVBoxLayout(card);
+    layout->setContentsMargins(14, 12, 14, 12);
+    auto* title = new QLabel(tr("Reasoning summary"), card);
+    auto* summary = new QLabel(card);
+    summary->setObjectName(QStringLiteral("reasoningSummary"));
+    summary->setWordWrap(true);
+    summary->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    auto* status = new QLabel(tr("Thinking"), card);
+    status->setObjectName(QStringLiteral("reasoningStatus"));
+    layout->addWidget(title);
+    layout->addWidget(summary);
+    layout->addWidget(status);
+    reasoningCards_.insert(itemId,
+                           {.item = item, .card = card, .summary = summary, .status = status});
+    item->setSizeHint(card->sizeHint());
+    timeline_->setItemWidget(item, card);
+}
+
+void MainWindow::appendReasoningDelta(const domain::AgentEvent& event) {
+    const QString itemId = event.payload.value(QStringLiteral("itemId")).toString();
+    const auto iterator = reasoningCards_.find(itemId);
+    if (iterator == reasoningCards_.end()) {
+        return;
+    }
+    iterator->summary->setText(boundedText(
+        iterator->summary->text() + event.payload.value(QStringLiteral("text")).toString(),
+        maximumSummaryText));
+    iterator->item->setSizeHint(iterator->card->sizeHint());
+}
+
+void MainWindow::completeReasoning(const domain::AgentEvent& event) {
+    const QString itemId = event.payload.value(QStringLiteral("itemId")).toString();
+    if (!reasoningCards_.contains(itemId)) {
+        appendReasoningStarted(event);
+    }
+    const auto iterator = reasoningCards_.find(itemId);
+    if (iterator == reasoningCards_.end()) {
+        return;
+    }
+    QStringList summaryParts;
+    for (const QJsonValue& value : event.payload.value(QStringLiteral("summary")).toArray()) {
+        summaryParts.append(value.toString());
+    }
+    iterator->summary->setText(
+        boundedText(summaryParts.join(QStringLiteral("\n\n")), maximumSummaryText));
+    iterator->status->setText(tr("Completed"));
+    iterator->item->setSizeHint(iterator->card->sizeHint());
+}
+
+void MainWindow::updatePlan(const domain::AgentEvent& event) {
+    const QJsonValue planValue = event.payload.value(QStringLiteral("plan"));
+    if (planValue.isArray()) {
+        planList_->clear();
+        for (const QJsonValue& value : planValue.toArray()) {
+            const QJsonObject step = value.toObject();
+            const QString status = step.value(QStringLiteral("status")).toString();
+            const QString marker = status == QLatin1String("completed")    ? QStringLiteral("[x]")
+                                   : status == QLatin1String("inProgress") ? QStringLiteral("[>]")
+                                                                           : QStringLiteral("[ ]");
+            auto* item = new QListWidgetItem(
+                QStringLiteral("%1 %2").arg(marker, step.value(QStringLiteral("step")).toString()),
+                planList_);
+            item->setData(Qt::UserRole, status);
+        }
+        const QString explanation = event.payload.value(QStringLiteral("explanation")).toString();
+        planExplanation_->setText(explanation.isEmpty() ? tr("Current plan") : explanation);
+    }
+    if (event.payload.contains(QStringLiteral("text"))) {
+        streamedPlanText_ = event.payload.value(QStringLiteral("text")).toString();
+    } else {
+        streamedPlanText_.append(event.payload.value(QStringLiteral("textDelta")).toString());
+    }
+    if (!streamedPlanText_.isEmpty()) {
+        streamedPlanText_ = boundedText(streamedPlanText_, maximumSummaryText);
+        planItemText_->setText(streamedPlanText_);
+        planItemText_->show();
+    }
+    if (planList_->count() > 0 || !streamedPlanText_.isEmpty()) {
+        taskDock_->show();
+    }
 }
 
 void MainWindow::applyTheme(const ThemeDefinition& theme) {

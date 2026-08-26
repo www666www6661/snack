@@ -154,6 +154,12 @@ QFrame#sessionHeader { background: %1; border-bottom: 1px solid %4; }
 QListWidget#timeline { background: %1; border: none; outline: none; }
 QListWidget#timeline::item { padding: 9px 12px; margin: 3px 18px; border-radius: 8px; }
 QListWidget#timeline::item:selected { background: %5; color: %2; }
+QFrame#toolCard { background: %10; border: 1px solid %4; border-radius: 10px; }
+QFrame#reasoningCard { background: %11; border: 1px solid %4; border-radius: 10px; }
+QFrame#approvalCard { background: %6; border: 1px solid %7; border-radius: 10px; }
+QPlainTextEdit#toolOutput { background: %1; border: 1px solid %4; border-radius: 7px; padding: 7px; }
+QListWidget#planList { background: %1; border: none; outline: none; }
+QListWidget#planList::item { padding: 6px; border-bottom: 1px solid %4; }
 QPlainTextEdit#composer { background: %6; border: 1px solid %4; border-radius: 12px; padding: 10px; }
 QPushButton#sendButton { background: %7; color: white; border: none; border-radius: 9px; padding: 8px 18px; }
 QPushButton#sendButton:disabled { background: %8; }
@@ -169,7 +175,9 @@ QStatusBar { border-top: 1px solid %4; color: %9; }
              color(*this, QStringLiteral("surface.raised")).name(),
              color(*this, QStringLiteral("state.running")).name(),
              color(*this, QStringLiteral("text.disabled")).name(),
-             color(*this, QStringLiteral("text.secondary")).name());
+             color(*this, QStringLiteral("text.secondary")).name())
+        .arg(color(*this, QStringLiteral("message.tool")).name())
+        .arg(color(*this, QStringLiteral("message.reasoning")).name());
 }
 
 } // namespace snack::ui

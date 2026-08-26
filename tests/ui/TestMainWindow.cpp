@@ -54,6 +54,7 @@ class TestMainWindow final : public QObject {
   private slots:
     void sendsAndRendersStreamingTurn();
     void restoresPersistedTimeline();
+    void restoresToolReasoningAndPlanViews();
     void hidesToTrayWithoutClosingSession();
     void restoresWindowLayout();
     void interruptsRunningTurnFromSendButton();
@@ -189,6 +190,102 @@ void TestMainWindow::restoresPersistedTimeline() {
     auto* restoredApproval = window.findChild<QPushButton*>(QStringLiteral("approvalAcceptButton"));
     QVERIFY(restoredApproval != nullptr);
     QVERIFY(!restoredApproval->isEnabled());
+}
+
+void TestMainWindow::restoresToolReasoningAndPlanViews() {
+    using snack::domain::AgentEvent;
+    using snack::domain::AgentEventType;
+
+    QTemporaryDir directory;
+    snack::app::AppSettings settings(directory.filePath(QStringLiteral("settings.ini")));
+    UiMemoryEventRepository repository;
+    snack::agent::FakeAgentAdapter adapter(nullptr, 1);
+    snack::domain::Conversation conversation;
+    conversation.title = QStringLiteral("Restored agent activity");
+    conversation.workingDirectory = directory.path();
+
+    quint64 sequence = 0;
+    const auto append = [&repository, &conversation, &sequence](AgentEventType type,
+                                                                const QJsonObject& payload) {
+        AgentEvent event;
+        event.conversationId = conversation.id;
+        event.turnId = QUuid::createUuid();
+        event.sequence = ++sequence;
+        event.type = type;
+        event.payload = payload;
+        repository.events.append(event);
+    };
+    append(AgentEventType::ToolStarted,
+           {{QStringLiteral("itemId"), QStringLiteral("tool-1")},
+            {QStringLiteral("kind"), QStringLiteral("commandExecution")},
+            {QStringLiteral("command"), QStringLiteral("cmake --build build")},
+            {QStringLiteral("cwd"), directory.path()},
+            {QStringLiteral("status"), QStringLiteral("inProgress")}});
+    append(AgentEventType::ToolOutputDelta,
+           {{QStringLiteral("itemId"), QStringLiteral("tool-1")},
+            {QStringLiteral("text"), QString(70000, QLatin1Char('a'))}});
+    append(AgentEventType::ToolCompleted,
+           {{QStringLiteral("itemId"), QStringLiteral("tool-1")},
+            {QStringLiteral("kind"), QStringLiteral("commandExecution")},
+            {QStringLiteral("command"), QStringLiteral("cmake --build build")},
+            {QStringLiteral("cwd"), directory.path()},
+            {QStringLiteral("status"), QStringLiteral("failed")},
+            {QStringLiteral("aggregatedOutput"),
+             QString(70000, QLatin1Char('b')) + QStringLiteral("final-tail")}});
+    append(AgentEventType::ReasoningStarted,
+           {{QStringLiteral("itemId"), QStringLiteral("reasoning-1")}});
+    append(AgentEventType::ReasoningSummaryDelta,
+           {{QStringLiteral("itemId"), QStringLiteral("reasoning-1")},
+            {QStringLiteral("text"), QStringLiteral("Draft summary")}});
+    append(AgentEventType::ReasoningCompleted,
+           {{QStringLiteral("itemId"), QStringLiteral("reasoning-1")},
+            {QStringLiteral("summary"), QJsonArray{QStringLiteral("Final public summary")}}});
+    append(AgentEventType::PlanUpdated,
+           {{QStringLiteral("itemId"), QStringLiteral("plan-1")},
+            {QStringLiteral("textDelta"), QStringLiteral("Draft plan")}});
+    append(AgentEventType::PlanUpdated, {{QStringLiteral("itemId"), QStringLiteral("plan-1")},
+                                         {QStringLiteral("text"), QStringLiteral("Final plan")},
+                                         {QStringLiteral("final"), true}});
+    append(AgentEventType::PlanUpdated,
+           {{QStringLiteral("explanation"), QStringLiteral("Fix and verify")},
+            {QStringLiteral("plan"),
+             QJsonArray{QJsonObject{{QStringLiteral("step"), QStringLiteral("Inspect")},
+                                    {QStringLiteral("status"), QStringLiteral("completed")}},
+                        QJsonObject{{QStringLiteral("step"), QStringLiteral("Fix")},
+                                    {QStringLiteral("status"), QStringLiteral("inProgress")}},
+                        QJsonObject{{QStringLiteral("step"), QStringLiteral("Test")},
+                                    {QStringLiteral("status"), QStringLiteral("pending")}}}}});
+
+    snack::session::SessionController controller(conversation, &adapter, &repository);
+    snack::ui::MainWindow window(&controller, &settings, false);
+    auto* toolCard = window.findChild<QFrame*>(QStringLiteral("toolCard"));
+    auto* toolOutput = window.findChild<QPlainTextEdit*>(QStringLiteral("toolOutput"));
+    auto* toolStatus = window.findChild<QLabel*>(QStringLiteral("toolStatus"));
+    auto* reasoningSummary = window.findChild<QLabel*>(QStringLiteral("reasoningSummary"));
+    auto* reasoningStatus = window.findChild<QLabel*>(QStringLiteral("reasoningStatus"));
+    auto* taskDock = window.findChild<QDockWidget*>(QStringLiteral("taskDock"));
+    auto* planList = window.findChild<QListWidget*>(QStringLiteral("planList"));
+    auto* planItemText = window.findChild<QLabel*>(QStringLiteral("planItemText"));
+    QVERIFY(toolCard != nullptr);
+    QVERIFY(toolOutput != nullptr);
+    QVERIFY(toolStatus != nullptr);
+    QVERIFY(reasoningSummary != nullptr);
+    QVERIFY(reasoningStatus != nullptr);
+    QVERIFY(taskDock != nullptr);
+    QVERIFY(planList != nullptr);
+    QVERIFY(planItemText != nullptr);
+    QVERIFY(toolOutput->toPlainText().size() < 66000);
+    QVERIFY(toolOutput->toPlainText().startsWith(QStringLiteral("[earlier output hidden]")));
+    QVERIFY(toolOutput->toPlainText().endsWith(QStringLiteral("final-tail")));
+    QCOMPARE(toolStatus->text(), QStringLiteral("failed"));
+    QCOMPARE(reasoningSummary->text(), QStringLiteral("Final public summary"));
+    QCOMPARE(reasoningStatus->text(), QStringLiteral("Completed"));
+    QCOMPARE(planItemText->text(), QStringLiteral("Final plan"));
+    QCOMPARE(planList->count(), 3);
+    QCOMPARE(planList->item(0)->data(Qt::UserRole).toString(), QStringLiteral("completed"));
+    QCOMPARE(planList->item(1)->data(Qt::UserRole).toString(), QStringLiteral("inProgress"));
+    QVERIFY(!taskDock->isHidden());
+    window.close();
 }
 
 void TestMainWindow::hidesToTrayWithoutClosingSession() {

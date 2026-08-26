@@ -10,7 +10,10 @@
 #include <optional>
 
 class QComboBox;
+class QDockWidget;
+class QFrame;
 class QLabel;
+class QListWidgetItem;
 class QListWidget;
 class QPlainTextEdit;
 class QPushButton;
@@ -51,6 +54,15 @@ class MainWindow final : public QMainWindow {
     void appendEvent(const domain::AgentEvent& event);
     void appendApprovalRequest(const domain::AgentEvent& event);
     void resolveApprovalCard(const domain::AgentEvent& event);
+    void appendToolStarted(const domain::AgentEvent& event);
+    void appendToolProgress(const domain::AgentEvent& event);
+    void completeTool(const domain::AgentEvent& event);
+    void appendReasoningStarted(const domain::AgentEvent& event);
+    void appendReasoningDelta(const domain::AgentEvent& event);
+    void completeReasoning(const domain::AgentEvent& event);
+    void updatePlan(const domain::AgentEvent& event);
+    [[nodiscard]] QString toolTitle(const QJsonObject& payload) const;
+    [[nodiscard]] QString toolDetails(const QJsonObject& payload) const;
     void applyTheme(const ThemeDefinition& theme);
     void applyInterfaceScale(double scale);
     void updateStatus(domain::ConversationStatus status);
@@ -80,12 +92,32 @@ class MainWindow final : public QMainWindow {
     QComboBox* effortCombo_{nullptr};
     QComboBox* accessCombo_{nullptr};
     QSystemTrayIcon* trayIcon_{nullptr};
+    QDockWidget* taskDock_{nullptr};
+    QLabel* planExplanation_{nullptr};
+    QLabel* planItemText_{nullptr};
+    QListWidget* planList_{nullptr};
     QString startupNotice_;
     struct ApprovalCardState {
         QLabel* status{nullptr};
         QList<QPushButton*> buttons;
     };
+    struct ToolCardState {
+        QListWidgetItem* item{nullptr};
+        QFrame* card{nullptr};
+        QLabel* detail{nullptr};
+        QLabel* status{nullptr};
+        QPlainTextEdit* output{nullptr};
+    };
+    struct ReasoningCardState {
+        QListWidgetItem* item{nullptr};
+        QFrame* card{nullptr};
+        QLabel* summary{nullptr};
+        QLabel* status{nullptr};
+    };
     QHash<QString, ApprovalCardState> approvalCards_;
+    QHash<QString, ToolCardState> toolCards_;
+    QHash<QString, ReasoningCardState> reasoningCards_;
+    QString streamedPlanText_;
     int activeAgentRow_{-1};
     bool restoringTimeline_{false};
     bool closeToTrayEnabled_{false};

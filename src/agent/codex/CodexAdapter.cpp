@@ -9,6 +9,35 @@
 #include <utility>
 
 namespace snack::agent::codex {
+namespace {
+
+bool isToolItemType(const QString& type) {
+    static const QSet<QString> types = {
+        QStringLiteral("commandExecution"), QStringLiteral("fileChange"),
+        QStringLiteral("mcpToolCall"),      QStringLiteral("dynamicToolCall"),
+        QStringLiteral("collabToolCall"),   QStringLiteral("webSearch"),
+        QStringLiteral("imageView"),        QStringLiteral("contextCompaction")};
+    return types.contains(type);
+}
+
+QJsonObject itemEventPayload(const QJsonObject& item) {
+    QJsonObject payload = item;
+    payload.insert(QStringLiteral("itemId"), item.value(QStringLiteral("id")));
+    payload.insert(QStringLiteral("kind"), item.value(QStringLiteral("type")));
+    return payload;
+}
+
+QJsonObject withoutReasoningContent(const QJsonObject& raw) {
+    QJsonObject sanitized = raw;
+    QJsonObject params = sanitized.value(QStringLiteral("params")).toObject();
+    QJsonObject item = params.value(QStringLiteral("item")).toObject();
+    item.remove(QStringLiteral("content"));
+    params.insert(QStringLiteral("item"), item);
+    sanitized.insert(QStringLiteral("params"), params);
+    return sanitized;
+}
+
+} // namespace
 
 CodexAdapter::CodexAdapter(CliInstallation installation, process::IProcessTransport* transport,
                            QObject* parent)
@@ -142,6 +171,12 @@ void CodexAdapter::startTurn(const TurnRequest& request) {
     startedAgentMessages_.clear();
     completedAgentMessages_.clear();
     streamedAgentText_.clear();
+    startedToolItems_.clear();
+    completedToolItems_.clear();
+    startedReasoningItems_.clear();
+    completedReasoningItems_.clear();
+    completedPlanItems_.clear();
+    reasoningSummaries_.clear();
     activeItems_.clear();
     pendingApprovals_.clear();
     approvalTokenByNativeKey_.clear();
@@ -512,6 +547,51 @@ void CodexAdapter::handleNotification(const QString& method, const QJsonValue& p
             return;
         }
         activeItems_.insert(notification->itemId, notification->rawItem);
+        if (isToolItemType(notification->itemType)) {
+            if (!startedToolItems_.contains(notification->itemId)) {
+                startedToolItems_.insert(notification->itemId);
+                emitActiveEvent(domain::AgentEventType::ToolStarted,
+                                itemEventPayload(notification->rawItem), raw);
+            }
+            if (method == QLatin1String("item/completed") &&
+                !completedToolItems_.contains(notification->itemId)) {
+                completedToolItems_.insert(notification->itemId);
+                emitActiveEvent(domain::AgentEventType::ToolCompleted,
+                                itemEventPayload(notification->rawItem), raw);
+            }
+            return;
+        }
+        if (notification->itemType == QLatin1String("reasoning")) {
+            if (!startedReasoningItems_.contains(notification->itemId)) {
+                startedReasoningItems_.insert(notification->itemId);
+                reasoningSummaries_.insert(notification->itemId, {});
+                emitActiveEvent(domain::AgentEventType::ReasoningStarted,
+                                {{QStringLiteral("itemId"), notification->itemId}},
+                                withoutReasoningContent(raw));
+            }
+            if (method == QLatin1String("item/completed") &&
+                !completedReasoningItems_.contains(notification->itemId)) {
+                completedReasoningItems_.insert(notification->itemId);
+                emitActiveEvent(domain::AgentEventType::ReasoningCompleted,
+                                {{QStringLiteral("itemId"), notification->itemId},
+                                 {QStringLiteral("summary"),
+                                  notification->rawItem.value(QStringLiteral("summary"))}},
+                                withoutReasoningContent(raw));
+            }
+            return;
+        }
+        if (notification->itemType == QLatin1String("plan")) {
+            if (method == QLatin1String("item/completed") &&
+                !completedPlanItems_.contains(notification->itemId)) {
+                completedPlanItems_.insert(notification->itemId);
+                emitActiveEvent(domain::AgentEventType::PlanUpdated,
+                                {{QStringLiteral("itemId"), notification->itemId},
+                                 {QStringLiteral("text"), notification->text},
+                                 {QStringLiteral("final"), true}},
+                                raw);
+            }
+            return;
+        }
         if (notification->itemType != QLatin1String("agentMessage")) {
             return;
         }
@@ -549,6 +629,155 @@ void CodexAdapter::handleNotification(const QString& method, const QJsonValue& p
                         {{QStringLiteral("itemId"), notification->itemId},
                          {QStringLiteral("text"), notification->text}},
                         raw);
+        return;
+    }
+
+    const auto itemDeltaParams = [this, &params,
+                                  &raw](const QString& eventName) -> std::optional<QJsonObject> {
+        if (!params.isObject()) {
+            warnActive(
+                QStringLiteral("Ignored invalid Codex %1: params must be an object").arg(eventName),
+                raw);
+            return std::nullopt;
+        }
+        const QJsonObject object = params.toObject();
+        const QString threadId = object.value(QStringLiteral("threadId")).toString();
+        const QString turnId = object.value(QStringLiteral("turnId")).toString();
+        const QString itemId = object.value(QStringLiteral("itemId")).toString();
+        if (threadId.isEmpty() || turnId.isEmpty() || itemId.isEmpty()) {
+            warnActive(QStringLiteral("Ignored invalid Codex %1: missing context").arg(eventName),
+                       raw);
+            return std::nullopt;
+        }
+        if (!acceptNativeContext(threadId, turnId, raw)) {
+            return std::nullopt;
+        }
+        return object;
+    };
+
+    if (method == QLatin1String("item/commandExecution/outputDelta") ||
+        method == QLatin1String("item/mcpToolCall/progress") ||
+        method == QLatin1String("item/fileChange/patchUpdated")) {
+        const auto notification = itemDeltaParams(method);
+        if (!notification.has_value()) {
+            return;
+        }
+        const QString itemId = notification->value(QStringLiteral("itemId")).toString();
+        if (completedToolItems_.contains(itemId)) {
+            return;
+        }
+        if (!startedToolItems_.contains(itemId)) {
+            QJsonObject item = activeItems_.value(itemId);
+            item.insert(QStringLiteral("id"), itemId);
+            item.insert(QStringLiteral("type"),
+                        method == QLatin1String("item/commandExecution/outputDelta")
+                            ? QStringLiteral("commandExecution")
+                        : method == QLatin1String("item/mcpToolCall/progress")
+                            ? QStringLiteral("mcpToolCall")
+                            : QStringLiteral("fileChange"));
+            activeItems_.insert(itemId, item);
+            startedToolItems_.insert(itemId);
+            emitActiveEvent(domain::AgentEventType::ToolStarted, itemEventPayload(item), raw);
+        }
+        QJsonObject payload{{QStringLiteral("itemId"), itemId}};
+        if (method == QLatin1String("item/fileChange/patchUpdated")) {
+            const QJsonArray changes = notification->value(QStringLiteral("changes")).toArray();
+            payload.insert(QStringLiteral("changes"), changes);
+            activeItems_[itemId].insert(QStringLiteral("changes"), changes);
+        } else {
+            payload.insert(QStringLiteral("text"),
+                           method == QLatin1String("item/mcpToolCall/progress")
+                               ? notification->value(QStringLiteral("message"))
+                               : notification->value(QStringLiteral("delta")));
+        }
+        emitActiveEvent(domain::AgentEventType::ToolOutputDelta, payload, raw);
+        return;
+    }
+
+    if (method == QLatin1String("item/reasoning/summaryPartAdded") ||
+        method == QLatin1String("item/reasoning/summaryTextDelta")) {
+        const auto notification = itemDeltaParams(method);
+        if (!notification.has_value()) {
+            return;
+        }
+        const QString itemId = notification->value(QStringLiteral("itemId")).toString();
+        if (completedReasoningItems_.contains(itemId)) {
+            return;
+        }
+        if (!startedReasoningItems_.contains(itemId)) {
+            startedReasoningItems_.insert(itemId);
+            reasoningSummaries_.insert(itemId, {});
+            emitActiveEvent(domain::AgentEventType::ReasoningStarted,
+                            {{QStringLiteral("itemId"), itemId}}, raw);
+        }
+        if (method == QLatin1String("item/reasoning/summaryPartAdded")) {
+            return;
+        }
+        const QJsonValue summaryIndexValue = notification->value(QStringLiteral("summaryIndex"));
+        const qint64 summaryIndex = summaryIndexValue.toInteger(-1);
+        if (!summaryIndexValue.isDouble() || summaryIndex < 0) {
+            warnActive(QStringLiteral("Ignored invalid Codex reasoning summary index"), raw);
+            return;
+        }
+        QStringList& parts = reasoningSummaries_[itemId];
+        while (parts.size() <= summaryIndex) {
+            parts.append(QString{});
+        }
+        const QString delta = notification->value(QStringLiteral("delta")).toString();
+        parts[summaryIndex].append(delta);
+        if (!delta.isEmpty()) {
+            emitActiveEvent(domain::AgentEventType::ReasoningSummaryDelta,
+                            {{QStringLiteral("itemId"), itemId},
+                             {QStringLiteral("summaryIndex"), summaryIndex},
+                             {QStringLiteral("text"), delta}},
+                            raw);
+        }
+        return;
+    }
+
+    if (method == QLatin1String("item/reasoning/textDelta")) {
+        (void)itemDeltaParams(method);
+        return;
+    }
+
+    if (method == QLatin1String("item/plan/delta")) {
+        const auto notification = itemDeltaParams(method);
+        if (!notification.has_value()) {
+            return;
+        }
+        const QString itemId = notification->value(QStringLiteral("itemId")).toString();
+        if (!completedPlanItems_.contains(itemId)) {
+            emitActiveEvent(
+                domain::AgentEventType::PlanUpdated,
+                {{QStringLiteral("itemId"), itemId},
+                 {QStringLiteral("textDelta"), notification->value(QStringLiteral("delta"))}},
+                raw);
+        }
+        return;
+    }
+
+    if (method == QLatin1String("turn/plan/updated")) {
+        if (!params.isObject()) {
+            warnActive(QStringLiteral("Ignored invalid Codex turn plan: params must be an object"),
+                       raw);
+            return;
+        }
+        const QJsonObject notification = params.toObject();
+        if (!acceptNativeContext(notification.value(QStringLiteral("threadId")).toString(),
+                                 notification.value(QStringLiteral("turnId")).toString(), raw)) {
+            return;
+        }
+        const QJsonValue plan = notification.value(QStringLiteral("plan"));
+        if (!plan.isArray()) {
+            warnActive(QStringLiteral("Ignored invalid Codex turn plan: plan must be an array"),
+                       raw);
+            return;
+        }
+        emitActiveEvent(
+            domain::AgentEventType::PlanUpdated,
+            {{QStringLiteral("plan"), plan},
+             {QStringLiteral("explanation"), notification.value(QStringLiteral("explanation"))}},
+            raw);
         return;
     }
 
@@ -757,6 +986,12 @@ void CodexAdapter::finishActiveTurn(domain::AgentEventType type, const QString& 
     startedAgentMessages_.clear();
     completedAgentMessages_.clear();
     streamedAgentText_.clear();
+    startedToolItems_.clear();
+    completedToolItems_.clear();
+    startedReasoningItems_.clear();
+    completedReasoningItems_.clear();
+    completedPlanItems_.clear();
+    reasoningSummaries_.clear();
     activeItems_.clear();
     turnRequestId_ = 0;
     interruptRequestId_ = 0;

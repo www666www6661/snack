@@ -88,6 +88,7 @@ class TestCodexAppServer final : public QObject {
     void parsesApprovalLifecycle();
     void adapterPublishesPaginatedCapabilities();
     void adapterStreamsAndCompletesTurn();
+    void adapterMapsToolReasoningAndPlanEvents();
     void adapterHandlesTurnFailuresAndStaleEvents();
     void adapterInterruptsAndDeclinesServerRequests();
     void adapterHandlesApprovalRequests();
@@ -361,7 +362,7 @@ void TestCodexAppServer::loadsVersionedSchemaContract() {
     QVERIFY(manifestFile.open(QIODevice::ReadOnly));
     const QJsonObject manifest = QJsonDocument::fromJson(manifestFile.readAll()).object();
     QCOMPARE(manifest.value(QStringLiteral("cliVersion")).toString(), QStringLiteral("0.149.0"));
-    QCOMPARE(manifest.value(QStringLiteral("schemas")).toArray().size(), 25);
+    QCOMPARE(manifest.value(QStringLiteral("schemas")).toArray().size(), 33);
 
     const QStringList schemaNames = {QStringLiteral("JSONRPCMessage.json"),
                                      QStringLiteral("InitializeParams.json"),
@@ -380,6 +381,14 @@ void TestCodexAppServer::loadsVersionedSchemaContract() {
                                      QStringLiteral("ItemStartedNotification.json"),
                                      QStringLiteral("ItemCompletedNotification.json"),
                                      QStringLiteral("AgentMessageDeltaNotification.json"),
+                                     QStringLiteral("CommandExecutionOutputDeltaNotification.json"),
+                                     QStringLiteral("FileChangePatchUpdatedNotification.json"),
+                                     QStringLiteral("McpToolCallProgressNotification.json"),
+                                     QStringLiteral("PlanDeltaNotification.json"),
+                                     QStringLiteral("ReasoningSummaryPartAddedNotification.json"),
+                                     QStringLiteral("ReasoningSummaryTextDeltaNotification.json"),
+                                     QStringLiteral("ReasoningTextDeltaNotification.json"),
+                                     QStringLiteral("TurnPlanUpdatedNotification.json"),
                                      QStringLiteral("TurnInterruptParams.json"),
                                      QStringLiteral("TurnInterruptResponse.json"),
                                      QStringLiteral("ErrorNotification.json"),
@@ -925,6 +934,115 @@ void TestCodexAppServer::adapterStreamsAndCompletesTurn() {
     adapter.closeAgent();
 }
 
+void TestCodexAppServer::adapterMapsToolReasoningAndPlanEvents() {
+    using namespace snack::agent::codex;
+    using snack::domain::AgentEvent;
+    using snack::domain::AgentEventType;
+
+    FakeProcessTransport transport;
+    CodexAdapter adapter({.status = CliStatus::Available,
+                          .executablePath = QStringLiteral("codex"),
+                          .version = QStringLiteral("0.149.0")},
+                         &transport);
+    connectAdapter(adapter, transport);
+    QSignalSpy eventSpy(&adapter, &CodexAdapter::eventReceived);
+    QSignalSpy finishedSpy(&adapter, &CodexAdapter::turnFinished);
+
+    adapter.startTurn(codexTurnRequest(QUuid::createUuid()));
+    const auto request = lastRequest(transport);
+    const QString nativeTurnId = QStringLiteral("turn-tool-plan-1");
+    feedResult(transport, request.id.toInteger(),
+               QJsonObject{{QStringLiteral("turn"),
+                            turnObject(nativeTurnId, QStringLiteral("inProgress"))}});
+
+    QFile fixture(
+        QStringLiteral(SNACK_TEST_FIXTURE_DIR)
+            .append(QStringLiteral("/codex/app-server/0.149.0/tool-reasoning-plan.jsonl")));
+    QVERIFY(fixture.open(QIODevice::ReadOnly));
+    transport.feedStandardOutput(fixture.readAll());
+
+    const QList<AgentEventType> expected = {
+        AgentEventType::TurnStarted,        AgentEventType::ToolStarted,
+        AgentEventType::ToolOutputDelta,    AgentEventType::ToolCompleted,
+        AgentEventType::ReasoningStarted,   AgentEventType::ReasoningSummaryDelta,
+        AgentEventType::ReasoningCompleted, AgentEventType::PlanUpdated,
+        AgentEventType::PlanUpdated,        AgentEventType::PlanUpdated,
+        AgentEventType::ToolStarted,        AgentEventType::ToolOutputDelta,
+        AgentEventType::ToolCompleted,      AgentEventType::ToolStarted,
+        AgentEventType::ToolOutputDelta,    AgentEventType::ToolCompleted};
+    QCOMPARE(eventSpy.count(), expected.size());
+    for (qsizetype index = 0; index < expected.size(); ++index) {
+        QCOMPARE(eventSpy.at(index).constFirst().value<AgentEvent>().type, expected.at(index));
+    }
+
+    const AgentEvent commandCompleted = eventSpy.at(3).constFirst().value<AgentEvent>();
+    QCOMPARE(commandCompleted.payload.value(QStringLiteral("kind")).toString(),
+             QStringLiteral("commandExecution"));
+    QCOMPARE(commandCompleted.payload.value(QStringLiteral("exitCode")).toInt(), 7);
+    const AgentEvent reasoningCompleted = eventSpy.at(6).constFirst().value<AgentEvent>();
+    QCOMPARE(reasoningCompleted.payload.value(QStringLiteral("summary")).toArray().at(0),
+             QJsonValue(QStringLiteral("The build command failed.")));
+    QVERIFY(!QJsonDocument(reasoningCompleted.payload)
+                 .toJson(QJsonDocument::Compact)
+                 .contains("private reasoning"));
+    QVERIFY(!QJsonDocument(reasoningCompleted.rawPayload)
+                 .toJson(QJsonDocument::Compact)
+                 .contains("private reasoning"));
+    QCOMPARE(eventSpy.at(8)
+                 .constFirst()
+                 .value<AgentEvent>()
+                 .payload.value(QStringLiteral("plan"))
+                 .toArray()
+                 .size(),
+             3);
+    QCOMPARE(eventSpy.at(9)
+                 .constFirst()
+                 .value<AgentEvent>()
+                 .payload.value(QStringLiteral("text"))
+                 .toString(),
+             QStringLiteral("Final plan"));
+    QCOMPARE(eventSpy.at(11)
+                 .constFirst()
+                 .value<AgentEvent>()
+                 .payload.value(QStringLiteral("changes"))
+                 .toArray()
+                 .size(),
+             1);
+    QVERIFY(eventSpy.at(15)
+                .constFirst()
+                .value<AgentEvent>()
+                .payload.value(QStringLiteral("result"))
+                .isObject());
+
+    const qsizetype eventCount = eventSpy.count();
+    feedNotification(transport, QStringLiteral("item/completed"),
+                     {{QStringLiteral("threadId"), QStringLiteral("0198-thread-snack")},
+                      {QStringLiteral("turnId"), nativeTurnId},
+                      {QStringLiteral("item"), commandCompleted.payload}});
+    feedNotification(transport, QStringLiteral("item/commandExecution/outputDelta"),
+                     {{QStringLiteral("threadId"), QStringLiteral("0198-thread-snack")},
+                      {QStringLiteral("turnId"), nativeTurnId},
+                      {QStringLiteral("itemId"), QStringLiteral("command-1")},
+                      {QStringLiteral("delta"), QStringLiteral("late")}});
+    QCOMPARE(eventSpy.count(), eventCount);
+
+    feedNotification(transport, QStringLiteral("item/commandExecution/outputDelta"),
+                     {{QStringLiteral("threadId"), QStringLiteral("0198-thread-snack")},
+                      {QStringLiteral("turnId"), QStringLiteral("stale-turn")},
+                      {QStringLiteral("itemId"), QStringLiteral("command-2")},
+                      {QStringLiteral("delta"), QStringLiteral("stale")}});
+    QCOMPARE(eventSpy.constLast().constFirst().value<AgentEvent>().type,
+             AgentEventType::WarningRaised);
+    feedNotification(
+        transport, QStringLiteral("turn/completed"),
+        {{QStringLiteral("threadId"), QStringLiteral("0198-thread-snack")},
+         {QStringLiteral("turn"), turnObject(nativeTurnId, QStringLiteral("completed"))}});
+    QCOMPARE(eventSpy.constLast().constFirst().value<AgentEvent>().type,
+             AgentEventType::TurnCompleted);
+    QCOMPARE(finishedSpy.count(), 1);
+    adapter.closeAgent();
+}
+
 void TestCodexAppServer::adapterHandlesTurnFailuresAndStaleEvents() {
     using namespace snack::agent::codex;
     using snack::domain::AgentEvent;
@@ -1119,15 +1237,18 @@ void TestCodexAppServer::adapterHandlesApprovalRequests() {
                      {{QStringLiteral("threadId"), QStringLiteral("0198-thread-snack")},
                       {QStringLiteral("turnId"), nativeTurnId},
                       {QStringLiteral("item"), fileItem}});
-    feedServerRequest(transport, 77, QStringLiteral("item/fileChange/requestApproval"), fileParams);
     QCOMPARE(eventSpy.count(), 2);
+    QCOMPARE(eventSpy.constLast().constFirst().value<AgentEvent>().type,
+             AgentEventType::ToolStarted);
+    feedServerRequest(transport, 77, QStringLiteral("item/fileChange/requestApproval"), fileParams);
+    QCOMPARE(eventSpy.count(), 3);
     const AgentEvent fileEvent = eventSpy.constLast().constFirst().value<AgentEvent>();
     QCOMPARE(fileEvent.type, AgentEventType::ApprovalRequested);
     QCOMPARE(fileEvent.payload.value(QStringLiteral("changes")).toArray().size(), 1);
     feedNotification(transport, QStringLiteral("serverRequest/resolved"),
                      {{QStringLiteral("threadId"), QStringLiteral("0198-thread-snack")},
                       {QStringLiteral("requestId"), 77}});
-    QCOMPARE(eventSpy.count(), 3);
+    QCOMPARE(eventSpy.count(), 4);
     QCOMPARE(eventSpy.constLast().constFirst().value<AgentEvent>().type,
              AgentEventType::ApprovalResolved);
 

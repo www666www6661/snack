@@ -6,7 +6,7 @@ Snack（临时显示名称：零食）是一款面向 Codex CLI 与 Claude Code 
 
 ## 当前状态
 
-项目已进入 `0.1.0-alpha.1` 工程构筑阶段。当前仓库包含 C++20/Qt 6.8 工程骨架、可持久化的模拟 Agent 流式会话、声明式主题、单实例 IPC 和首批 Qt Test；真实 Codex 协议接入将在 M2 开始。
+项目正在构筑 `0.1.0-alpha.2` Codex 垂直链路。C++20/Qt 6.8 应用现已能够探测并驱动 Codex App Server、持久化原生 Thread 与类型化事件、流式展示消息和工具活动、渲染推理摘要与计划、处理命令/文件审批，并通过 Qt Test 和版本化协议 fixture 验证每个切片。
 
 ## 产品约束
 

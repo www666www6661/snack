@@ -14,7 +14,7 @@ CMake/Qt 6.8/C++20, Clang presets, Qt Test, LLVM coverage, metadata, localizatio
 
 ## M2: Codex vertical slice (`0.1.0-alpha.2`)
 
-Status: in progress. CLI discovery, injectable `QProcess` transport, JSONL framing, initialization, request correlation, bounded diagnostics, paginated `model/list`, model-specific capabilities, `thread/start`/`thread/resume`, persisted native identities, per-turn model/effort/access overrides, text `turn/start` streaming, error closure, `turn/interrupt`, command/file approval cards and responses, main-application Codex/Mock selection, and versioned Codex CLI `0.149.0` schemas/fixtures are complete. Tool progress, reasoning, and plan events remain pending.
+Status: in progress. CLI discovery, injectable `QProcess` transport, JSONL framing, initialization, request correlation, bounded diagnostics, paginated `model/list`, model-specific capabilities, `thread/start`/`thread/resume`, persisted native identities, per-turn model/effort/access overrides, text and tool streaming, reasoning summaries, inline/task-dock plans, error closure, `turn/interrupt`, command/file approvals, main-application Codex/Mock selection, and versioned Codex CLI `0.149.0` schemas/fixtures are complete. Remaining M2 work includes the user-input request flow, usage events, and the unimplemented thread/steer surface required by acceptance.
 
 App-server stdio and schema handshake; models, thread start/resume/read/list; turn start/steer/interrupt; streamed messages/tools/reasoning/plans/errors/usage/approvals; CLI detection, native IDs, capability disabling, and raw diagnostics. Acceptance includes live local Codex and complete fixture failures.
 

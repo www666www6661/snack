@@ -61,8 +61,14 @@ void TestDomainTypes::unknownValuesUseSafeDefaults() {
 void TestDomainTypes::eventTypeNamesRoundTrip() {
     using enum snack::domain::AgentEventType;
     const QList<snack::domain::AgentEventType> values = {
-        UserMessage,   AgentMessageDelta, ApprovalRequested,  ApprovalResolved,
-        TurnCompleted, WarningRaised,     RawProtocolObserved};
+        UserMessage,          AgentMessageStart, AgentMessageDelta,
+        AgentMessageComplete, ToolStarted,       ToolOutputDelta,
+        ToolCompleted,        ReasoningStarted,  ReasoningSummaryDelta,
+        ReasoningCompleted,   PlanUpdated,       ApprovalRequested,
+        ApprovalResolved,     TurnStarted,       TurnCompleted,
+        TurnInterrupted,      TurnFailed,        CapabilityChanged,
+        ConnectionChanged,    WarningRaised,     ErrorRaised,
+        RawProtocolObserved};
     for (const auto value : values) {
         QCOMPARE(snack::domain::agentEventTypeFromString(snack::domain::enumName(value)), value);
     }

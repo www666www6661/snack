@@ -6,7 +6,7 @@ Snack (temporary display name: 零食) is a local-first desktop workbench for Co
 
 ## Status
 
-The project has entered the `0.1.0-alpha.1` foundation phase. The repository now contains a C++20/Qt 6.8 project shell, a persistent fake-Agent streaming conversation, declarative themes, single-instance IPC, and the first Qt Test suites. Real Codex protocol integration starts in M2.
+The project is building the `0.1.0-alpha.2` Codex vertical slice. The C++20/Qt 6.8 application now discovers and drives Codex App Server, persists native threads and typed events, streams messages and tool activity, renders reasoning summaries and plans, handles command/file approvals, and verifies each slice with Qt Test and versioned protocol fixtures.
 
 ## Product constraints
 

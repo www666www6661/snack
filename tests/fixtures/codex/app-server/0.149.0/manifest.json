@@ -20,6 +20,14 @@
     "schema/ItemStartedNotification.json",
     "schema/ItemCompletedNotification.json",
     "schema/AgentMessageDeltaNotification.json",
+    "schema/CommandExecutionOutputDeltaNotification.json",
+    "schema/FileChangePatchUpdatedNotification.json",
+    "schema/McpToolCallProgressNotification.json",
+    "schema/PlanDeltaNotification.json",
+    "schema/ReasoningSummaryPartAddedNotification.json",
+    "schema/ReasoningSummaryTextDeltaNotification.json",
+    "schema/ReasoningTextDeltaNotification.json",
+    "schema/TurnPlanUpdatedNotification.json",
     "schema/TurnInterruptParams.json",
     "schema/TurnInterruptResponse.json",
     "schema/ErrorNotification.json",
@@ -37,6 +45,7 @@
     "turn-stream-success.jsonl",
     "turn-failed.jsonl",
     "turn-interrupted.jsonl",
-    "approval-flow.jsonl"
+    "approval-flow.jsonl",
+    "tool-reasoning-plan.jsonl"
   ]
 }

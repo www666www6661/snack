@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-M2 的连接、Thread、文本 Turn 与审批垂直链路已在 Codex CLI `0.149.0` 上完成 fixture 验证。当前代码已经建立独立的 CLI 探测、子进程传输、JSONL 协议解析、初始化握手、分页 `model/list`、原生 `thread/start`/`thread/resume`、`turn/start`、文本流映射、`turn/interrupt` 和命令/文件审批响应。主应用默认探测并启动 Codex；CLI 不可用时明确回退到 Mock Agent。工具进度、推理与计划事件尚未接入产品 UI。
+M2 的连接、Thread、文本 Turn、审批与活动事件垂直链路已在 Codex CLI `0.149.0` 上完成 fixture 验证。当前代码已经建立独立的 CLI 探测、子进程传输、JSONL 协议解析、初始化握手、分页 `model/list`、原生 `thread/start`/`thread/resume`、`turn/start`、文本流、工具执行、推理摘要、计划、`turn/interrupt` 和命令/文件审批响应。主应用默认探测并启动 Codex；CLI 不可用时明确回退到 Mock Agent。
 
 官方协议依据：[OpenAI Docs - Codex App Server](https://developers.openai.com/codex/app-server)。默认传输是 stdio 上逐行 JSON；线上消息省略 `jsonrpc: "2.0"`。每个连接必须先发送 `initialize` 请求，收到成功响应后再发送 `initialized` 通知。
 
@@ -24,6 +24,10 @@ M2 的连接、Thread、文本 Turn 与审批垂直链路已在 Codex CLI `0.149
 新会话调用 `thread/start`；持久化记录已有 `nativeThreadId` 时调用 `thread/resume`。Snack 在 SQLite Schema v3 中分别保存响应的 `thread.id` 和 `thread.sessionId`，绝不相互推导。恢复响应返回不同 Thread ID 时安全失败。访问映射为：严格 = `untrusted` + `read-only`，工作区 = `on-request` + `workspace-write`，完全 = `never` + `danger-full-access`。
 
 每轮 `turn/start` 发送文本输入和 GUI Turn UUID，并按该轮不可变快照覆盖 `model`、`effort`、`cwd`、`approvalPolicy` 与 `sandboxPolicy`。`turn/started`、`item/started`、`item/agentMessage/delta`、`item/completed`、`error` 与 `turn/completed` 被映射为统一领域事件。适配器同时校验原生 Thread/Turn ID、合并最终消息缺失的尾部文本、忽略重复终态，并保证 `turnFinished` 只发送一次。用户可以在原生 Turn ID 返回前取消；请求会延迟到 ID 可用时发送。`turn/interrupt` 的响应不代表终态，仍由 `turn/completed` 的 `interrupted` 状态收口。
+
+命令、文件变更、MCP、动态工具、协作、搜索、图片查看与上下文压缩 Item 映射为统一且可持久化的工具生命周期。命令输出与 MCP 进度持续写入同一张时间线卡片；文件 Patch 更新刷新变更文件摘要。最终 `item/completed` 对状态、输出、结果、错误、退出码和耗时具有权威性。历史卡片可由事件日志恢复，界面显示的工具输出最多保留最近 64 KiB。
+
+当前切片只展示协议提供的推理摘要。`summaryTextDelta` 流入推理卡片，最终 summary 数组覆盖草稿；`reasoning/textDelta` 不会作为可见推理渲染或持久化。Plan Item Delta 可填充行内计划文本，完成 Item 覆盖草稿；`turn/plan/updated` 驱动可停靠任务列表，并显示 `pending`、`inProgress` 与 `completed` 三态。
 
 命令与文件审批以 app-server 主动发起的 `item/commandExecution/requestApproval` 和 `item/fileChange/requestApproval` 请求到达。适配器校验原生 Thread、Turn、Item 和 JSON-RPC 请求身份后，才产生持久化的 `ApprovalRequested` 事件。界面展示命令、cwd、原因、文件授权根目录或网络 host/protocol，并提供 `accept`、`acceptForSession`、`decline` 与 `cancel`。成功响应会记录 `ApprovalResolved`；`serverRequest/resolved`、Turn 结束、中断与断连也会清理等待状态。恢复出来但未回答的历史卡片保持禁用，因为其来源 app-server 进程已经不存在。并发请求分别寻址，重复原生请求 ID 不会产生重复卡片或重复响应。
 
@@ -48,7 +52,7 @@ Windows 优先探测 `codex.cmd`，并通过 `cmd.exe /c call` 启动 npm 包装
 codex app-server generate-json-schema --out <directory>
 ```
 
-普通 CI 只运行假传输与 fixture，不依赖已安装 CLI，也不调用模型。测试覆盖分页、创建/恢复身份、动态逐轮设置、正常文本流、分片与最终文本合并、命令/文件审批决策、过期与重复审批、历史卡片安全、请求/通知错误、错误 Thread/Turn、重复完成、中断竞态、未支持 server request 与进程断开。本机可选择执行 CLI 探测、初始化、模型目录与临时 Thread 创建的烟雾测试，全程不调用模型；真实 `turn/start` 必须由开发者另行明确启用，避免测试意外产生模型调用：
+普通 CI 只运行假传输与 fixture，不依赖已安装 CLI，也不调用模型。测试覆盖分页、创建/恢复身份、动态逐轮设置、文本与工具流、最终 Item 权威覆盖、命令非零退出、文件/MCP 结果、推理摘要隐私、计划三态、有界历史输出、审批决策、过期与重复事件、请求/通知错误、中断竞态、未支持 server request 与进程断开。本机可选择执行 CLI 探测、初始化、模型目录与临时 Thread 创建的烟雾测试，全程不调用模型；真实 `turn/start` 必须由开发者另行明确启用，避免测试意外产生模型调用：
 
 ```powershell
 $env:SNACK_RUN_LIVE_CODEX_TEST = '1'
