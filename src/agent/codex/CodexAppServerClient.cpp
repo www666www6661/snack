@@ -20,6 +20,14 @@ std::optional<qint64> numericId(const QJsonValue& value) {
     return static_cast<qint64>(number);
 }
 
+qsizetype jsonlPayloadBytes(const QByteArray& buffer, qsizetype newline = -1) {
+    qsizetype bytes = newline >= 0 ? newline : buffer.size();
+    if (bytes > 0 && buffer.at(bytes - 1) == '\r') {
+        --bytes;
+    }
+    return bytes;
+}
+
 } // namespace
 
 CodexAppServerClient::CodexAppServerClient(process::IProcessTransport* transport, QObject* parent,
@@ -182,10 +190,11 @@ void CodexAppServerClient::handleStandardOutput(const QByteArray& data) {
     outputBuffer_.append(data);
     while (true) {
         const qsizetype newline = outputBuffer_.indexOf('\n');
+        if (jsonlPayloadBytes(outputBuffer_, newline) > maxFrameBytes_) {
+            fail(QStringLiteral("Codex app-server emitted an oversized JSONL frame"));
+            return;
+        }
         if (newline < 0) {
-            if (outputBuffer_.size() > maxFrameBytes_) {
-                fail(QStringLiteral("Codex app-server emitted an oversized JSONL frame"));
-            }
             return;
         }
         QByteArray line = outputBuffer_.first(newline);
@@ -195,10 +204,6 @@ void CodexAppServerClient::handleStandardOutput(const QByteArray& data) {
         }
         if (line.isEmpty()) {
             continue;
-        }
-        if (line.size() > maxFrameBytes_) {
-            fail(QStringLiteral("Codex app-server emitted an oversized JSONL frame"));
-            return;
         }
         processLine(line);
         if (state_ == ConnectionState::Failed) {

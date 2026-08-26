@@ -2076,6 +2076,29 @@ void TestCodexAppServer::rejectsMalformedAndOversizedFrames() {
     oversizedClient.start({.program = QStringLiteral("codex")});
     oversizedTransport.feedStandardOutput(QByteArray(25, 'x'));
     QCOMPARE(oversizedClient.state(), ConnectionState::Failed);
+
+    const QByteArray framedMessage(
+        R"({"method":"future/event","params":{"padding":"1234567890"}})");
+    FakeProcessTransport framedTransport;
+    CodexAppServerClient framedClient(&framedTransport, nullptr, framedMessage.size() - 1);
+    QSignalSpy framedFailure(&framedClient, &CodexAppServerClient::failureOccurred);
+    framedClient.start({.program = QStringLiteral("codex")});
+    framedTransport.feedStandardOutput(framedMessage + '\n');
+    QCOMPARE(framedClient.state(), ConnectionState::Failed);
+    QCOMPARE(framedFailure.count(), 1);
+    QVERIFY(
+        framedFailure.constFirst().constFirst().toString().contains(QStringLiteral("oversized")));
+
+    const QByteArray boundaryMessage(
+        R"({"id":1,"result":{"userAgent":"test","platformFamily":"windows","platformOs":"windows"}})");
+    FakeProcessTransport boundaryTransport;
+    CodexAppServerClient boundaryClient(&boundaryTransport, nullptr, boundaryMessage.size());
+    boundaryClient.start({.program = QStringLiteral("codex")});
+    boundaryTransport.feedStandardOutput(boundaryMessage);
+    boundaryTransport.feedStandardOutput("\r");
+    QCOMPARE(boundaryClient.state(), ConnectionState::Initializing);
+    boundaryTransport.feedStandardOutput("\n");
+    QCOMPARE(boundaryClient.state(), ConnectionState::Ready);
 }
 
 void TestCodexAppServer::boundsDiagnosticsAndReportsEarlyExit() {
