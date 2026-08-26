@@ -110,6 +110,7 @@ class TestCodexAppServer final : public QObject {
     void rejectsMalformedAndOversizedFrames();
     void boundsDiagnosticsAndReportsEarlyExit();
     void handlesTimeoutCancellationAndWriteFailure();
+    void forceKillsProcessesThatIgnoreShutdown();
     void timesOutRequestsAndIsolatesLateResponses();
     void guardsStateAndHandshakeErrors();
     void liveLocalHandshakeWhenEnabled();
@@ -2114,6 +2115,57 @@ void TestCodexAppServer::handlesTimeoutCancellationAndWriteFailure() {
     writeClient.start({.program = QStringLiteral("codex")});
     QCOMPARE(writeClient.state(), ConnectionState::Failed);
     QCOMPARE(writeTransport.terminateCalls, 1);
+}
+
+void TestCodexAppServer::forceKillsProcessesThatIgnoreShutdown() {
+    using namespace snack::agent::codex;
+
+    FakeProcessTransport stoppingTransport;
+    stoppingTransport.deferTerminate = true;
+    CodexAppServerClient stoppingClient(&stoppingTransport, nullptr,
+                                        CodexAppServerClient::defaultMaximumFrameBytes,
+                                        CodexAppServerClient::defaultMaximumDiagnosticBytes,
+                                        CodexAppServerClient::defaultRequestTimeoutMs, 5);
+    QSignalSpy stoppingWarningSpy(&stoppingClient, &CodexAppServerClient::protocolWarning);
+    stoppingClient.start({.program = QStringLiteral("codex")});
+    stoppingClient.stop();
+    QCOMPARE(stoppingClient.state(), ConnectionState::Stopping);
+    QTRY_COMPARE(stoppingTransport.killCalls, 1);
+    QCOMPARE(stoppingClient.state(), ConnectionState::Stopped);
+    QVERIFY(stoppingWarningSpy.constLast().constFirst().toString().contains(
+        QStringLiteral("forcing termination")));
+
+    FakeProcessTransport failedTransport;
+    failedTransport.deferTerminate = true;
+    CodexAppServerClient failedClient(&failedTransport, nullptr,
+                                      CodexAppServerClient::defaultMaximumFrameBytes,
+                                      CodexAppServerClient::defaultMaximumDiagnosticBytes,
+                                      CodexAppServerClient::defaultRequestTimeoutMs, 5);
+    failedClient.start({.program = QStringLiteral("codex")});
+    failedTransport.feedStandardOutput(
+        R"({"id":1,"error":{"code":-32000,"message":"initialization failed"}})"
+        "\n");
+    QCOMPARE(failedClient.state(), ConnectionState::Failed);
+    QTRY_COMPARE(failedTransport.killCalls, 1);
+    QVERIFY(!failedTransport.isRunning());
+    QVERIFY(failedClient.start({.program = QStringLiteral("codex")}));
+    failedTransport.deferTerminate = false;
+    failedClient.stop();
+    QCOMPARE(failedClient.state(), ConnectionState::Stopped);
+
+    FakeProcessTransport gracefulTransport;
+    gracefulTransport.deferTerminate = true;
+    CodexAppServerClient gracefulClient(&gracefulTransport, nullptr,
+                                        CodexAppServerClient::defaultMaximumFrameBytes,
+                                        CodexAppServerClient::defaultMaximumDiagnosticBytes,
+                                        CodexAppServerClient::defaultRequestTimeoutMs, 10);
+    gracefulClient.start({.program = QStringLiteral("codex")});
+    gracefulClient.stop();
+    QCOMPARE(gracefulClient.state(), ConnectionState::Stopping);
+    gracefulTransport.finish(0, snack::agent::process::ExitStatus::Normal);
+    QTest::qWait(15);
+    QCOMPARE(gracefulTransport.killCalls, 0);
+    QCOMPARE(gracefulClient.state(), ConnectionState::Stopped);
 }
 
 void TestCodexAppServer::timesOutRequestsAndIsolatesLateResponses() {

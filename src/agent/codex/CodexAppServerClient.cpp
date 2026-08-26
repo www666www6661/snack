@@ -24,16 +24,34 @@ std::optional<qint64> numericId(const QJsonValue& value) {
 
 CodexAppServerClient::CodexAppServerClient(process::IProcessTransport* transport, QObject* parent,
                                            qsizetype maxFrameBytes, qsizetype maxDiagnosticBytes,
-                                           int requestTimeoutMs)
+                                           int requestTimeoutMs, int shutdownTimeoutMs)
     : QObject(parent), transport_(transport), maxFrameBytes_(maxFrameBytes),
-      maxDiagnosticBytes_(maxDiagnosticBytes), requestTimeoutMs_(requestTimeoutMs) {
+      maxDiagnosticBytes_(maxDiagnosticBytes), requestTimeoutMs_(requestTimeoutMs),
+      shutdownTimeoutMs_(shutdownTimeoutMs) {
     Q_ASSERT(transport_ != nullptr);
     Q_ASSERT(maxFrameBytes_ > 0);
     Q_ASSERT(maxDiagnosticBytes_ > 0);
     Q_ASSERT(requestTimeoutMs_ > 0);
+    Q_ASSERT(shutdownTimeoutMs_ > 0);
     handshakeTimer_.setSingleShot(true);
     connect(&handshakeTimer_, &QTimer::timeout, this,
             [this] { fail(QStringLiteral("Codex app-server initialization timed out")); });
+    shutdownTimer_.setSingleShot(true);
+    connect(&shutdownTimer_, &QTimer::timeout, this, [this] {
+        if (!transport_->isRunning()) {
+            if (state_ == ConnectionState::Stopping) {
+                setState(ConnectionState::Stopped);
+            }
+            return;
+        }
+        emit protocolWarning(
+            QStringLiteral("Codex app-server did not stop after %1 ms; forcing termination")
+                .arg(shutdownTimeoutMs_));
+        transport_->kill();
+        if (!transport_->isRunning() && state_ == ConnectionState::Stopping) {
+            setState(ConnectionState::Stopped);
+        }
+    });
     connect(transport_, &process::IProcessTransport::started, this,
             &CodexAppServerClient::handleProcessStarted);
     connect(transport_, &process::IProcessTransport::standardOutputReceived, this,
@@ -62,6 +80,7 @@ bool CodexAppServerClient::start(const process::LaunchSpec& launchSpec,
         emit protocolWarning(QStringLiteral("Codex app-server process is still stopping"));
         return false;
     }
+    shutdownTimer_.stop();
     clientInfo_ = clientInfo;
     serverInfo_ = {};
     outputBuffer_.clear();
@@ -136,12 +155,7 @@ void CodexAppServerClient::stop() {
     handshakeTimer_.stop();
     clearPendingRequests();
     setState(ConnectionState::Stopping);
-    if (transport_->isRunning()) {
-        transport_->closeWriteChannel();
-        transport_->terminate();
-    } else {
-        setState(ConnectionState::Stopped);
-    }
+    beginProcessShutdown();
 }
 
 void CodexAppServerClient::handleProcessStarted() {
@@ -203,6 +217,7 @@ void CodexAppServerClient::handleStandardError(const QByteArray& data) {
 
 void CodexAppServerClient::handleProcessFinished(int exitCode, process::ExitStatus status) {
     handshakeTimer_.stop();
+    shutdownTimer_.stop();
     if (state_ == ConnectionState::Stopping) {
         setState(ConnectionState::Stopped);
         return;
@@ -309,6 +324,22 @@ void CodexAppServerClient::clearPendingRequests() {
     requestTimers_.clear();
 }
 
+void CodexAppServerClient::beginProcessShutdown() {
+    if (!transport_->isRunning()) {
+        if (state_ == ConnectionState::Stopping) {
+            setState(ConnectionState::Stopped);
+        }
+        return;
+    }
+    transport_->closeWriteChannel();
+    transport_->terminate();
+    if (transport_->isRunning()) {
+        shutdownTimer_.start(shutdownTimeoutMs_);
+    } else if (state_ == ConnectionState::Stopping) {
+        setState(ConnectionState::Stopped);
+    }
+}
+
 bool CodexAppServerClient::writeMessage(const QByteArray& message) {
     QByteArray frame = message;
     frame.append('\n');
@@ -334,10 +365,7 @@ void CodexAppServerClient::fail(const QString& detail) {
     handshakeTimer_.stop();
     clearPendingRequests();
     setState(ConnectionState::Failed);
-    if (transport_->isRunning()) {
-        transport_->closeWriteChannel();
-        transport_->terminate();
-    }
+    beginProcessShutdown();
     emit failureOccurred(detail);
 }
 
