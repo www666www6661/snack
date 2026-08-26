@@ -50,6 +50,8 @@ flowchart LR
 
 适配器必须返回 `UnsupportedCapability`，不能让 UI 猜测 Agent 类型或降级方式。
 
+M2 当前已实现 `IProcessTransport`/`QProcessTransport`、`CodexCliDiscovery`、`CodexProtocol`、`CodexAppServerClient`、`CodexModelCatalog` 和连接态 `CodexAdapter`。适配器完成全部模型分页后才发布能力，`SessionController` 再按选中模型归一化下一轮设置；原生 Thread/Turn 事件映射属于下一段垂直链路。
+
 ### 3.4 `session`
 
 `SessionController` 是单会话编排器。它维护运行状态、当前 Turn、消息队列、设置快照、审批、原生会话 ID与恢复策略。每个会话独立串行处理自身状态转换，不共享可变协议状态。

@@ -1,0 +1,2 @@
+{"id":1,"result":{"userAgent":"snack/0.149.0 (Windows 10.0.0; x86_64) test (snack; 0.1.0)","codexHome":"C:\\Users\\example\\.codex","platformFamily":"windows","platformOs":"windows"}}
+{"method":"remoteControl/status/changed","params":{"status":"disabled","serverName":"EXAMPLE-HOST","installationId":"00000000-0000-0000-0000-000000000000","environmentId":null},"emittedAtMs":0}

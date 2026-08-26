@@ -1,0 +1,36 @@
+{
+  "data": [
+    {
+      "id": "gpt-5.2-codex",
+      "model": "gpt-5.2-codex",
+      "displayName": "GPT-5.2-Codex",
+      "description": "Default coding model",
+      "hidden": false,
+      "defaultReasoningEffort": "high",
+      "supportedReasoningEfforts": [
+        {"reasoningEffort": "low", "description": "Fast"},
+        {"reasoningEffort": "medium", "description": "Balanced"},
+        {"reasoningEffort": "high", "description": "Deep"},
+        {"reasoningEffort": "xhigh", "description": "Extra deep"}
+      ],
+      "inputModalities": ["text", "image"],
+      "supportsPersonality": true,
+      "isDefault": true
+    },
+    {
+      "id": "gpt-hidden",
+      "model": "gpt-hidden",
+      "displayName": "Hidden model",
+      "description": "Must not be exposed in the picker",
+      "hidden": true,
+      "defaultReasoningEffort": "minimal",
+      "supportedReasoningEfforts": [
+        {"reasoningEffort": "minimal", "description": "Minimal"}
+      ],
+      "inputModalities": ["text"],
+      "supportsPersonality": false,
+      "isDefault": false
+    }
+  ],
+  "nextCursor": "page-2"
+}

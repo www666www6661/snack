@@ -23,4 +23,27 @@
       <translation>活动中的 Agent 任务将被中断，并且不会自动重新发送。</translation>
     </message>
   </context>
+  <context>
+    <name>main</name>
+    <message>
+      <source>Database recovery mode</source>
+      <translation>数据库恢复模式</translation>
+    </message>
+    <message>
+      <source>A database migration failed. Existing data was opened read-only and no Agent work will be started.
+
+Reason: %1</source>
+      <translation>数据库迁移失败。现有数据已用只读方式打开，并且不会启动 Agent 工作。
+
+原因：%1</translation>
+    </message>
+    <message>
+      <source>
+
+Safety backup: %1</source>
+      <translation>
+
+安全备份：%1</translation>
+    </message>
+  </context>
 </TS>

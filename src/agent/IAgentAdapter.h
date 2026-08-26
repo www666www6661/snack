@@ -7,9 +7,27 @@
 
 namespace snack::agent {
 
+struct ReasoningEffortCapability {
+    QString id;
+    QString description;
+};
+
+struct ModelCapability {
+    QString id;
+    QString displayName;
+    QString description;
+    QString defaultReasoningEffortId;
+    QList<ReasoningEffortCapability> supportedReasoningEfforts;
+    QStringList inputModalities;
+    bool supportsPersonality{false};
+    bool isDefault{false};
+};
+
 struct CapabilitySet {
     QString version;
     QStringList models;
+    QString defaultModelId;
+    QList<ModelCapability> modelCapabilities;
     QList<domain::ReasoningEffort> reasoningEfforts;
     QList<domain::AccessLevel> accessLevels;
     bool supportsSteering{false};
@@ -38,8 +56,11 @@ class IAgentAdapter : public QObject {
 
   signals:
     void connectionChanged(bool connected, const QString& detail);
+    void capabilitiesChanged(const snack::agent::CapabilitySet& capabilities);
     void eventReceived(const snack::domain::AgentEvent& event);
     void turnFinished(const QUuid& turnId, bool interrupted);
 };
 
 } // namespace snack::agent
+
+Q_DECLARE_METATYPE(snack::agent::CapabilitySet)

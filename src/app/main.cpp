@@ -79,6 +79,19 @@ int main(int argc, char* argv[]) {
                               QObject::tr("Cannot open local data: %1").arg(storageError));
         return 2;
     }
+    if (eventStore.isReadOnlyRecovery()) {
+        QString recoveryMessage =
+            QCoreApplication::translate(
+                "main", "A database migration failed. Existing data was opened read-only and "
+                        "no Agent work will be started.\n\nReason: %1")
+                .arg(eventStore.recoveryError());
+        if (!eventStore.migrationBackupPath().isEmpty()) {
+            recoveryMessage += QCoreApplication::translate("main", "\n\nSafety backup: %1")
+                                   .arg(QDir::toNativeSeparators(eventStore.migrationBackupPath()));
+        }
+        QMessageBox::warning(nullptr, QCoreApplication::translate("main", "Database recovery mode"),
+                             recoveryMessage);
+    }
 
     snack::domain::Conversation conversation;
     const QUuid restoredId(settingsSnapshot.lastConversationId);

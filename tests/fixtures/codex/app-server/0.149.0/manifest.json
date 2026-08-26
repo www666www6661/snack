@@ -1,0 +1,17 @@
+{
+  "cliVersion": "0.149.0",
+  "generatedAt": "2026-08-25",
+  "command": "codex app-server generate-json-schema --out <directory>",
+  "schemas": [
+    "schema/JSONRPCMessage.json",
+    "schema/InitializeParams.json",
+    "schema/InitializeResponse.json",
+    "schema/ModelListParams.json",
+    "schema/ModelListResponse.json"
+  ],
+  "fixtures": [
+    "initialize-success.jsonl",
+    "model-list-page-1.json",
+    "model-list-page-2.json"
+  ]
+}

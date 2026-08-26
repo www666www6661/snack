@@ -39,6 +39,7 @@ class TestSessionController final : public QObject {
     void snapshotsSettingsPerTurn();
     void interruptsActiveTurn();
     void validatesStateAndNormalizesSettings();
+    void followsDynamicCapabilities();
     void reportsPersistenceFailure();
 };
 
@@ -133,6 +134,42 @@ void TestSessionController::validatesStateAndNormalizesSettings() {
     QVERIFY(!controller.sendMessage(QStringLiteral("second"), &error));
     controller.close();
     QCOMPARE(controller.status(), snack::domain::ConversationStatus::Closed);
+}
+
+void TestSessionController::followsDynamicCapabilities() {
+    using snack::domain::AccessLevel;
+    using snack::domain::ReasoningEffort;
+    MemoryEventRepository repository;
+    snack::agent::FakeAgentAdapter adapter(nullptr, 1);
+    snack::session::SessionController controller(conversation(), &adapter, &repository);
+    QSignalSpy settingsSpy(&controller,
+                           &snack::session::SessionController::nextTurnSettingsChanged);
+
+    const snack::agent::CapabilitySet capabilities{
+        .version = QStringLiteral("codex-catalog-v2"),
+        .models = {QStringLiteral("codex-small"), QStringLiteral("codex-default")},
+        .defaultModelId = QStringLiteral("codex-default"),
+        .modelCapabilities = {{.id = QStringLiteral("codex-small"),
+                               .defaultReasoningEffortId = QStringLiteral("low"),
+                               .supportedReasoningEfforts = {{QStringLiteral("low"), {}}}},
+                              {.id = QStringLiteral("codex-default"),
+                               .defaultReasoningEffortId = QStringLiteral("high"),
+                               .supportedReasoningEfforts = {{QStringLiteral("high"), {}},
+                                                             {QStringLiteral("xhigh"), {}}},
+                               .isDefault = true}},
+        .reasoningEfforts = {ReasoningEffort::Low, ReasoningEffort::High,
+                             ReasoningEffort::ExtraHigh},
+        .accessLevels = {AccessLevel::Workspace}};
+    adapter.capabilitiesChanged(capabilities);
+
+    QCOMPARE(settingsSpy.count(), 1);
+    QCOMPARE(controller.nextTurnSettings().capabilityVersion, QStringLiteral("codex-catalog-v2"));
+    QCOMPARE(controller.nextTurnSettings().modelId, QStringLiteral("codex-default"));
+    QCOMPARE(controller.nextTurnSettings().reasoningEffort, ReasoningEffort::High);
+    QCOMPARE(controller.nextTurnSettings().accessLevel, AccessLevel::Workspace);
+
+    adapter.capabilitiesChanged(capabilities);
+    QCOMPARE(settingsSpy.count(), 1);
 }
 
 void TestSessionController::reportsPersistenceFailure() {

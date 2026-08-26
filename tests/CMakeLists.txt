@@ -12,6 +12,11 @@ snack_add_test(snack_single_instance_tests app/TestSingleInstance.cpp)
 snack_add_test(snack_theme_tests ui/TestThemeDefinition.cpp)
 snack_add_test(snack_storage_tests storage/TestStorage.cpp)
 snack_add_test(snack_session_tests session/TestSessionController.cpp)
+snack_add_test(snack_codex_tests agent/TestCodexAppServer.cpp)
+target_compile_definitions(
+    snack_codex_tests
+    PRIVATE SNACK_TEST_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures"
+)
 
 add_executable(snack_ui_tests ui/TestMainWindow.cpp)
 target_link_libraries(snack_ui_tests PRIVATE Snack::Ui Qt6::Test)

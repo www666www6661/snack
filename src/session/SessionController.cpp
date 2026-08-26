@@ -1,8 +1,34 @@
 #include "session/SessionController.h"
 
+#include <algorithm>
+#include <optional>
 #include <utility>
 
 namespace snack::session {
+namespace {
+
+const agent::ModelCapability* findModel(const agent::CapabilitySet& capabilities,
+                                        const QString& modelId) {
+    const auto iterator = std::find_if(
+        capabilities.modelCapabilities.cbegin(), capabilities.modelCapabilities.cend(),
+        [&modelId](const agent::ModelCapability& model) { return model.id == modelId; });
+    return iterator == capabilities.modelCapabilities.cend() ? nullptr : &*iterator;
+}
+
+std::optional<domain::ReasoningEffort> knownEffort(const agent::CapabilitySet& capabilities,
+                                                   const QString& effortId) {
+    const auto iterator =
+        std::find_if(capabilities.reasoningEfforts.cbegin(), capabilities.reasoningEfforts.cend(),
+                     [&effortId](domain::ReasoningEffort effort) {
+                         return domain::enumName(effort) == effortId;
+                     });
+    if (iterator == capabilities.reasoningEfforts.cend()) {
+        return std::nullopt;
+    }
+    return *iterator;
+}
+
+} // namespace
 
 SessionController::SessionController(domain::Conversation conversation,
                                      agent::IAgentAdapter* adapter,
@@ -22,12 +48,61 @@ SessionController::SessionController(domain::Conversation conversation,
             });
     connect(adapter_, &agent::IAgentAdapter::eventReceived, this,
             &SessionController::handleAdapterEvent);
+    connect(adapter_, &agent::IAgentAdapter::capabilitiesChanged, this,
+            &SessionController::handleCapabilitiesChanged);
     connect(adapter_, &agent::IAgentAdapter::turnFinished, this, [this](const QUuid& turnId, bool) {
         if (turnId == activeTurnId_) {
             activeTurnId_ = QUuid{};
             setStatus(domain::ConversationStatus::Idle);
         }
     });
+}
+
+void SessionController::handleCapabilitiesChanged(const agent::CapabilitySet& capabilities) {
+    domain::TurnSettingsSnapshot normalized = nextTurnSettings_;
+    normalized.capabilityVersion = capabilities.version;
+
+    if (!capabilities.models.isEmpty() && !capabilities.models.contains(normalized.modelId)) {
+        normalized.modelId = capabilities.models.contains(capabilities.defaultModelId)
+                                 ? capabilities.defaultModelId
+                                 : capabilities.models.constFirst();
+    }
+
+    if (const auto* model = findModel(capabilities, normalized.modelId); model != nullptr) {
+        const QString currentEffort = domain::enumName(normalized.reasoningEffort);
+        const auto supportsCurrent = std::any_of(
+            model->supportedReasoningEfforts.cbegin(), model->supportedReasoningEfforts.cend(),
+            [&currentEffort](const agent::ReasoningEffortCapability& effort) {
+                return effort.id == currentEffort;
+            });
+        if (!supportsCurrent) {
+            auto replacement = knownEffort(capabilities, model->defaultReasoningEffortId);
+            for (auto iterator = model->supportedReasoningEfforts.cbegin();
+                 !replacement.has_value() && iterator != model->supportedReasoningEfforts.cend();
+                 ++iterator) {
+                replacement = knownEffort(capabilities, iterator->id);
+            }
+            if (replacement.has_value()) {
+                normalized.reasoningEffort = *replacement;
+            }
+        }
+    } else if (!capabilities.reasoningEfforts.isEmpty() &&
+               !capabilities.reasoningEfforts.contains(normalized.reasoningEffort)) {
+        normalized.reasoningEffort = capabilities.reasoningEfforts.constFirst();
+    }
+
+    if (!capabilities.accessLevels.isEmpty() &&
+        !capabilities.accessLevels.contains(normalized.accessLevel)) {
+        normalized.accessLevel = capabilities.accessLevels.contains(domain::AccessLevel::Strict)
+                                     ? domain::AccessLevel::Strict
+                                     : capabilities.accessLevels.constFirst();
+    }
+
+    if (normalized == nextTurnSettings_) {
+        return;
+    }
+    nextTurnSettings_ = normalized;
+    emit nextTurnSettingsChanged(nextTurnSettings_);
 }
 
 const domain::Conversation& SessionController::conversation() const { return conversation_; }

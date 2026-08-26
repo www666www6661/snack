@@ -8,7 +8,7 @@
 
 ## M1：工程骨架与测试基础（目标 `0.1.0-alpha.1`）
 
-状态：进行中。首个垂直切片已经建立应用壳、设置与主题、单实例 IPC、托盘生命周期、窗口/布局恢复、SQLite 事件仓库、内容寻址存储、统一 Agent 接口、模拟流式会话和 Qt Test。Windows Qt 6.8.3/LLVM-MinGW 已完成严格警告构建、8/8 测试、30 次 IPC 重复和 83.86% 第一方代码行覆盖率；这不替代正式 `clang-cl + MSVC ABI` 验证。完成 M1 验收前仍需补齐迁移故障恢复以及三个正式平台工具链的构建。
+状态：进行中。首个垂直切片已经建立应用壳、设置与主题、单实例 IPC、托盘生命周期、窗口/布局恢复、带备份/只读恢复的版本化 SQLite 迁移、事件仓库、内容寻址存储、统一 Agent 接口、模拟流式会话和 Qt Test。Windows Qt 6.8.3/LLVM-MinGW 已完成严格警告构建、9/9 Debug 测试、30 次 IPC 重复和 84.33% 第一方代码行覆盖率；这不替代正式 `clang-cl + MSVC ABI` 验证。完成 M1 验收前仍需完成三个正式平台工具链的构建。
 
 - CMake/Qt 6.8/C++20 项目、Clang Presets、Qt Test、LLVM coverage。
 - 应用元数据、国际化、主题 Schema、日志、单实例、设置和模拟 Agent。
@@ -18,6 +18,8 @@
 验收：三个桌面平台能启动空壳，模拟 Agent 完成一轮流式对话，崩溃后恢复 UI事件。
 
 ## M2：Codex 协议垂直链路（`0.1.0-alpha.2`）
+
+状态：进行中。CLI 探测、可注入 `QProcess` 传输、JSONL 分帧、初始化握手、请求 ID 关联、有界诊断、分页 `model/list`、逐模型能力发布、下一轮设置归一化和 Codex CLI `0.149.0` 版本化 Schema/fixture 已完成；尚未完成主窗口适配器选择和真实 Thread/Turn。
 
 - `codex app-server` stdio transport、Schema生成与握手。
 - model/list、thread start/resume/read/list、turn start/steer/interrupt。

@@ -8,6 +8,8 @@ namespace snack::storage {
 
 class EventStore final : public IEventRepository {
   public:
+    enum class Mode { Closed, ReadWrite, RecoveryReadOnly };
+
     EventStore();
     ~EventStore() override;
 
@@ -16,6 +18,10 @@ class EventStore final : public IEventRepository {
 
     bool open(const QString& databasePath, QString* error);
     [[nodiscard]] bool isOpen() const;
+    [[nodiscard]] Mode mode() const;
+    [[nodiscard]] bool isReadOnlyRecovery() const;
+    [[nodiscard]] QString migrationBackupPath() const;
+    [[nodiscard]] QString recoveryError() const;
 
     bool saveConversation(const domain::Conversation& conversation, QString* error) override;
     bool appendEvent(const domain::AgentEvent& event, QString* error) override;
@@ -23,11 +29,19 @@ class EventStore final : public IEventRepository {
                                                                   QString* error) const override;
 
   private:
-    bool applyMigrations(QString* error);
+    [[nodiscard]] int schemaVersion(QString* error) const;
+    bool createMigrationBackup(const QString& databasePath, int targetVersion, QString* error);
+    bool applyMigrations(int currentVersion, QString* error);
+    bool validateSchema(bool checkIntegrity, QString* error) const;
+    bool enterRecoveryMode(const QString& reason, QString* error);
+    bool ensureWritable(QString* error) const;
     bool execute(const QString& statement, QString* error);
 
     QString connectionName_;
     QSqlDatabase database_;
+    Mode mode_{Mode::Closed};
+    QString migrationBackupPath_;
+    QString recoveryError_;
 };
 
 } // namespace snack::storage

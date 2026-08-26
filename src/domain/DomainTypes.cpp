@@ -11,10 +11,10 @@ template <typename Enum> struct EnumName {
 constexpr EnumName<AgentKind> agentKinds[] = {
     {AgentKind::Codex, "codex"}, {AgentKind::Claude, "claude"}, {AgentKind::Mock, "mock"}};
 constexpr EnumName<ReasoningEffort> reasoningEfforts[] = {
-    {ReasoningEffort::Low, "low"},
-    {ReasoningEffort::Medium, "medium"},
-    {ReasoningEffort::High, "high"},
-    {ReasoningEffort::ExtraHigh, "extra-high"}};
+    {ReasoningEffort::Minimal, "minimal"}, {ReasoningEffort::Low, "low"},
+    {ReasoningEffort::Medium, "medium"},   {ReasoningEffort::High, "high"},
+    {ReasoningEffort::ExtraHigh, "xhigh"}, {ReasoningEffort::Maximum, "max"},
+    {ReasoningEffort::Ultra, "ultra"}};
 constexpr EnumName<AccessLevel> accessLevels[] = {{AccessLevel::Strict, "strict"},
                                                   {AccessLevel::Workspace, "workspace"},
                                                   {AccessLevel::Full, "full"}};
@@ -113,6 +113,9 @@ AgentKind agentKindFromString(const QString& value) {
 }
 
 ReasoningEffort reasoningEffortFromString(const QString& value) {
+    if (value == QLatin1String("extra-high")) {
+        return ReasoningEffort::ExtraHigh;
+    }
     return enumFromString(value, reasoningEfforts, ReasoningEffort::Medium);
 }
 

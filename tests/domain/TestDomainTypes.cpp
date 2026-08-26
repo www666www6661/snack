@@ -7,6 +7,7 @@ class TestDomainTypes final : public QObject {
 
   private slots:
     void settingsSnapshotRoundTrips();
+    void reasoningEffortNamesRoundTrip();
     void unknownValuesUseSafeDefaults();
     void eventTypeNamesRoundTrip();
 };
@@ -21,6 +22,17 @@ void TestDomainTypes::settingsSnapshotRoundTrips() {
     original.capabilityVersion = QStringLiteral("v7");
 
     QCOMPARE(snack::domain::TurnSettingsSnapshot::fromJson(original.toJson()), original);
+}
+
+void TestDomainTypes::reasoningEffortNamesRoundTrip() {
+    using enum snack::domain::ReasoningEffort;
+    const QList<snack::domain::ReasoningEffort> values = {Minimal,   Low,     Medium, High,
+                                                          ExtraHigh, Maximum, Ultra};
+    for (const auto value : values) {
+        QCOMPARE(snack::domain::reasoningEffortFromString(snack::domain::enumName(value)), value);
+    }
+    QCOMPARE(snack::domain::enumName(ExtraHigh), QStringLiteral("xhigh"));
+    QCOMPARE(snack::domain::reasoningEffortFromString(QStringLiteral("extra-high")), ExtraHigh);
 }
 
 void TestDomainTypes::unknownValuesUseSafeDefaults() {

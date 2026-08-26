@@ -1,6 +1,7 @@
 # Protocol capability matrix
 
-Reviewed: 2026-08-25  
+Reviewed: 2026-08-26
+
 Locally observed versions: Codex CLI `0.149.0`, Claude Code `2.1.245`
 
 ## 1. Decision
@@ -56,6 +57,7 @@ Claude uses a persistent `claude -p --input-format stream-json --output-format s
 - Correlate requests, responses, and server requests by ID and retain raw messages.
 - Model threads and turns separately. Per-turn settings can override model, effort, cwd, approval, and sandbox policy.
 - Generate version-specific JSON Schema for contract tests with `codex app-server generate-json-schema`.
+- Drive model, effort, input-modality, and personality controls from the complete paginated `model/list` result; use the advertised defaults when a selection disappears.
 - The documented WebSocket transport remains experimental; v1 does not use it.
 
 ## 5. Claude transport constraints
@@ -73,7 +75,7 @@ Exact minimum versions are frozen after the Codex and Claude protocol spikes. A 
 
 ## 7. Official sources
 
-- OpenAI Docs: https://learn.chatgpt.com/docs/app-server
+- OpenAI Docs: https://developers.openai.com/codex/app-server
 - Claude Code CLI reference: https://code.claude.com/docs/en/cli-reference
 - Claude Code non-interactive mode: https://code.claude.com/docs/en/headless
 - Claude Agent SDK streaming input: https://code.claude.com/docs/en/agent-sdk/streaming-vs-single-mode

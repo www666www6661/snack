@@ -37,6 +37,8 @@ flowchart LR
 - `ui`: `QMainWindow` and `QDockWidget`; at most one `QWebEnginePage` per visible conversation window; ViewModels own logic.
 - `terminal`: a separate `TerminalManager` with Windows ConPTY and POSIX PTY backends. Scrollback stays in memory.
 
+The current M2 slices implement `IProcessTransport`/`QProcessTransport`, `CodexCliDiscovery`, `CodexProtocol`, `CodexAppServerClient`, `CodexModelCatalog`, and the connection-state `CodexAdapter`. The adapter completes paginated model discovery before publishing capabilities; `SessionController` then normalizes next-turn settings against the selected model. Native thread and turn event mapping remains the next vertical slice.
+
 ## 4. Concurrency model
 
 - GUI thread: Widgets, WebEngine navigation, and small ViewModel updates.

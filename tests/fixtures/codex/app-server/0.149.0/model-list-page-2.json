@@ -1,0 +1,22 @@
+{
+  "data": [
+    {
+      "id": "gpt-5.1-codex-mini",
+      "model": "gpt-5.1-codex-mini",
+      "displayName": "GPT-5.1-Codex Mini",
+      "description": "Compact coding model",
+      "hidden": false,
+      "defaultReasoningEffort": "medium",
+      "supportedReasoningEfforts": [
+        {"reasoningEffort": "minimal", "description": "Minimal"},
+        {"reasoningEffort": "medium", "description": "Balanced"},
+        {"reasoningEffort": "max", "description": "Maximum"},
+        {"reasoningEffort": "ultra", "description": "Ultra"},
+        {"reasoningEffort": "future", "description": "Forward-compatible raw value"}
+      ],
+      "supportsPersonality": false,
+      "isDefault": false
+    }
+  ],
+  "nextCursor": null
+}

@@ -1,6 +1,7 @@
 # 协议能力矩阵
 
-核对日期：2026-08-25  
+核对日期：2026-08-26
+
 本机参考版本：Codex CLI `0.149.0`，Claude Code `2.1.245`
 
 ## 1. 结论
@@ -56,6 +57,7 @@ Claude 使用 `claude -p --input-format stream-json --output-format stream-json 
 - 请求、响应与 server request 按 ID关联；事件存储必须保留原始消息。
 - 线程和 Turn 分离建模；`turn/start` 可以覆盖 `model`、`effort`、`cwd`、审批与沙箱策略。
 - 使用 CLI 生成的 JSON Schema 建立版本化契约测试：`codex app-server generate-json-schema`。
+- 模型、推理强度、输入模态和人格控件必须由完整分页 `model/list` 驱动；选择失效时使用服务端声明的默认值。
 - WebSocket 传输在官方文档中仍为实验且不适合本地生产集成，Snack 首版不使用。
 
 ## 5. Claude 传输约束
@@ -79,7 +81,7 @@ Claude 使用 `claude -p --input-format stream-json --output-format stream-json 
 
 ## 7. 官方资料
 
-- OpenAI Docs: https://learn.chatgpt.com/docs/app-server
+- OpenAI Docs: https://developers.openai.com/codex/app-server
 - Claude Code CLI reference: https://code.claude.com/docs/en/cli-reference
 - Claude Code non-interactive mode: https://code.claude.com/docs/en/headless
 - Claude Agent SDK streaming input: https://code.claude.com/docs/en/agent-sdk/streaming-vs-single-mode

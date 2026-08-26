@@ -2,7 +2,7 @@
 
 ## 当前垂直切片
 
-`0.1.0-alpha.1` 工程骨架包含 Qt Widgets 主窗口、单实例 IPC、设置、声明式主题校验、SQLite 事件仓库、SHA-256 内容存储、统一 Agent 接口、模拟 Agent、会话状态机和 Qt Test 测试。真实 Codex 连接从 M2 开始。
+`0.1.0-alpha.1` 工程骨架包含 Qt Widgets 主窗口、单实例 IPC、设置、声明式主题校验、SQLite 事件仓库、SHA-256 内容存储、统一 Agent 接口、模拟 Agent、会话状态机和 Qt Test 测试。M2 已加入真实 Codex 的 CLI 探测、stdio JSONL 传输、初始化握手和分页模型能力，但原生 Codex Thread 尚未接入主窗口。
 
 ## 前置环境
 
@@ -74,8 +74,10 @@ ctest --test-dir build/macos-debug --output-on-failure
 
 应用使用 `QStandardPaths::AppLocalDataLocation` 保存 SQLite 数据库、内容存储和日志。模拟 Agent 不联网，也不读取 Codex 或 Claude 凭据。
 
+升级现有数据库 Schema 前，零食会在数据库旁保留带时间戳的 `.pre-migration-*.bak` SQLite 快照。迁移失败或数据库由更高版本应用创建时，程序进入只读恢复模式：已有记录仍可读取，但 Agent 启动和所有事件写入都会被阻止。
+
 ## 测试规则
 
 新增行为必须同步添加 Qt Test。CI 在三个桌面平台构建并运行测试，Linux 使用 LLVM source-based coverage 执行第一方代码 80% 行覆盖率门禁。CI 不调用真实 Agent。
 
-2026-08-25 的 Windows LLVM-MinGW 基线：8/8 测试通过（包含运行库部署布局检查）；单实例 IPC 连续重复 30 次通过；第一方代码行覆盖率为 83.86%。正式 M1 验收仍需完成 Windows `clang-cl`、Linux 和 macOS 构建。
+2026-08-26 的 Windows LLVM-MinGW 基线：9/9 Debug 测试通过（包含运行库部署布局检查）；单实例 IPC 连续重复 30 次通过；第一方代码行覆盖率为 84.33%；本机真实 Codex CLI 初始化与 `model/list` 烟雾测试也通过。正式 M1 验收仍需完成 Windows `clang-cl`、Linux 和 macOS 构建。

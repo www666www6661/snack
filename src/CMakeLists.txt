@@ -1,7 +1,20 @@
 set(SNACK_CORE_SOURCES
+    agent/codex/CodexAdapter.cpp
+    agent/codex/CodexAdapter.h
+    agent/codex/CodexAppServerClient.cpp
+    agent/codex/CodexAppServerClient.h
+    agent/codex/CodexCliDiscovery.cpp
+    agent/codex/CodexCliDiscovery.h
+    agent/codex/CodexModelCatalog.cpp
+    agent/codex/CodexModelCatalog.h
+    agent/codex/CodexProtocol.cpp
+    agent/codex/CodexProtocol.h
     agent/FakeAgentAdapter.cpp
     agent/FakeAgentAdapter.h
     agent/IAgentAdapter.h
+    agent/process/IProcessTransport.h
+    agent/process/QProcessTransport.cpp
+    agent/process/QProcessTransport.h
     app/AppSettings.cpp
     app/AppSettings.h
     app/Logging.cpp

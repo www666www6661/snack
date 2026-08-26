@@ -2,7 +2,7 @@
 
 ## Current vertical slice
 
-The `0.1.0-alpha.1` foundation includes a Qt Widgets shell, single-instance IPC, settings, declarative theme validation, an SQLite event repository, a SHA-256 content store, the common Agent interface, a fake streaming Agent, the session state machine, and Qt Test coverage. Real Codex integration starts in M2.
+The `0.1.0-alpha.1` foundation includes a Qt Widgets shell, single-instance IPC, settings, declarative theme validation, an SQLite event repository, a SHA-256 content store, the common Agent interface, a fake streaming Agent, the session state machine, and Qt Test coverage. M2 now includes real Codex CLI discovery, stdio JSONL transport, initialization, and paginated model capabilities, but native Codex threads are not yet connected to the main window.
 
 ## Prerequisites
 
@@ -74,8 +74,10 @@ ctest --test-dir build/macos-debug --output-on-failure
 
 The application stores its SQLite database, content blobs, and logs under `QStandardPaths::AppLocalDataLocation`. The fake Agent does not use the network or read Codex or Claude credentials.
 
+Before upgrading an existing database schema, Snack keeps a timestamped `.pre-migration-*.bak` SQLite snapshot beside the database. A failed migration or a database created by a newer app version opens in read-only recovery mode: existing records remain available, while Agent startup and all event writes are blocked.
+
 ## Test policy
 
 Every behavior change includes Qt Test coverage. CI builds and tests on all three desktop platforms, while Linux enforces at least 80% first-party line coverage using LLVM source-based coverage. CI never calls a real Agent.
 
-Windows LLVM-MinGW baseline on 2026-08-25: 8/8 tests pass, including the deployed runtime layout check, the single-instance IPC test passes 30 consecutive repetitions, and first-party line coverage is 83.86%. Formal M1 acceptance still requires Windows `clang-cl`, Linux, and macOS builds.
+Windows LLVM-MinGW baseline on 2026-08-26: 9/9 Debug tests pass, including the deployed runtime layout check, the single-instance IPC test passes 30 consecutive repetitions, and first-party line coverage is 84.33%. The live local Codex CLI initialization and `model/list` smoke test also passes. Formal M1 acceptance still requires Windows `clang-cl`, Linux, and macOS builds.

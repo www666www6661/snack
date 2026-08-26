@@ -29,6 +29,8 @@ Sequence numbers increase strictly within one conversation. A mapping failure st
 
 Every turn stores an immutable `TurnSettingsSnapshot`: agent, model ID, effort, access level, mapped sandbox/approval settings, cwd, isolated-change state, and protocol capability version. UI edits during a turn update only `nextTurnSettings`.
 
+`CapabilitySet` carries the visible model IDs plus per-model display metadata, default effort, supported effort IDs/descriptions, input modalities, personality support, and the server-selected default model. Raw future effort IDs remain available for display even when the current domain enum cannot execute them.
+
 ## 5. SQLite model
 
 Initial logical tables: `schema_migrations`, `workspaces`, `conversations`, `conversation_tags`, `groups`, `saved_views`, `turns`, `events`, `queued_messages`, `attachments`, `permission_rules`, `diff_sets`, `diff_files`, `snapshots`, `terminal_tabs`, `layouts`, `themes`, `prompt_templates`, and `maintenance_runs`.
@@ -50,3 +52,5 @@ Raw logs and reviewed snapshots default to 30 days with a 10 GB cap. Pending rev
 ## 9. Migrations
 
 Migrations are forward-only, idempotent, and record start/completion. Back up the database before upgrading. Failure enters read-only recovery mode and never replaces old data with an empty database.
+
+The M1 store currently uses schema version 2. Before any pending upgrade of an existing file, `EventStore` creates a consistent SQLite snapshot beside the database with a `.pre-migration-v<version>-<timestamp>-<id>.bak` suffix. All pending steps execute in one transaction. A statement or commit failure rolls the transaction back and reopens the original database read-only; write APIs then fail closed. Databases created by a newer Snack version follow the same read-only path without being modified. Successful safety backups are retained for explicit user recovery and later maintenance policy.

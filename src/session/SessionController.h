@@ -32,6 +32,7 @@ class SessionController final : public QObject {
     void nextTurnSettingsChanged(const snack::domain::TurnSettingsSnapshot& settings);
 
   private:
+    void handleCapabilitiesChanged(const agent::CapabilitySet& capabilities);
     void handleAdapterEvent(domain::AgentEvent event);
     void recordEvent(domain::AgentEvent event);
     void setStatus(domain::ConversationStatus status);

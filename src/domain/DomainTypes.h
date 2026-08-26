@@ -8,7 +8,7 @@
 namespace snack::domain {
 
 enum class AgentKind { Codex, Claude, Mock };
-enum class ReasoningEffort { Low, Medium, High, ExtraHigh };
+enum class ReasoningEffort { Minimal, Low, Medium, High, ExtraHigh, Maximum, Ultra };
 enum class AccessLevel { Strict, Workspace, Full };
 enum class ConversationStatus {
     Dormant,
