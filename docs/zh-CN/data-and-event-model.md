@@ -35,7 +35,7 @@
 - `UsageUpdated`, `CapabilityChanged`, `ConnectionChanged`
 - `WarningRaised`, `ErrorRaised`, `RawProtocolObserved`
 
-事件序号在单会话内严格递增。原生事件映射失败时写入 `RawProtocolObserved` 与解析警告，不丢弃原始内容。
+事件序号在单会话内严格递增。原生事件映射失败时写入 `RawProtocolObserved` 与解析警告，不丢弃原始内容。活动原生 Thread/Turn 内合法但未知的通知或未来 Item 类型也保存为 `RawProtocolObserved`；保存前先校验上下文身份，避免过期原生 Turn 污染当前 GUI Turn。明确属于隐私边界的协议内容（例如 Codex 原始 reasoning text）不会进入该降级路径。
 
 Codex 文本 Turn 使用 GUI `QUuid` 作为领域 `turnId`，并把 app-server 的 Turn ID 保存到事件 payload 的 `nativeTurnId`，两者不互作数据库主键。`item/agentMessage/delta` 的文本写入 `AgentMessageDelta.payload.text`；原始 JSON-RPC 通知保存在 `rawPayload`。终态只接受一次，`completed`、`interrupted`、`failed` 分别映射到对应领域事件。
 

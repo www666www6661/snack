@@ -97,6 +97,7 @@ class TestCodexAppServer final : public QObject {
     void adapterSteersActiveTurn();
     void adapterMapsToolReasoningAndPlanEvents();
     void adapterHandlesTurnFailuresAndStaleEvents();
+    void adapterPreservesUnknownProtocolEvents();
     void adapterInterruptsAndDeclinesServerRequests();
     void adapterHandlesApprovalRequests();
     void adapterHandlesUserInputAndTokenUsage();
@@ -1426,6 +1427,80 @@ void TestCodexAppServer::adapterHandlesTurnFailuresAndStaleEvents() {
              AgentEventType::TurnFailed);
     QCOMPARE(finishedSpy.count(), 1);
     QCOMPARE(finishedSpy.constFirst().constFirst().toUuid(), retryTurnId);
+    adapter.closeAgent();
+}
+
+void TestCodexAppServer::adapterPreservesUnknownProtocolEvents() {
+    using namespace snack::agent::codex;
+    using snack::domain::AgentEvent;
+    using snack::domain::AgentEventType;
+
+    FakeProcessTransport transport;
+    CodexAdapter adapter({.status = CliStatus::Available,
+                          .executablePath = QStringLiteral("codex"),
+                          .version = QStringLiteral("0.149.0")},
+                         &transport);
+    connectAdapter(adapter, transport);
+    QSignalSpy eventSpy(&adapter, &CodexAdapter::eventReceived);
+
+    const QUuid guiTurnId = QUuid::createUuid();
+    adapter.startTurn(codexTurnRequest(guiTurnId));
+    const QString nativeTurnId = QStringLiteral("turn-future-events-1");
+    feedResult(transport, lastRequest(transport).id.toInteger(),
+               QJsonObject{{QStringLiteral("turn"),
+                            turnObject(nativeTurnId, QStringLiteral("inProgress"))}});
+
+    feedNotification(transport, QStringLiteral("future/event"),
+                     {{QStringLiteral("threadId"), QStringLiteral("0198-thread-snack")},
+                      {QStringLiteral("turnId"), nativeTurnId},
+                      {QStringLiteral("futureField"), true}});
+    QCOMPARE(eventSpy.count(), 1);
+    const AgentEvent futureEvent = eventSpy.constLast().constFirst().value<AgentEvent>();
+    QCOMPARE(futureEvent.type, AgentEventType::RawProtocolObserved);
+    QCOMPARE(futureEvent.payload.value(QStringLiteral("method")).toString(),
+             QStringLiteral("future/event"));
+    QVERIFY(futureEvent.rawPayload.value(QStringLiteral("params"))
+                .toObject()
+                .value(QStringLiteral("futureField"))
+                .toBool());
+
+    feedNotification(transport, QStringLiteral("future/stale"),
+                     {{QStringLiteral("threadId"), QStringLiteral("0198-thread-snack")},
+                      {QStringLiteral("turnId"), QStringLiteral("stale-turn")}});
+    QCOMPARE(eventSpy.count(), 2);
+    QCOMPARE(eventSpy.constLast().constFirst().value<AgentEvent>().type,
+             AgentEventType::WarningRaised);
+
+    feedNotification(transport, QStringLiteral("item/started"),
+                     {{QStringLiteral("threadId"), QStringLiteral("0198-thread-snack")},
+                      {QStringLiteral("turnId"), nativeTurnId},
+                      {QStringLiteral("item"),
+                       QJsonObject{{QStringLiteral("id"), QStringLiteral("future-item-1")},
+                                   {QStringLiteral("type"), QStringLiteral("futureItem")},
+                                   {QStringLiteral("futureField"), 7}}}});
+    QCOMPARE(eventSpy.count(), 3);
+    const AgentEvent futureItem = eventSpy.constLast().constFirst().value<AgentEvent>();
+    QCOMPARE(futureItem.type, AgentEventType::RawProtocolObserved);
+    QCOMPARE(futureItem.payload.value(QStringLiteral("itemType")).toString(),
+             QStringLiteral("futureItem"));
+
+    feedNotification(transport, QStringLiteral("item/reasoning/textDelta"),
+                     {{QStringLiteral("threadId"), QStringLiteral("0198-thread-snack")},
+                      {QStringLiteral("turnId"), nativeTurnId},
+                      {QStringLiteral("itemId"), QStringLiteral("reasoning-private-1")},
+                      {QStringLiteral("delta"), QStringLiteral("private reasoning")}});
+    QCOMPARE(eventSpy.count(), 3);
+
+    feedNotification(
+        transport, QStringLiteral("turn/completed"),
+        {{QStringLiteral("threadId"), QStringLiteral("0198-thread-snack")},
+         {QStringLiteral("turn"), turnObject(nativeTurnId, QStringLiteral("completed"))}});
+    QCOMPARE(eventSpy.count(), 4);
+    QCOMPARE(eventSpy.constLast().constFirst().value<AgentEvent>().type,
+             AgentEventType::TurnCompleted);
+    feedNotification(transport, QStringLiteral("future/after-turn"),
+                     {{QStringLiteral("futureField"), true}});
+    QCOMPARE(eventSpy.count(), 4);
     adapter.closeAgent();
 }
 

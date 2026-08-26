@@ -43,7 +43,7 @@ Windows ConPTY/Credential Manager/MSI，Linux PTY/Secret Service/.deb/Wayland/X1
 | 写租约 | 抢占、释放、转移、崩溃残留、符号链接别名 |
 | 存储 | WAL恢复、磁盘满、Blob 丢失、引用计数、迁移失败 |
 | 备份 | 普通/加密、错密码、篡改、路径穿越、回滚、跨平台映射 |
-| 协议 | 半帧、LF/CRLF 上限、非法 JSON、重复 ID、未知事件、请求超时、迟到响应、退出期间重连、terminate/kill 降级、输出洪泛、进程退出 |
+| 协议 | 半帧、LF/CRLF 上限、非法 JSON、重复 ID、未知事件保留/上下文/隐私、请求超时、迟到响应、退出期间重连、terminate/kill 降级、输出洪泛、进程退出 |
 | WebEngine | 恶意 Markdown、远程资源阻止、渲染进程崩溃、链接校验 |
 | 终端 | Unicode、ANSI、resize、进程退出、标签拖出、真正退出重建 |
 

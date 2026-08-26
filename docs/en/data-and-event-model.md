@@ -23,7 +23,7 @@ GUI entities use random UUIDs. Native agent IDs are separate values, never datab
 
 Event types include user and agent message lifecycle, reasoning lifecycle, turn lifecycle, plans, tools, commands, file changes and diffs, approvals, user prompts, usage, capability/connection changes, warnings, errors, and `RawProtocolObserved`.
 
-Sequence numbers increase strictly within one conversation. A mapping failure stores the raw protocol event and a parse warning rather than dropping content.
+Sequence numbers increase strictly within one conversation. A mapping failure stores the raw protocol event and a parse warning rather than dropping content. A valid but unknown notification or future item type within the active native Thread/Turn is stored as `RawProtocolObserved`; contextual identity is checked first so a stale native turn cannot contaminate the current GUI turn. Explicitly private protocol content, such as Codex raw reasoning text, remains excluded rather than entering this fallback.
 
 A Codex text turn keeps the GUI `QUuid` as its domain `turnId` and stores the app-server turn ID as `nativeTurnId` in event payloads; neither substitutes for the other as a database key. `item/agentMessage/delta` text becomes `AgentMessageDelta.payload.text`, while the original JSON-RPC notification remains in `rawPayload`. Terminal status is accepted once and maps `completed`, `interrupted`, and `failed` to their corresponding domain events.
 

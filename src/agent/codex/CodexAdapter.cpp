@@ -724,6 +724,11 @@ void CodexAdapter::handleNotification(const QString& method, const QJsonValue& p
             return;
         }
         if (notification->itemType != QLatin1String("agentMessage")) {
+            emitActiveEvent(domain::AgentEventType::RawProtocolObserved,
+                            {{QStringLiteral("method"), method},
+                             {QStringLiteral("itemId"), notification->itemId},
+                             {QStringLiteral("itemType"), notification->itemType}},
+                            raw);
             return;
         }
 
@@ -960,7 +965,20 @@ void CodexAdapter::handleNotification(const QString& method, const QJsonValue& p
             finishActiveTurn(domain::AgentEventType::TurnFailed, notification->message,
                              QStringLiteral("failed"), raw, false);
         }
+        return;
     }
+
+    if (params.isObject()) {
+        const QJsonObject object = params.toObject();
+        if ((object.contains(QStringLiteral("threadId")) ||
+             object.contains(QStringLiteral("turnId"))) &&
+            !acceptNativeContext(object.value(QStringLiteral("threadId")).toString(),
+                                 object.value(QStringLiteral("turnId")).toString(), raw)) {
+            return;
+        }
+    }
+    emitActiveEvent(domain::AgentEventType::RawProtocolObserved,
+                    {{QStringLiteral("method"), method}}, raw);
 }
 
 void CodexAdapter::handleServerRequest(const QJsonValue& id, const QString& method,
