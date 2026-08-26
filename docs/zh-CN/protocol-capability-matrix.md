@@ -71,7 +71,7 @@ Claude 使用 `claude -p --input-format stream-json --output-format stream-json 
 
 ## 6. 最低版本政策
 
-精确最低版本在 `M1 Codex protocol spike` 与 `M5 Claude protocol spike` 完成后冻结。冻结条件：
+Codex 最低版本已冻结为 `0.149.0`，该版本的预发布版不满足要求；Claude 最低版本仍等待 M5 冻结。版本合格条件：
 
 1. 能力握手可用且可记录。
 2. 会话创建、恢复、流式事件、取消和错误路径通过契约测试。

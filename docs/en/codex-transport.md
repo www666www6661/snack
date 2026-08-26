@@ -2,7 +2,7 @@
 
 ## Current status
 
-The M2 connection, thread, text-turn, approval, user-input, usage, and activity slices are fixture-validated against Codex CLI `0.149.0`. They establish CLI discovery, subprocess transport, JSONL parsing, initialization, paginated `model/list`, native `thread/start`/`thread/resume`, `turn/start`, streamed text, tool execution, reasoning summaries, plans, `turn/interrupt`, command/file approval responses, question responses, and token/context display. The main application probes and starts Codex by default, with an explicit Mock Agent fallback when the CLI is unavailable.
+The M2 connection, thread, text-turn, approval, user-input, usage, and activity slices are fixture-validated against Codex CLI `0.149.0`, which is the current minimum supported version. They establish CLI discovery, subprocess transport, JSONL parsing, initialization, paginated `model/list`, native `thread/start`/`thread/resume`, `turn/start`, streamed text, tool execution, reasoning summaries, plans, `turn/interrupt`, command/file approval responses, question responses, and token/context display. The main application probes and starts Codex by default, with an explicit Mock Agent fallback when the CLI is unavailable or too old.
 
 Protocol source: [OpenAI Docs - Codex App Server](https://developers.openai.com/codex/app-server). The default transport is newline-delimited JSON over stdio, with the `jsonrpc: "2.0"` member omitted on the wire. Every connection sends one `initialize` request and waits for its successful response before sending the `initialized` notification.
 
@@ -45,6 +45,8 @@ Command and file approvals arrive as server-initiated `item/commandExecution/req
 `thread/tokenUsage/updated` maps supplied `last`, `total`, and `modelContextWindow` values into `UsageUpdated`. The header shows total/context consumption and an input/cache/output/reasoning tooltip; a missing context window hides the ratio. Snack neither infers costs nor repairs token arithmetic.
 
 Windows discovery prefers `codex.cmd` and starts npm wrappers through `cmd.exe /c call`; Linux and macOS start `codex` directly. The Windows path is verified with a live local handshake.
+
+Discovery parses the CLI SemVer before probing `app-server`. Versions below `0.149.0`, including prereleases of `0.149.0`, are rejected with the detected and required versions preserved in the fallback diagnostic. Newer versions are not accepted by version alone: they must still expose the expected app-server command, complete initialization, return a valid model catalog, and pass strict runtime response validation. This permits forward-compatible additions while failing closed on missing required fields.
 
 `AgentRuntimeFactory` creates an immutable per-conversation adapter and owns its process transport. The Agent menu changes only the next-conversation preference; it never swaps the current adapter. Startup restores a stored conversation only when both its Agent kind and workspace match, preventing Codex, Claude, and Mock identities from sharing a conversation. Once the Codex catalog arrives, the main window rebuilds model and effort controls from model metadata and shows only advertised access levels. Changes made during a running turn apply to the next turn.
 

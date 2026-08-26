@@ -5,6 +5,7 @@
 #include <QProcess>
 #include <QRegularExpression>
 #include <QStandardPaths>
+#include <QVersionNumber>
 
 namespace snack::agent::codex {
 
@@ -34,6 +35,13 @@ CliInstallation CodexCliDiscovery::probe(const QString& configuredExecutable, in
         return {.status = CliStatus::ProbeFailed,
                 .executablePath = executable,
                 .detail = QStringLiteral("Codex returned an unrecognized version")};
+    }
+    if (!isSupportedVersion(version)) {
+        return {.status = CliStatus::UnsupportedVersion,
+                .executablePath = executable,
+                .version = version,
+                .detail = QStringLiteral("Codex CLI %1 is unsupported; Snack requires %2 or newer")
+                              .arg(version, minimumSupportedVersion())};
     }
 
     const CommandResult helpResult =
@@ -72,9 +80,34 @@ process::LaunchSpec CodexCliDiscovery::appServerLaunchSpec(const CliInstallation
 
 QString CodexCliDiscovery::parseVersion(const QByteArray& output) {
     static const QRegularExpression expression(
-        QStringLiteral(R"(codex-cli\s+([0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?))"),
+        QStringLiteral(
+            R"(codex-cli\s+([0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?(?:\+[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?))"),
         QRegularExpression::CaseInsensitiveOption);
     return expression.match(QString::fromUtf8(output)).captured(1);
+}
+
+QString CodexCliDiscovery::minimumSupportedVersion() { return QStringLiteral("0.149.0"); }
+
+bool CodexCliDiscovery::isSupportedVersion(const QString& version) {
+    static const QRegularExpression expression(QStringLiteral(
+        R"(^([0-9]+)\.([0-9]+)\.([0-9]+)(?:-([0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*))?(?:\+[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?$)"));
+    const QRegularExpressionMatch match = expression.match(version);
+    if (!match.hasMatch()) {
+        return false;
+    }
+    bool majorValid = false;
+    bool minorValid = false;
+    bool patchValid = false;
+    const int major = match.captured(1).toInt(&majorValid);
+    const int minor = match.captured(2).toInt(&minorValid);
+    const int patch = match.captured(3).toInt(&patchValid);
+    if (!majorValid || !minorValid || !patchValid) {
+        return false;
+    }
+    const QVersionNumber candidate(major, minor, patch);
+    const QVersionNumber minimum(0, 149, 0);
+    const int comparison = QVersionNumber::compare(candidate, minimum);
+    return comparison > 0 || (comparison == 0 && match.captured(4).isEmpty());
 }
 
 bool CodexCliDiscovery::supportsAppServer(const QByteArray& output) {

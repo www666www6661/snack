@@ -77,6 +77,7 @@ class TestCodexAppServer final : public QObject {
     void initTestCase();
     void parsesProtocolEnvelopes();
     void discoversCliWithInjectedRunner();
+    void validatesSupportedCliVersions();
     void probesExecutableWithDefaultRunner();
     void reportsMissingAndUnsupportedCli();
     void buildsPlatformLaunchSpec();
@@ -254,8 +255,22 @@ void TestCodexAppServer::discoversCliWithInjectedRunner() {
     QCOMPARE(installation.status, CliStatus::Available);
     QCOMPARE(installation.version, QStringLiteral("0.149.0"));
     QCOMPARE(calls, 2);
-    QCOMPARE(CodexCliDiscovery::parseVersion("CODEX-CLI 1.2.3-beta.1"),
-             QStringLiteral("1.2.3-beta.1"));
+    QCOMPARE(CodexCliDiscovery::parseVersion("CODEX-CLI 1.2.3-beta.1+build.7"),
+             QStringLiteral("1.2.3-beta.1+build.7"));
+}
+
+void TestCodexAppServer::validatesSupportedCliVersions() {
+    using snack::agent::codex::CodexCliDiscovery;
+
+    QCOMPARE(CodexCliDiscovery::minimumSupportedVersion(), QStringLiteral("0.149.0"));
+    QVERIFY(!CodexCliDiscovery::isSupportedVersion(QStringLiteral("0.148.9")));
+    QVERIFY(!CodexCliDiscovery::isSupportedVersion(QStringLiteral("0.149.0-beta.1")));
+    QVERIFY(CodexCliDiscovery::isSupportedVersion(QStringLiteral("0.149.0")));
+    QVERIFY(CodexCliDiscovery::isSupportedVersion(QStringLiteral("0.149.0+packaged.1")));
+    QVERIFY(CodexCliDiscovery::isSupportedVersion(QStringLiteral("0.150.0-alpha.1")));
+    QVERIFY(CodexCliDiscovery::isSupportedVersion(QStringLiteral("1.0.0")));
+    QVERIFY(!CodexCliDiscovery::isSupportedVersion(QStringLiteral("invalid")));
+    QVERIFY(!CodexCliDiscovery::isSupportedVersion(QStringLiteral("999999999999999999999.0.0")));
 }
 
 void TestCodexAppServer::probesExecutableWithDefaultRunner() {
@@ -317,18 +332,31 @@ void TestCodexAppServer::reportsMissingAndUnsupportedCli() {
     QVERIFY(file.open(QIODevice::WriteOnly));
     file.close();
 
-    int calls = 0;
-    const auto unsupported = CodexCliDiscovery::probe(
-        executable, 50, [&calls](const snack::agent::process::LaunchSpec&, int) {
-            ++calls;
-            if (calls == 1) {
+    int oldVersionCalls = 0;
+    const auto oldVersion = CodexCliDiscovery::probe(
+        executable, 50, [&oldVersionCalls](const snack::agent::process::LaunchSpec&, int) {
+            ++oldVersionCalls;
+            return CommandResult{
+                .started = true, .exitCode = 0, .standardOutput = "codex-cli 0.148.0"};
+        });
+    QCOMPARE(oldVersion.status, CliStatus::UnsupportedVersion);
+    QCOMPARE(oldVersionCalls, 1);
+    QVERIFY(oldVersion.detail.contains(QStringLiteral("0.148.0")));
+    QVERIFY(oldVersion.detail.contains(CodexCliDiscovery::minimumSupportedVersion()));
+
+    int appServerCalls = 0;
+    const auto unsupportedAppServer = CodexCliDiscovery::probe(
+        executable, 50, [&appServerCalls](const snack::agent::process::LaunchSpec&, int) {
+            ++appServerCalls;
+            if (appServerCalls == 1) {
                 return CommandResult{
-                    .started = true, .exitCode = 0, .standardOutput = "codex-cli 0.1.0"};
+                    .started = true, .exitCode = 0, .standardOutput = "codex-cli 0.149.0"};
             }
             return CommandResult{
                 .started = true, .exitCode = 2, .standardError = "unknown subcommand app-server"};
         });
-    QCOMPARE(unsupported.status, CliStatus::UnsupportedAppServer);
+    QCOMPARE(unsupportedAppServer.status, CliStatus::UnsupportedAppServer);
+    QCOMPARE(appServerCalls, 2);
 
     const auto timedOut =
         CodexCliDiscovery::probe(executable, 50, [](const snack::agent::process::LaunchSpec&, int) {

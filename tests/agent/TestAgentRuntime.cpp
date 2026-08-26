@@ -8,6 +8,7 @@ class TestAgentRuntime final : public QObject {
   private slots:
     void createsCodexRuntimeWhenAvailable();
     void fallsBackWhenCodexIsUnavailable();
+    void preservesUnsupportedCodexVersionDetail();
     void honorsExplicitMockSelection();
     void degradesUnimplementedClaudeSelection();
 };
@@ -40,6 +41,21 @@ void TestAgentRuntime::fallsBackWhenCodexIsUnavailable() {
     QVERIFY(runtime.transport == nullptr);
     QCOMPARE(runtime.adapter->kind(), snack::domain::AgentKind::Mock);
     QCOMPARE(runtime.detail, QStringLiteral("not installed"));
+}
+
+void TestAgentRuntime::preservesUnsupportedCodexVersionDetail() {
+    const QString detail =
+        QStringLiteral("Codex CLI 0.148.0 is unsupported; Snack requires 0.149.0 or newer");
+    auto runtime = snack::agent::AgentRuntimeFactory::createWithCodexInstallation(
+        snack::domain::AgentKind::Codex,
+        {.status = snack::agent::codex::CliStatus::UnsupportedVersion,
+         .executablePath = QStringLiteral("codex"),
+         .version = QStringLiteral("0.148.0"),
+         .detail = detail});
+
+    QCOMPARE(runtime.selectedKind, snack::domain::AgentKind::Mock);
+    QVERIFY(runtime.fellBack);
+    QCOMPARE(runtime.detail, detail);
 }
 
 void TestAgentRuntime::honorsExplicitMockSelection() {

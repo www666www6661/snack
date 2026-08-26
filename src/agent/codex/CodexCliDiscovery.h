@@ -9,7 +9,7 @@
 
 namespace snack::agent::codex {
 
-enum class CliStatus { Available, NotFound, UnsupportedAppServer, ProbeFailed };
+enum class CliStatus { Available, NotFound, UnsupportedVersion, UnsupportedAppServer, ProbeFailed };
 
 struct CommandResult {
     bool started{false};
@@ -40,6 +40,8 @@ class CodexCliDiscovery final {
     [[nodiscard]] static process::LaunchSpec
     appServerLaunchSpec(const CliInstallation& installation, const QString& workingDirectory = {});
     [[nodiscard]] static QString parseVersion(const QByteArray& output);
+    [[nodiscard]] static QString minimumSupportedVersion();
+    [[nodiscard]] static bool isSupportedVersion(const QString& version);
     [[nodiscard]] static bool supportsAppServer(const QByteArray& output);
 
   private:

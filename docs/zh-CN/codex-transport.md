@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-M2 的连接、Thread、文本 Turn、审批、用户提问、用量与活动事件垂直链路已在 Codex CLI `0.149.0` 上完成 fixture 验证。当前代码已经建立独立的 CLI 探测、子进程传输、JSONL 协议解析、初始化握手、分页 `model/list`、原生 `thread/start`/`thread/resume`、`turn/start`、文本流、工具执行、推理摘要、计划、`turn/interrupt`、命令/文件审批响应、问题回答和 Token/上下文显示。主应用默认探测并启动 Codex；CLI 不可用时明确回退到 Mock Agent。
+M2 的连接、Thread、文本 Turn、审批、用户提问、用量与活动事件垂直链路已在 Codex CLI `0.149.0` 上完成 fixture 验证，该版本也是当前最低支持版本。当前代码已经建立独立的 CLI 探测、子进程传输、JSONL 协议解析、初始化握手、分页 `model/list`、原生 `thread/start`/`thread/resume`、`turn/start`、文本流、工具执行、推理摘要、计划、`turn/interrupt`、命令/文件审批响应、问题回答和 Token/上下文显示。主应用默认探测并启动 Codex；CLI 不可用或版本过旧时明确回退到 Mock Agent。
 
 官方协议依据：[OpenAI Docs - Codex App Server](https://developers.openai.com/codex/app-server)。默认传输是 stdio 上逐行 JSON；线上消息省略 `jsonrpc: "2.0"`。每个连接必须先发送 `initialize` 请求，收到成功响应后再发送 `initialized` 通知。
 
@@ -45,6 +45,8 @@ M3 Composer 把有序、可编辑的消息队列持久化到 SQLite。当前进�
 `thread/tokenUsage/updated` 提供的 `last`、`total` 与 `modelContextWindow` 会映射为 `UsageUpdated`。标题栏展示总 Token/上下文占用，提示中细分输入、缓存、输出与推理；上下文窗口缺失时隐藏比例。零食不会估算费用，也不会修正服务端 Token 算术。
 
 Windows 优先探测 `codex.cmd`，并通过 `cmd.exe /c call` 启动 npm 包装器；Linux 和 macOS 直接启动 `codex`。这条 Windows 路径已通过真实本机握手测试。
+
+探测会先解析 CLI SemVer，再检查 `app-server`。低于 `0.149.0` 的版本以及 `0.149.0` 的预发布版会被拒绝，GUI 回退诊断保留检测版本和最低要求。更高版本不会仅凭版本号放行：仍须暴露预期的 app-server 命令、完成初始化、返回合法模型目录，并通过严格的运行时响应校验。由此允许前向兼容的新增字段，同时在必需字段缺失时安全失败。
 
 `AgentRuntimeFactory` 根据应用偏好构造不可变的会话适配器及其进程传输。Agent 菜单只设置“下一会话”偏好，不替换当前适配器；启动恢复也仅接受 Agent 类型和工作目录都相同的记录，因此 Codex、Claude 与 Mock 的原生身份不会混入同一会话。Codex 能力目录返回后，主窗口按模型元数据重建模型与推理强度控件，访问层级也只显示适配器声明的选项。运行中修改这些控件只影响下一轮。
 

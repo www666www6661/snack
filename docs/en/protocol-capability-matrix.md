@@ -71,7 +71,7 @@ Claude uses a persistent `claude -p --input-format stream-json --output-format s
 
 ## 6. Minimum-version policy
 
-Exact minimum versions are frozen after the Codex and Claude protocol spikes. A version qualifies only when capability discovery, create/resume, streaming, cancellation, errors, and correctly scoped approvals all pass contract tests. Older versions receive an upgrade message, never screen scraping. Unknown newer versions may run only after a successful handshake.
+The Codex minimum is frozen at `0.149.0`; prereleases of that version do not qualify. Claude remains unfrozen until M5. A version qualifies only when capability discovery, create/resume, streaming, cancellation, errors, and correctly scoped approvals all pass contract tests. Older versions receive an upgrade message, never screen scraping. Unknown newer versions may run only after the app-server command probe, initialization, model discovery, and strict runtime validation succeed.
 
 ## 7. Official sources
 
