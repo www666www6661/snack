@@ -1146,11 +1146,24 @@ void TestCodexAppServer::adapterSteersActiveTurn() {
 
     const QUuid guiTurnId = QUuid::createUuid();
     adapter.startTurn(codexTurnRequest(guiTurnId));
-    QVERIFY(!adapter.steerTurn({guiTurnId, QStringLiteral("too early")}));
+    QVERIFY(adapter.steerTurn({guiTurnId, QStringLiteral("deferred steer")}));
+    QVERIFY(!adapter.steerTurn({guiTurnId, QStringLiteral("second deferred steer")}));
     const QString nativeTurnId = QStringLiteral("turn-steer-1");
     feedResult(transport, lastRequest(transport).id.toInteger(),
                QJsonObject{{QStringLiteral("turn"),
                             turnObject(nativeTurnId, QStringLiteral("inProgress"))}});
+    const ProtocolMessage deferred = lastRequest(transport);
+    QCOMPARE(deferred.method, QStringLiteral("turn/steer"));
+    QCOMPARE(deferred.params.toObject()
+                 .value(QStringLiteral("input"))
+                 .toArray()
+                 .at(0)
+                 .toObject()
+                 .value(QStringLiteral("text"))
+                 .toString(),
+             QStringLiteral("deferred steer"));
+    feedResult(transport, deferred.id.toInteger(),
+               QJsonObject{{QStringLiteral("turnId"), nativeTurnId}});
 
     QVERIFY(adapter.steerTurn({guiTurnId, QStringLiteral(" focus the tests ")}));
     const ProtocolMessage steer = lastRequest(transport);

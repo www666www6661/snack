@@ -39,6 +39,7 @@ class MainWindow final : public QMainWindow {
 
   private slots:
     void sendMessage();
+    void stopTurn();
     void updateSessionSettings();
     void applyLightTheme();
     void applyDarkTheme();
@@ -89,6 +90,7 @@ class MainWindow final : public QMainWindow {
     QListWidget* timeline_{nullptr};
     QPlainTextEdit* composer_{nullptr};
     QPushButton* sendButton_{nullptr};
+    QPushButton* stopButton_{nullptr};
     QLabel* statusLabel_{nullptr};
     QLabel* titleLabel_{nullptr};
     QLabel* usageLabel_{nullptr};

@@ -78,6 +78,7 @@ void TestMainWindow::sendsAndRendersStreamingTurn() {
 
     auto* composer = window.findChild<QPlainTextEdit*>(QStringLiteral("composer"));
     auto* sendButton = window.findChild<QPushButton*>(QStringLiteral("sendButton"));
+    auto* stopButton = window.findChild<QPushButton*>(QStringLiteral("stopButton"));
     auto* timeline = window.findChild<QListWidget*>(QStringLiteral("timeline"));
     auto* modelCombo = window.findChild<QComboBox*>(QStringLiteral("modelCombo"));
     auto* effortCombo = window.findChild<QComboBox*>(QStringLiteral("effortCombo"));
@@ -85,6 +86,7 @@ void TestMainWindow::sendsAndRendersStreamingTurn() {
     auto* statusLabel = window.findChild<QLabel*>(QStringLiteral("statusLabel"));
     QVERIFY(composer != nullptr);
     QVERIFY(sendButton != nullptr);
+    QVERIFY(stopButton != nullptr);
     QVERIFY(timeline != nullptr);
     QVERIFY(modelCombo != nullptr);
     QVERIFY(effortCombo != nullptr);
@@ -409,14 +411,24 @@ void TestMainWindow::interruptsRunningTurnFromSendButton() {
 
     auto* composer = window.findChild<QPlainTextEdit*>(QStringLiteral("composer"));
     auto* sendButton = window.findChild<QPushButton*>(QStringLiteral("sendButton"));
+    auto* stopButton = window.findChild<QPushButton*>(QStringLiteral("stopButton"));
     QTRY_COMPARE(controller.status(), snack::domain::ConversationStatus::Idle);
     composer->setPlainText(QStringLiteral("Stop this turn"));
     sendButton->click();
     QCOMPARE(controller.status(), snack::domain::ConversationStatus::Running);
-    QCOMPARE(sendButton->text(), QStringLiteral("Stop"));
+    QCOMPARE(sendButton->text(), QStringLiteral("Steer"));
     QVERIFY(sendButton->isEnabled());
+    QVERIFY(!stopButton->isHidden());
+    QVERIFY(stopButton->isEnabled());
 
+    composer->setPlainText(QStringLiteral("Focus the failing test"));
     sendButton->click();
+    QCOMPARE(adapter.lastSteerRequest().message, QStringLiteral("Focus the failing test"));
+    QVERIFY(composer->toPlainText().isEmpty());
+    QCOMPARE(repository.events.constLast().type, snack::domain::AgentEventType::UserMessage);
+    QVERIFY(repository.events.constLast().payload.value(QStringLiteral("steered")).toBool());
+
+    stopButton->click();
     QCOMPARE(controller.status(), snack::domain::ConversationStatus::Idle);
     QCOMPARE(repository.events.constLast().type, snack::domain::AgentEventType::TurnInterrupted);
     QCOMPARE(sendButton->text(), QStringLiteral("Send"));
@@ -441,6 +453,7 @@ void TestMainWindow::handlesApprovalCard() {
 
     auto* composer = window.findChild<QPlainTextEdit*>(QStringLiteral("composer"));
     auto* sendButton = window.findChild<QPushButton*>(QStringLiteral("sendButton"));
+    auto* stopButton = window.findChild<QPushButton*>(QStringLiteral("stopButton"));
     QTRY_COMPARE(controller.status(), ConversationStatus::Idle);
     composer->setPlainText(QStringLiteral("Run a command"));
     sendButton->click();
@@ -459,7 +472,9 @@ void TestMainWindow::handlesApprovalCard() {
     adapter.eventReceived(request);
 
     QCOMPARE(controller.status(), ConversationStatus::WaitingApproval);
-    QCOMPARE(sendButton->text(), QStringLiteral("Stop"));
+    QCOMPARE(sendButton->text(), QStringLiteral("Steer"));
+    QVERIFY(!sendButton->isEnabled());
+    QVERIFY(!stopButton->isHidden());
     auto* card = window.findChild<QFrame*>(QStringLiteral("approvalCard"));
     auto* allow = window.findChild<QPushButton*>(QStringLiteral("approvalAcceptButton"));
     auto* allowSession = window.findChild<QPushButton*>(QStringLiteral("approvalSessionButton"));
@@ -478,7 +493,7 @@ void TestMainWindow::handlesApprovalCard() {
     QVERIFY(!allow->isEnabled());
     QVERIFY(approvalStatus->text().contains(QStringLiteral("accept")));
 
-    sendButton->click();
+    stopButton->click();
     QCOMPARE(controller.status(), ConversationStatus::Idle);
     window.close();
 }
@@ -500,6 +515,7 @@ void TestMainWindow::handlesUserInputCardAndUsage() {
 
     auto* composer = window.findChild<QPlainTextEdit*>(QStringLiteral("composer"));
     auto* sendButton = window.findChild<QPushButton*>(QStringLiteral("sendButton"));
+    auto* stopButton = window.findChild<QPushButton*>(QStringLiteral("stopButton"));
     QTRY_COMPARE(controller.status(), ConversationStatus::Idle);
     composer->setPlainText(QStringLiteral("Ask a question"));
     sendButton->click();
@@ -581,7 +597,7 @@ void TestMainWindow::handlesUserInputCardAndUsage() {
     QVERIFY(!submit->isEnabled());
     QVERIFY(secret->text().isEmpty());
     QVERIFY(inputStatus->text().contains(QStringLiteral("sent"), Qt::CaseInsensitive));
-    sendButton->click();
+    stopButton->click();
     window.close();
 }
 

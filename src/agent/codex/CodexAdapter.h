@@ -55,6 +55,8 @@ class CodexAdapter final : public IAgentAdapter {
     [[nodiscard]] bool acceptNativeContext(const QString& threadId, const QString& turnId,
                                            const QJsonObject& raw);
     void sendInterruptRequest();
+    [[nodiscard]] bool sendSteerRequest(const SteerRequest& request);
+    void sendDeferredSteer();
     void emitActiveEvent(domain::AgentEventType type, const QJsonObject& payload = {},
                          const QJsonObject& raw = {});
     void warnActive(const QString& message, const QJsonObject& raw = {});
@@ -71,6 +73,7 @@ class CodexAdapter final : public IAgentAdapter {
     QString nativeThreadId_;
     QString nativeSessionId_;
     TurnRequest activeTurn_;
+    SteerRequest deferredSteer_;
     QString nativeTurnId_;
     QSet<QString> startedAgentMessages_;
     QSet<QString> completedAgentMessages_;

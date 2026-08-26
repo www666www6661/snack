@@ -169,6 +169,7 @@ void CodexAdapter::startTurn(const TurnRequest& request) {
     }
 
     activeTurn_ = request;
+    deferredSteer_ = {};
     nativeTurnId_.clear();
     startedAgentMessages_.clear();
     completedAgentMessages_.clear();
@@ -201,14 +202,15 @@ void CodexAdapter::startTurn(const TurnRequest& request) {
 bool CodexAdapter::steerTurn(const SteerRequest& request) {
     const QString message = request.message.trimmed();
     if (!connected_ || activeTurn_.turnId.isNull() || request.turnId != activeTurn_.turnId ||
-        nativeTurnId_.isEmpty() || steerRequestId_ != 0 || message.isEmpty()) {
+        steerRequestId_ != 0 || !deferredSteer_.turnId.isNull() || message.isEmpty()) {
         return false;
     }
-    const QString clientMessageId = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    steerRequestId_ = client_.sendRequest(
-        QStringLiteral("turn/steer"),
-        makeTurnSteerParameters(nativeThreadId_, nativeTurnId_, message, clientMessageId));
-    return steerRequestId_ != 0;
+    SteerRequest normalized{request.turnId, message};
+    if (nativeTurnId_.isEmpty()) {
+        deferredSteer_ = normalized;
+        return true;
+    }
+    return sendSteerRequest(normalized);
 }
 
 bool CodexAdapter::respondToApproval(const QString& requestId, domain::ApprovalDecision decision) {
@@ -587,6 +589,7 @@ void CodexAdapter::finishTurnStart(const QJsonValue& result) {
         return;
     }
     sendInterruptRequest();
+    sendDeferredSteer();
 }
 
 void CodexAdapter::handleNotification(const QString& method, const QJsonValue& params,
@@ -1107,6 +1110,25 @@ void CodexAdapter::sendInterruptRequest() {
     }
 }
 
+bool CodexAdapter::sendSteerRequest(const SteerRequest& request) {
+    const QString clientMessageId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    steerRequestId_ = client_.sendRequest(
+        QStringLiteral("turn/steer"),
+        makeTurnSteerParameters(nativeThreadId_, nativeTurnId_, request.message, clientMessageId));
+    return steerRequestId_ != 0;
+}
+
+void CodexAdapter::sendDeferredSteer() {
+    if (deferredSteer_.turnId.isNull() || nativeTurnId_.isEmpty()) {
+        return;
+    }
+    const SteerRequest request = deferredSteer_;
+    deferredSteer_ = {};
+    if (!sendSteerRequest(request)) {
+        warnActive(QStringLiteral("Failed to send deferred Codex steer message"));
+    }
+}
+
 void CodexAdapter::emitActiveEvent(domain::AgentEventType type, const QJsonObject& payload,
                                    const QJsonObject& raw) {
     if (activeTurn_.turnId.isNull()) {
@@ -1158,6 +1180,7 @@ void CodexAdapter::finishActiveTurn(domain::AgentEventType type, const QString& 
 
     const QUuid turnId = activeTurn_.turnId;
     activeTurn_ = {};
+    deferredSteer_ = {};
     nativeTurnId_.clear();
     startedAgentMessages_.clear();
     completedAgentMessages_.clear();

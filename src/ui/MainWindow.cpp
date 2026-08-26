@@ -84,6 +84,7 @@ MainWindow::MainWindow(session::SessionController* controller, app::AppSettings*
     connect(controller_, &session::SessionController::capabilitiesChanged, this,
             [this](const agent::CapabilitySet&) {
                 rebuildCapabilityControls(controller_->nextTurnSettings());
+                updateStatus(controller_->status());
             });
     connect(controller_, &session::SessionController::connectionDetailChanged, this,
             &MainWindow::updateConnectionDetail);
@@ -129,19 +130,20 @@ void MainWindow::closeEvent(QCloseEvent* event) {
 }
 
 void MainWindow::sendMessage() {
-    if (controller_->status() == domain::ConversationStatus::Running ||
-        controller_->status() == domain::ConversationStatus::WaitingApproval ||
-        controller_->status() == domain::ConversationStatus::WaitingInput) {
-        controller_->interrupt();
-        statusBar()->showMessage(tr("Stopping the current turn"), 3000);
-        return;
-    }
     QString error;
-    if (!controller_->sendMessage(composer_->toPlainText(), &error)) {
+    const bool running = controller_->status() == domain::ConversationStatus::Running;
+    const bool accepted = running ? controller_->steerMessage(composer_->toPlainText(), &error)
+                                  : controller_->sendMessage(composer_->toPlainText(), &error);
+    if (!accepted) {
         statusBar()->showMessage(error, 4000);
         return;
     }
     composer_->clear();
+}
+
+void MainWindow::stopTurn() {
+    controller_->interrupt();
+    statusBar()->showMessage(tr("Stopping the current turn"), 3000);
 }
 
 void MainWindow::updateSessionSettings() {
@@ -263,7 +265,11 @@ void MainWindow::buildUi() {
     composer_->setMaximumHeight(120);
     sendButton_ = new QPushButton(tr("Send"), composerFrame);
     sendButton_->setObjectName(QStringLiteral("sendButton"));
+    stopButton_ = new QPushButton(tr("Stop"), composerFrame);
+    stopButton_->setObjectName(QStringLiteral("stopButton"));
+    stopButton_->hide();
     composerLayout->addWidget(composer_, 1);
+    composerLayout->addWidget(stopButton_, 0, Qt::AlignBottom);
     composerLayout->addWidget(sendButton_, 0, Qt::AlignBottom);
 
     conversationLayout->addWidget(header);
@@ -304,6 +310,7 @@ void MainWindow::buildUi() {
     terminalDock->hide();
 
     connect(sendButton_, &QPushButton::clicked, this, &MainWindow::sendMessage);
+    connect(stopButton_, &QPushButton::clicked, this, &MainWindow::stopTurn);
     connect(modelCombo_, &QComboBox::currentIndexChanged, this, &MainWindow::updateSessionSettings);
     connect(effortCombo_, &QComboBox::currentIndexChanged, this,
             &MainWindow::updateSessionSettings);
@@ -970,8 +977,12 @@ void MainWindow::updateStatus(domain::ConversationStatus status) {
     const bool active = status == domain::ConversationStatus::Running ||
                         status == domain::ConversationStatus::WaitingApproval ||
                         status == domain::ConversationStatus::WaitingInput;
-    sendButton_->setEnabled(idle || active);
-    sendButton_->setText(active ? tr("Stop") : tr("Send"));
+    const bool canSteer = status == domain::ConversationStatus::Running &&
+                          controller_->capabilities().supportsSteering;
+    sendButton_->setEnabled(idle || canSteer);
+    sendButton_->setText(active ? tr("Steer") : tr("Send"));
+    stopButton_->setVisible(active);
+    stopButton_->setEnabled(active);
     if (!active) {
         for (auto iterator = approvalCards_.begin(); iterator != approvalCards_.end(); ++iterator) {
             for (QPushButton* button : iterator->buttons) {
