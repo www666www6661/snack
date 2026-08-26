@@ -7,11 +7,30 @@
     "schema/InitializeParams.json",
     "schema/InitializeResponse.json",
     "schema/ModelListParams.json",
-    "schema/ModelListResponse.json"
+    "schema/ModelListResponse.json",
+    "schema/ThreadStartParams.json",
+    "schema/ThreadStartResponse.json",
+    "schema/ThreadResumeParams.json",
+    "schema/ThreadResumeResponse.json",
+    "schema/ThreadStartedNotification.json",
+    "schema/TurnStartParams.json",
+    "schema/TurnStartResponse.json",
+    "schema/TurnStartedNotification.json",
+    "schema/TurnCompletedNotification.json",
+    "schema/ItemStartedNotification.json",
+    "schema/ItemCompletedNotification.json",
+    "schema/AgentMessageDeltaNotification.json",
+    "schema/TurnInterruptParams.json",
+    "schema/TurnInterruptResponse.json",
+    "schema/ErrorNotification.json"
   ],
   "fixtures": [
     "initialize-success.jsonl",
     "model-list-page-1.json",
-    "model-list-page-2.json"
+    "model-list-page-2.json",
+    "thread-start-success.json",
+    "turn-stream-success.jsonl",
+    "turn-failed.jsonl",
+    "turn-interrupted.jsonl"
   ]
 }

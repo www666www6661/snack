@@ -14,7 +14,8 @@ class FakeAgentAdapter final : public IAgentAdapter {
 
     [[nodiscard]] domain::AgentKind kind() const override;
     [[nodiscard]] CapabilitySet capabilities() const override;
-    void connectAgent(const QString& workingDirectory) override;
+    [[nodiscard]] AgentConnectionRequest lastConnectionRequest() const;
+    void connectAgent(const AgentConnectionRequest& request) override;
     void startTurn(const TurnRequest& request) override;
     void interruptTurn() override;
     void closeAgent() override;
@@ -31,6 +32,7 @@ class FakeAgentAdapter final : public IAgentAdapter {
     QStringList chunks_;
     qsizetype chunkIndex_{0};
     bool connected_{false};
+    AgentConnectionRequest lastConnectionRequest_;
 };
 
 } // namespace snack::agent

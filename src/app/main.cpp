@@ -96,11 +96,20 @@ int main(int argc, char* argv[]) {
     snack::domain::Conversation conversation;
     const QUuid restoredId(settingsSnapshot.lastConversationId);
     if (!restoredId.isNull()) {
-        conversation.id = restoredId;
+        QString restoreError;
+        const auto restoredConversation = eventStore.conversationById(restoredId, &restoreError);
+        if (restoredConversation.has_value() &&
+            QDir::cleanPath(restoredConversation->workingDirectory) == QDir::cleanPath(workspace)) {
+            conversation = *restoredConversation;
+        } else if (!restoreError.isEmpty()) {
+            qWarning() << restoreError;
+        }
     }
-    conversation.title = QObject::tr("Project foundation");
-    conversation.workingDirectory = workspace;
-    conversation.agentKind = snack::domain::AgentKind::Mock;
+    if (conversation.title.isEmpty()) {
+        conversation.title = QObject::tr("Project foundation");
+        conversation.workingDirectory = workspace;
+        conversation.agentKind = snack::domain::AgentKind::Mock;
+    }
     conversation.status = snack::domain::ConversationStatus::Dormant;
 
     settingsSnapshot.lastWorkspace = workspace;

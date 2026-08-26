@@ -1,0 +1,3 @@
+{"id":4,"result":{"turn":{"id":"turn-snack-failed","items":[],"status":"inProgress"}}}
+{"method":"error","params":{"threadId":"thread-snack","turnId":"turn-snack-failed","error":{"message":"Redacted provider failure"},"willRetry":false}}
+{"method":"turn/completed","params":{"threadId":"thread-snack","turn":{"id":"turn-snack-failed","items":[],"status":"failed","error":{"message":"Redacted provider failure"}}}}

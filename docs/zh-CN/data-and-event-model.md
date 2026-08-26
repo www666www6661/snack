@@ -37,6 +37,8 @@
 
 事件序号在单会话内严格递增。原生事件映射失败时写入 `RawProtocolObserved` 与解析警告，不丢弃原始内容。
 
+Codex 文本 Turn 使用 GUI `QUuid` 作为领域 `turnId`，并把 app-server 的 Turn ID 保存到事件 payload 的 `nativeTurnId`，两者不互作数据库主键。`item/agentMessage/delta` 的文本写入 `AgentMessageDelta.payload.text`；原始 JSON-RPC 通知保存在 `rawPayload`。终态只接受一次，`completed`、`interrupted`、`failed` 分别映射到对应领域事件。
+
 ## 4. 设置快照
 
 每个 Turn 保存不可变的 `TurnSettingsSnapshot`：Agent、模型 ID、推理强度、访问层级、沙箱/审批映射、工作目录、隔离修改状态和协议能力版本。运行中 UI设置只更新 `nextTurnSettings`。
@@ -67,4 +69,4 @@
 
 迁移只向前执行，每步幂等并记录开始/完成。升级前自动备份数据库。迁移失败进入只读恢复模式；不得用空数据库覆盖旧数据。
 
-M1 当前数据库 Schema 版本为 2。现有数据库存在待执行升级时，`EventStore` 会先在数据库旁创建后缀为 `.pre-migration-v<版本>-<时间>-<标识>.bak` 的 SQLite 一致性快照。全部待执行步骤位于同一事务中；任一语句或提交失败都会回滚事务，并以只读方式重新打开原数据库，所有写 API 随后安全失败。由更高版本零食创建的数据库也会在不修改文件的前提下进入只读模式。成功升级产生的安全备份会保留，供用户明确恢复，后续再纳入维护清理策略。
+当前数据库 Schema 版本为 3。会话分别持久化 `native_thread_id` 与 `native_session_id`，Codex 恢复不会用一个身份推导另一个。现有数据库存在待执行升级时，`EventStore` 会先在数据库旁创建后缀为 `.pre-migration-v<版本>-<时间>-<标识>.bak` 的 SQLite 一致性快照。全部待执行步骤位于同一事务中；任一语句或提交失败都会回滚事务，并以只读方式重新打开原数据库，所有写 API 随后安全失败。由更高版本零食创建的数据库也会在不修改文件的前提下进入只读模式。成功升级产生的安全备份会保留，供用户明确恢复，后续再纳入维护清理策略。

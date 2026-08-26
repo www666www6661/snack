@@ -16,6 +16,13 @@ class MemoryEventRepository : public snack::storage::IEventRepository {
         return true;
     }
 
+    std::optional<snack::domain::Conversation> conversationById(const QUuid& conversationId,
+                                                                QString*) const override {
+        return conversation_.id == conversationId
+                   ? std::optional<snack::domain::Conversation>(conversation_)
+                   : std::nullopt;
+    }
+
     QList<snack::domain::AgentEvent> eventsForConversation(const QUuid& conversationId,
                                                            QString*) const override {
         QList<snack::domain::AgentEvent> result;
@@ -40,6 +47,7 @@ class TestSessionController final : public QObject {
     void interruptsActiveTurn();
     void validatesStateAndNormalizesSettings();
     void followsDynamicCapabilities();
+    void persistsNativeIdentityForResume();
     void reportsPersistenceFailure();
 };
 
@@ -170,6 +178,34 @@ void TestSessionController::followsDynamicCapabilities() {
 
     adapter.capabilitiesChanged(capabilities);
     QCOMPARE(settingsSpy.count(), 1);
+}
+
+void TestSessionController::persistsNativeIdentityForResume() {
+    MemoryEventRepository repository;
+    snack::agent::FakeAgentAdapter adapter(nullptr, 1);
+    auto resumableConversation = conversation();
+    resumableConversation.nativeThreadId = QStringLiteral("existing-thread");
+    resumableConversation.nativeSessionId = QStringLiteral("existing-session");
+    snack::session::SessionController controller(resumableConversation, &adapter, &repository);
+    QSignalSpy identitySpy(&controller, &snack::session::SessionController::nativeIdentityChanged);
+
+    controller.open();
+    QCOMPARE(adapter.lastConnectionRequest().nativeThreadId, QStringLiteral("existing-thread"));
+    QCOMPARE(adapter.lastConnectionRequest().workingDirectory,
+             resumableConversation.workingDirectory);
+
+    adapter.nativeIdentityChanged(QStringLiteral("resumed-thread"),
+                                  QStringLiteral("server-session-root"));
+    QCOMPARE(identitySpy.count(), 1);
+    QCOMPARE(controller.conversation().nativeThreadId, QStringLiteral("resumed-thread"));
+    QCOMPARE(controller.conversation().nativeSessionId, QStringLiteral("server-session-root"));
+    QCOMPARE(repository.conversation_.nativeThreadId, QStringLiteral("resumed-thread"));
+    QCOMPARE(repository.conversation_.nativeSessionId, QStringLiteral("server-session-root"));
+
+    adapter.nativeIdentityChanged(QString(), QStringLiteral("invalid"));
+    adapter.nativeIdentityChanged(QStringLiteral("resumed-thread"),
+                                  QStringLiteral("server-session-root"));
+    QCOMPARE(identitySpy.count(), 1);
 }
 
 void TestSessionController::reportsPersistenceFailure() {

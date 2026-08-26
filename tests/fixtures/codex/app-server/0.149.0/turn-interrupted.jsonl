@@ -1,0 +1,3 @@
+{"id":4,"result":{"turn":{"id":"turn-snack-interrupted","items":[],"status":"inProgress"}}}
+{"id":5,"result":{}}
+{"method":"turn/completed","params":{"threadId":"thread-snack","turn":{"id":"turn-snack-interrupted","items":[],"status":"interrupted"}}}

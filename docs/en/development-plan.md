@@ -8,13 +8,13 @@ Deliver these bilingual documents, high-fidelity static designs, official capabi
 
 ## M1: skeleton and test foundation (`0.1.0-alpha.1`)
 
-Status: in progress. The first vertical slice now provides the application shell, settings and themes, single-instance IPC, tray lifecycle, window/layout restoration, versioned SQLite migration with backup/read-only recovery, the event repository, content-addressed storage, the common Agent interface, a fake streaming conversation, and Qt Test suites. A strict-warning Windows Qt 6.8.3/LLVM-MinGW build now passes 9/9 Debug tests, 30 IPC repetitions, and 84.33% first-party line coverage; this does not replace formal `clang-cl + MSVC ABI` verification. M1 acceptance still requires builds with all three release toolchains.
+Status: in progress. The first vertical slice now provides the application shell, settings and themes, single-instance IPC, tray lifecycle, window/layout restoration, versioned SQLite migration with backup/read-only recovery, the event repository, content-addressed storage, the common Agent interface, a fake streaming conversation, and Qt Test suites. A strict-warning Windows Qt 6.8.3/LLVM-MinGW build now passes 9/9 Debug tests, 30 IPC repetitions, and 84.89% first-party line coverage; this does not replace formal `clang-cl + MSVC ABI` verification. M1 acceptance still requires builds with all three release toolchains.
 
 CMake/Qt 6.8/C++20, Clang presets, Qt Test, LLVM coverage, metadata, localization, theme schema, logging, single instance, settings, mock agent, SQLite migrations, event/content interfaces, and GitHub Actions gates. Acceptance: the shell starts on all desktop platforms, a mock agent streams one turn, and UI events recover after a crash.
 
 ## M2: Codex vertical slice (`0.1.0-alpha.2`)
 
-Status: in progress. CLI discovery, injectable `QProcess` transport, JSONL framing, initialization, request ID correlation, bounded diagnostics, paginated `model/list`, model-specific capability publication, next-turn settings normalization, and versioned Codex CLI `0.149.0` schemas/fixtures are complete. Main-window adapter selection and native thread/turn behavior remain pending.
+Status: in progress. CLI discovery, injectable `QProcess` transport, JSONL framing, initialization, request correlation, bounded diagnostics, paginated `model/list`, model-specific capabilities, `thread/start`/`thread/resume`, persisted native identities, per-turn model/effort/access overrides, text `turn/start` streaming, error closure, `turn/interrupt`, and versioned Codex CLI `0.149.0` schemas/fixtures are complete. Main-window adapter selection plus approval, tool, reasoning, and plan events remain pending.
 
 App-server stdio and schema handshake; models, thread start/resume/read/list; turn start/steer/interrupt; streamed messages/tools/reasoning/plans/errors/usage/approvals; CLI detection, native IDs, capability disabling, and raw diagnostics. Acceptance includes live local Codex and complete fixture failures.
 

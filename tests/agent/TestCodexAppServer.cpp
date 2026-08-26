@@ -3,6 +3,8 @@
 #include "agent/codex/CodexCliDiscovery.h"
 #include "agent/codex/CodexModelCatalog.h"
 #include "agent/codex/CodexProtocol.h"
+#include "agent/codex/CodexThreadLifecycle.h"
+#include "agent/codex/CodexTurnLifecycle.h"
 #include "agent/process/IProcessTransport.h"
 #include "agent/process/QProcessTransport.h"
 
@@ -79,7 +81,14 @@ class TestCodexAppServer final : public QObject {
     void loadsVersionedSchemaContract();
     void parsesModelCatalogFixtures();
     void rejectsInvalidModelCatalog();
+    void parsesThreadLifecycleResponses();
+    void mapsThreadAccessLevels();
+    void mapsAndParsesTurnLifecycle();
     void adapterPublishesPaginatedCapabilities();
+    void adapterStreamsAndCompletesTurn();
+    void adapterHandlesTurnFailuresAndStaleEvents();
+    void adapterInterruptsAndDeclinesServerRequests();
+    void adapterFinishesTurnWhenProcessDisconnects();
     void adapterHandlesCatalogFailures();
     void streamsQProcessIoAndReportsStartFailure();
     void completesHandshakeFromFragmentedFixture();
@@ -349,12 +358,28 @@ void TestCodexAppServer::loadsVersionedSchemaContract() {
     QVERIFY(manifestFile.open(QIODevice::ReadOnly));
     const QJsonObject manifest = QJsonDocument::fromJson(manifestFile.readAll()).object();
     QCOMPARE(manifest.value(QStringLiteral("cliVersion")).toString(), QStringLiteral("0.149.0"));
-    QCOMPARE(manifest.value(QStringLiteral("schemas")).toArray().size(), 5);
+    QCOMPARE(manifest.value(QStringLiteral("schemas")).toArray().size(), 20);
 
-    const QStringList schemaNames = {
-        QStringLiteral("JSONRPCMessage.json"), QStringLiteral("InitializeParams.json"),
-        QStringLiteral("InitializeResponse.json"), QStringLiteral("ModelListParams.json"),
-        QStringLiteral("ModelListResponse.json")};
+    const QStringList schemaNames = {QStringLiteral("JSONRPCMessage.json"),
+                                     QStringLiteral("InitializeParams.json"),
+                                     QStringLiteral("InitializeResponse.json"),
+                                     QStringLiteral("ModelListParams.json"),
+                                     QStringLiteral("ModelListResponse.json"),
+                                     QStringLiteral("ThreadStartParams.json"),
+                                     QStringLiteral("ThreadStartResponse.json"),
+                                     QStringLiteral("ThreadResumeParams.json"),
+                                     QStringLiteral("ThreadResumeResponse.json"),
+                                     QStringLiteral("ThreadStartedNotification.json"),
+                                     QStringLiteral("TurnStartParams.json"),
+                                     QStringLiteral("TurnStartResponse.json"),
+                                     QStringLiteral("TurnStartedNotification.json"),
+                                     QStringLiteral("TurnCompletedNotification.json"),
+                                     QStringLiteral("ItemStartedNotification.json"),
+                                     QStringLiteral("ItemCompletedNotification.json"),
+                                     QStringLiteral("AgentMessageDeltaNotification.json"),
+                                     QStringLiteral("TurnInterruptParams.json"),
+                                     QStringLiteral("TurnInterruptResponse.json"),
+                                     QStringLiteral("ErrorNotification.json")};
     for (const QString& schemaName : schemaNames) {
         QFile schemaFile(fixtureRoot + QStringLiteral("/schema/") + schemaName);
         QVERIFY2(schemaFile.open(QIODevice::ReadOnly), qPrintable(schemaFile.errorString()));
@@ -389,6 +414,61 @@ static snack::agent::codex::ProtocolMessage lastRequest(const FakeProcessTranspo
 static void feedResult(FakeProcessTransport& transport, qint64 id, const QJsonObject& result) {
     const QJsonObject response{{QStringLiteral("id"), id}, {QStringLiteral("result"), result}};
     transport.feedStandardOutput(QJsonDocument(response).toJson(QJsonDocument::Compact) + '\n');
+}
+
+static void feedNotification(FakeProcessTransport& transport, const QString& method,
+                             const QJsonObject& params) {
+    const QJsonObject notification{{QStringLiteral("method"), method},
+                                   {QStringLiteral("params"), params}};
+    transport.feedStandardOutput(QJsonDocument(notification).toJson(QJsonDocument::Compact) + '\n');
+}
+
+static QJsonObject threadResult(const QString& threadId = QStringLiteral("0198-thread-snack"),
+                                const QString& sessionId = QStringLiteral("0198-session-root"),
+                                const QString& cwd = QStringLiteral("C:/workspace")) {
+    QJsonObject result = loadObjectFixture(QStringLiteral("thread-start-success.json"));
+    QJsonObject thread = result.value(QStringLiteral("thread")).toObject();
+    thread.insert(QStringLiteral("id"), threadId);
+    thread.insert(QStringLiteral("sessionId"), sessionId);
+    thread.insert(QStringLiteral("cwd"), cwd);
+    result.insert(QStringLiteral("thread"), thread);
+    return result;
+}
+
+static QJsonObject turnObject(const QString& turnId, const QString& status,
+                              const QString& errorMessage = {}) {
+    QJsonObject turn{{QStringLiteral("id"), turnId},
+                     {QStringLiteral("items"), QJsonArray{}},
+                     {QStringLiteral("status"), status}};
+    if (!errorMessage.isEmpty()) {
+        turn.insert(QStringLiteral("error"),
+                    QJsonObject{{QStringLiteral("message"), errorMessage}});
+    }
+    return turn;
+}
+
+static snack::agent::TurnRequest
+codexTurnRequest(const QUuid& turnId, const QString& message = QStringLiteral("hello")) {
+    return {.turnId = turnId,
+            .message = message,
+            .settings = {.agentKind = snack::domain::AgentKind::Codex,
+                         .modelId = QStringLiteral("gpt-5.2-codex"),
+                         .reasoningEffort = snack::domain::ReasoningEffort::High,
+                         .accessLevel = snack::domain::AccessLevel::Workspace,
+                         .workingDirectory = QStringLiteral("C:/workspace"),
+                         .capabilityVersion = QStringLiteral("codex-app-server/0.149.0")}};
+}
+
+static void connectAdapter(snack::agent::codex::CodexAdapter& adapter,
+                           FakeProcessTransport& transport) {
+    adapter.connectAgent({.workingDirectory = QStringLiteral("C:/workspace"),
+                          .settings = codexTurnRequest(QUuid::createUuid()).settings});
+    QTRY_COMPARE(transport.writes.size(), 1);
+    completeHandshake(transport);
+    QJsonObject page = loadObjectFixture(QStringLiteral("model-list-page-1.json"));
+    page.insert(QStringLiteral("nextCursor"), QJsonValue::Null);
+    feedResult(transport, lastRequest(transport).id.toInteger(), page);
+    feedResult(transport, lastRequest(transport).id.toInteger(), threadResult());
 }
 
 void TestCodexAppServer::parsesModelCatalogFixtures() {
@@ -458,6 +538,148 @@ void TestCodexAppServer::rejectsInvalidModelCatalog() {
     QVERIFY(!parseModelPage(invalidReasoning, &error).has_value());
 }
 
+void TestCodexAppServer::parsesThreadLifecycleResponses() {
+    using snack::agent::codex::parseThreadLifecycleResponse;
+    QString error;
+    const auto parsed = parseThreadLifecycleResponse(threadResult(), &error);
+    QVERIFY2(parsed.has_value(), qPrintable(error));
+    QCOMPARE(parsed->id, QStringLiteral("0198-thread-snack"));
+    QCOMPARE(parsed->sessionId, QStringLiteral("0198-session-root"));
+    QCOMPARE(parsed->workingDirectory, QStringLiteral("C:/workspace"));
+    QCOMPARE(parsed->raw.value(QStringLiteral("modelProvider")).toString(),
+             QStringLiteral("openai"));
+
+    QVERIFY(!parseThreadLifecycleResponse(QJsonArray{}, &error).has_value());
+    QVERIFY(error.contains(QStringLiteral("object")));
+    QVERIFY(!parseThreadLifecycleResponse(QJsonObject{}, &error).has_value());
+    QJsonObject missingSession = threadResult();
+    QJsonObject thread = missingSession.value(QStringLiteral("thread")).toObject();
+    thread.remove(QStringLiteral("sessionId"));
+    missingSession.insert(QStringLiteral("thread"), thread);
+    QVERIFY(!parseThreadLifecycleResponse(missingSession, &error).has_value());
+    QVERIFY(error.contains(QStringLiteral("sessionId")));
+}
+
+void TestCodexAppServer::mapsThreadAccessLevels() {
+    using snack::agent::codex::threadAccessParameters;
+    using snack::domain::AccessLevel;
+    const auto strict = threadAccessParameters(AccessLevel::Strict);
+    QCOMPARE(strict.value(QStringLiteral("approvalPolicy")).toString(),
+             QStringLiteral("untrusted"));
+    QCOMPARE(strict.value(QStringLiteral("sandbox")).toString(), QStringLiteral("read-only"));
+
+    const auto workspace = threadAccessParameters(AccessLevel::Workspace);
+    QCOMPARE(workspace.value(QStringLiteral("approvalPolicy")).toString(),
+             QStringLiteral("on-request"));
+    QCOMPARE(workspace.value(QStringLiteral("sandbox")).toString(),
+             QStringLiteral("workspace-write"));
+
+    const auto full = threadAccessParameters(AccessLevel::Full);
+    QCOMPARE(full.value(QStringLiteral("approvalPolicy")).toString(), QStringLiteral("never"));
+    QCOMPARE(full.value(QStringLiteral("sandbox")).toString(),
+             QStringLiteral("danger-full-access"));
+}
+
+void TestCodexAppServer::mapsAndParsesTurnLifecycle() {
+    using namespace snack::agent::codex;
+
+    const QUuid guiTurnId = QUuid::createUuid();
+    const auto request = codexTurnRequest(guiTurnId, QStringLiteral("stream this"));
+    const QJsonObject params = makeTurnStartParameters(QStringLiteral("thread-1"),
+                                                       QStringLiteral("C:/workspace"), request);
+    QCOMPARE(params.value(QStringLiteral("threadId")).toString(), QStringLiteral("thread-1"));
+    QCOMPARE(params.value(QStringLiteral("clientUserMessageId")).toString(),
+             guiTurnId.toString(QUuid::WithoutBraces));
+    QCOMPARE(params.value(QStringLiteral("model")).toString(), QStringLiteral("gpt-5.2-codex"));
+    QCOMPARE(params.value(QStringLiteral("effort")).toString(), QStringLiteral("high"));
+    QCOMPARE(params.value(QStringLiteral("approvalPolicy")).toString(),
+             QStringLiteral("on-request"));
+    QCOMPARE(params.value(QStringLiteral("sandboxPolicy"))
+                 .toObject()
+                 .value(QStringLiteral("type"))
+                 .toString(),
+             QStringLiteral("workspaceWrite"));
+    QCOMPARE(params.value(QStringLiteral("input"))
+                 .toArray()
+                 .at(0)
+                 .toObject()
+                 .value(QStringLiteral("text"))
+                 .toString(),
+             QStringLiteral("stream this"));
+    QCOMPARE(turnAccessParameters(snack::domain::AccessLevel::Strict)
+                 .value(QStringLiteral("sandboxPolicy"))
+                 .toObject()
+                 .value(QStringLiteral("type"))
+                 .toString(),
+             QStringLiteral("readOnly"));
+    QCOMPARE(turnAccessParameters(snack::domain::AccessLevel::Full)
+                 .value(QStringLiteral("sandboxPolicy"))
+                 .toObject()
+                 .value(QStringLiteral("type"))
+                 .toString(),
+             QStringLiteral("dangerFullAccess"));
+    QCOMPARE(makeTurnInterruptParameters(QStringLiteral("thread-1"), QStringLiteral("turn-1"))
+                 .value(QStringLiteral("turnId"))
+                 .toString(),
+             QStringLiteral("turn-1"));
+
+    QString error;
+    const auto response = parseTurnStartResponse(
+        QJsonObject{{QStringLiteral("turn"),
+                     turnObject(QStringLiteral("turn-1"), QStringLiteral("inProgress"))}},
+        &error);
+    QVERIFY2(response.has_value(), qPrintable(error));
+    QCOMPARE(response->id, QStringLiteral("turn-1"));
+    const auto completed = parseTurnNotification(
+        QJsonObject{
+            {QStringLiteral("threadId"), QStringLiteral("thread-1")},
+            {QStringLiteral("turn"), turnObject(QStringLiteral("turn-1"), QStringLiteral("failed"),
+                                                QStringLiteral("provider failed"))}},
+        &error);
+    QVERIFY2(completed.has_value(), qPrintable(error));
+    QCOMPARE(completed->turn.errorMessage, QStringLiteral("provider failed"));
+
+    const QJsonObject itemParams{
+        {QStringLiteral("threadId"), QStringLiteral("thread-1")},
+        {QStringLiteral("turnId"), QStringLiteral("turn-1")},
+        {QStringLiteral("item"),
+         QJsonObject{{QStringLiteral("id"), QStringLiteral("item-1")},
+                     {QStringLiteral("type"), QStringLiteral("agentMessage")},
+                     {QStringLiteral("text"), QStringLiteral("answer")}}}};
+    const auto item = parseItemNotification(itemParams, &error);
+    QVERIFY2(item.has_value(), qPrintable(error));
+    QCOMPARE(item->text, QStringLiteral("answer"));
+    const auto delta =
+        parseAgentMessageDelta(QJsonObject{{QStringLiteral("threadId"), QStringLiteral("thread-1")},
+                                           {QStringLiteral("turnId"), QStringLiteral("turn-1")},
+                                           {QStringLiteral("itemId"), QStringLiteral("item-1")},
+                                           {QStringLiteral("delta"), QStringLiteral("part")}},
+                               &error);
+    QVERIFY2(delta.has_value(), qPrintable(error));
+    QCOMPARE(delta->delta, QStringLiteral("part"));
+    const auto turnError = parseTurnErrorNotification(
+        QJsonObject{{QStringLiteral("threadId"), QStringLiteral("thread-1")},
+                    {QStringLiteral("turnId"), QStringLiteral("turn-1")},
+                    {QStringLiteral("error"),
+                     QJsonObject{{QStringLiteral("message"), QStringLiteral("retry")}}},
+                    {QStringLiteral("willRetry"), true}},
+        &error);
+    QVERIFY2(turnError.has_value(), qPrintable(error));
+    QVERIFY(turnError->willRetry);
+
+    QVERIFY(!parseTurnStartResponse(QJsonArray{}, &error).has_value());
+    QVERIFY(!parseTurnStartResponse(QJsonObject{}, &error).has_value());
+    QVERIFY(!parseTurnStartResponse(
+                 QJsonObject{{QStringLiteral("turn"),
+                              turnObject(QStringLiteral("turn-1"), QStringLiteral("future"))}},
+                 &error)
+                 .has_value());
+    QVERIFY(!parseTurnNotification(QJsonObject{}, &error).has_value());
+    QVERIFY(!parseItemNotification(QJsonObject{}, &error).has_value());
+    QVERIFY(!parseAgentMessageDelta(QJsonObject{}, &error).has_value());
+    QVERIFY(!parseTurnErrorNotification(QJsonObject{}, &error).has_value());
+}
+
 void TestCodexAppServer::adapterPublishesPaginatedCapabilities() {
     using namespace snack::agent::codex;
     FakeProcessTransport transport;
@@ -467,8 +689,10 @@ void TestCodexAppServer::adapterPublishesPaginatedCapabilities() {
                          &transport);
     QSignalSpy capabilitySpy(&adapter, &CodexAdapter::capabilitiesChanged);
     QSignalSpy connectionSpy(&adapter, &CodexAdapter::connectionChanged);
-    adapter.connectAgent(QStringLiteral("C:/workspace"));
-    adapter.connectAgent(QStringLiteral("C:/ignored"));
+    adapter.connectAgent({.workingDirectory = QStringLiteral("C:/workspace"),
+                          .settings = {.modelId = QStringLiteral("gpt-5.1-codex-mini"),
+                                       .accessLevel = snack::domain::AccessLevel::Workspace}});
+    adapter.connectAgent({.workingDirectory = QStringLiteral("C:/ignored")});
     QTRY_COMPARE(transport.writes.size(), 1);
     QCOMPARE(transport.launchSpec.workingDirectory, QStringLiteral("C:/workspace"));
 
@@ -485,8 +709,16 @@ void TestCodexAppServer::adapterPublishesPaginatedCapabilities() {
     const qint64 secondId = lastRequest(transport).id.toInteger();
     feedResult(transport, secondId, loadObjectFixture(QStringLiteral("model-list-page-2.json")));
     QCOMPARE(capabilitySpy.count(), 1);
-    QCOMPARE(connectionSpy.count(), 1);
-    QVERIFY(connectionSpy.constFirst().constFirst().toBool());
+    QCOMPARE(connectionSpy.count(), 0);
+    QCOMPARE(lastRequest(transport).method, QStringLiteral("thread/start"));
+    const QJsonObject startParams = lastRequest(transport).params.toObject();
+    QCOMPARE(startParams.value(QStringLiteral("cwd")).toString(), QStringLiteral("C:/workspace"));
+    QCOMPARE(startParams.value(QStringLiteral("model")).toString(),
+             QStringLiteral("gpt-5.1-codex-mini"));
+    QCOMPARE(startParams.value(QStringLiteral("approvalPolicy")).toString(),
+             QStringLiteral("on-request"));
+    QCOMPARE(startParams.value(QStringLiteral("sandbox")).toString(),
+             QStringLiteral("workspace-write"));
     const auto capabilities = adapter.capabilities();
     QCOMPARE(capabilities.models,
              QStringList({QStringLiteral("gpt-5.2-codex"), QStringLiteral("gpt-5.1-codex-mini")}));
@@ -501,22 +733,20 @@ void TestCodexAppServer::adapterPublishesPaginatedCapabilities() {
                snack::domain::ReasoningEffort::ExtraHigh, snack::domain::ReasoningEffort::Maximum,
                snack::domain::ReasoningEffort::Ultra}));
 
-    QSignalSpy eventSpy(&adapter, &CodexAdapter::eventReceived);
-    QSignalSpy finishedSpy(&adapter, &CodexAdapter::turnFinished);
-    const QUuid turnId = QUuid::createUuid();
-    adapter.startTurn({.turnId = turnId, .message = QStringLiteral("not implemented")});
-    QCOMPARE(eventSpy.count(), 1);
-    QCOMPARE(eventSpy.constFirst().constFirst().value<snack::domain::AgentEvent>().type,
-             snack::domain::AgentEventType::TurnFailed);
-    QCOMPARE(finishedSpy.count(), 1);
-    QCOMPARE(finishedSpy.constFirst().constFirst().toUuid(), turnId);
+    QSignalSpy identitySpy(&adapter, &CodexAdapter::nativeIdentityChanged);
+    feedResult(transport, lastRequest(transport).id.toInteger(), threadResult());
+    QCOMPARE(identitySpy.count(), 1);
+    QCOMPARE(identitySpy.constFirst().at(0).toString(), QStringLiteral("0198-thread-snack"));
+    QCOMPARE(identitySpy.constFirst().at(1).toString(), QStringLiteral("0198-session-root"));
+    QCOMPARE(connectionSpy.count(), 1);
+    QVERIFY(connectionSpy.constFirst().constFirst().toBool());
 
     adapter.closeAgent();
     QCOMPARE(connectionSpy.count(), 2);
     QVERIFY(!connectionSpy.constLast().constFirst().toBool());
 
     const qsizetype writesBeforeReconnect = transport.writes.size();
-    adapter.connectAgent(QStringLiteral("C:/second-workspace"));
+    adapter.connectAgent({.workingDirectory = QStringLiteral("C:/second-workspace")});
     QTRY_COMPARE(transport.writes.size(), writesBeforeReconnect + 1);
     QCOMPARE(transport.launchSpec.workingDirectory, QStringLiteral("C:/second-workspace"));
     completeHandshake(transport);
@@ -524,9 +754,271 @@ void TestCodexAppServer::adapterPublishesPaginatedCapabilities() {
     singlePage.insert(QStringLiteral("nextCursor"), QJsonValue::Null);
     feedResult(transport, lastRequest(transport).id.toInteger(), singlePage);
     QCOMPARE(capabilitySpy.count(), 2);
+    QCOMPARE(lastRequest(transport).method, QStringLiteral("thread/resume"));
+    QCOMPARE(lastRequest(transport).params.toObject().value(QStringLiteral("threadId")).toString(),
+             QStringLiteral("0198-thread-snack"));
+    feedResult(transport, lastRequest(transport).id.toInteger(),
+               threadResult(QStringLiteral("0198-thread-snack"),
+                            QStringLiteral("0198-session-root"),
+                            QStringLiteral("C:/second-workspace")));
     QCOMPARE(connectionSpy.count(), 3);
     QVERIFY(connectionSpy.constLast().constFirst().toBool());
     adapter.closeAgent();
+}
+
+void TestCodexAppServer::adapterStreamsAndCompletesTurn() {
+    using namespace snack::agent::codex;
+    using snack::domain::AgentEvent;
+    using snack::domain::AgentEventType;
+
+    FakeProcessTransport transport;
+    CodexAdapter adapter({.status = CliStatus::Available,
+                          .executablePath = QStringLiteral("codex"),
+                          .version = QStringLiteral("0.149.0")},
+                         &transport);
+    connectAdapter(adapter, transport);
+    QVERIFY(adapter.capabilities().supportsInterrupt);
+
+    QSignalSpy eventSpy(&adapter, &CodexAdapter::eventReceived);
+    QSignalSpy finishedSpy(&adapter, &CodexAdapter::turnFinished);
+    const QUuid guiTurnId = QUuid::createUuid();
+    adapter.startTurn(codexTurnRequest(guiTurnId, QStringLiteral("Say hello")));
+    const auto startRequest = lastRequest(transport);
+    QCOMPARE(startRequest.method, QStringLiteral("turn/start"));
+    const QJsonObject startParams = startRequest.params.toObject();
+    QCOMPARE(startParams.value(QStringLiteral("threadId")).toString(),
+             QStringLiteral("0198-thread-snack"));
+    QCOMPARE(startParams.value(QStringLiteral("cwd")).toString(), QStringLiteral("C:/workspace"));
+    QCOMPARE(startParams.value(QStringLiteral("effort")).toString(), QStringLiteral("high"));
+
+    const QString nativeTurnId = QStringLiteral("turn-stream-1");
+    feedResult(transport, startRequest.id.toInteger(),
+               QJsonObject{{QStringLiteral("turn"),
+                            turnObject(nativeTurnId, QStringLiteral("inProgress"))}});
+    feedNotification(
+        transport, QStringLiteral("turn/started"),
+        {{QStringLiteral("threadId"), QStringLiteral("0198-thread-snack")},
+         {QStringLiteral("turn"), turnObject(nativeTurnId, QStringLiteral("inProgress"))}});
+    feedNotification(transport, QStringLiteral("item/started"),
+                     {{QStringLiteral("threadId"), QStringLiteral("0198-thread-snack")},
+                      {QStringLiteral("turnId"), nativeTurnId},
+                      {QStringLiteral("startedAtMs"), 1},
+                      {QStringLiteral("item"),
+                       QJsonObject{{QStringLiteral("id"), QStringLiteral("message-1")},
+                                   {QStringLiteral("type"), QStringLiteral("agentMessage")},
+                                   {QStringLiteral("text"), QString()}}}});
+    for (const QString& text : {QStringLiteral("Hel"), QStringLiteral("lo")}) {
+        feedNotification(transport, QStringLiteral("item/agentMessage/delta"),
+                         {{QStringLiteral("threadId"), QStringLiteral("0198-thread-snack")},
+                          {QStringLiteral("turnId"), nativeTurnId},
+                          {QStringLiteral("itemId"), QStringLiteral("message-1")},
+                          {QStringLiteral("delta"), text}});
+    }
+    feedNotification(transport, QStringLiteral("item/completed"),
+                     {{QStringLiteral("threadId"), QStringLiteral("0198-thread-snack")},
+                      {QStringLiteral("turnId"), nativeTurnId},
+                      {QStringLiteral("completedAtMs"), 2},
+                      {QStringLiteral("item"),
+                       QJsonObject{{QStringLiteral("id"), QStringLiteral("message-1")},
+                                   {QStringLiteral("type"), QStringLiteral("agentMessage")},
+                                   {QStringLiteral("text"), QStringLiteral("Hello")}}}});
+    feedNotification(
+        transport, QStringLiteral("turn/completed"),
+        {{QStringLiteral("threadId"), QStringLiteral("0198-thread-snack")},
+         {QStringLiteral("turn"), turnObject(nativeTurnId, QStringLiteral("completed"))}});
+
+    const QList<AgentEventType> expected = {
+        AgentEventType::TurnStarted,          AgentEventType::AgentMessageStart,
+        AgentEventType::AgentMessageDelta,    AgentEventType::AgentMessageDelta,
+        AgentEventType::AgentMessageComplete, AgentEventType::TurnCompleted};
+    QCOMPARE(eventSpy.count(), expected.size());
+    for (qsizetype index = 0; index < expected.size(); ++index) {
+        const AgentEvent event = eventSpy.at(index).constFirst().value<AgentEvent>();
+        QCOMPARE(event.turnId, guiTurnId);
+        QCOMPARE(event.type, expected.at(index));
+        QVERIFY(!event.rawPayload.isEmpty());
+    }
+    QCOMPARE(eventSpy.at(2)
+                 .constFirst()
+                 .value<AgentEvent>()
+                 .payload.value(QStringLiteral("text"))
+                 .toString(),
+             QStringLiteral("Hel"));
+    QCOMPARE(finishedSpy.count(), 1);
+    QCOMPARE(finishedSpy.constFirst().constFirst().toUuid(), guiTurnId);
+    QVERIFY(!finishedSpy.constFirst().at(1).toBool());
+
+    feedNotification(
+        transport, QStringLiteral("turn/completed"),
+        {{QStringLiteral("threadId"), QStringLiteral("0198-thread-snack")},
+         {QStringLiteral("turn"), turnObject(nativeTurnId, QStringLiteral("completed"))}});
+    QCOMPARE(eventSpy.count(), expected.size());
+    QCOMPARE(finishedSpy.count(), 1);
+    adapter.closeAgent();
+}
+
+void TestCodexAppServer::adapterHandlesTurnFailuresAndStaleEvents() {
+    using namespace snack::agent::codex;
+    using snack::domain::AgentEvent;
+    using snack::domain::AgentEventType;
+
+    FakeProcessTransport transport;
+    CodexAdapter adapter({.status = CliStatus::Available,
+                          .executablePath = QStringLiteral("codex"),
+                          .version = QStringLiteral("0.149.0")},
+                         &transport);
+    connectAdapter(adapter, transport);
+    QSignalSpy eventSpy(&adapter, &CodexAdapter::eventReceived);
+    QSignalSpy finishedSpy(&adapter, &CodexAdapter::turnFinished);
+
+    const QUuid failedRequestId = QUuid::createUuid();
+    adapter.startTurn(codexTurnRequest(failedRequestId));
+    const qint64 requestId = lastRequest(transport).id.toInteger();
+    transport.feedStandardOutput(
+        (QStringLiteral(R"({"id":%1,"error":{"code":429,"message":"rate limited"}})")
+             .arg(requestId) +
+         QLatin1Char('\n'))
+            .toUtf8());
+    QCOMPARE(eventSpy.count(), 1);
+    QCOMPARE(eventSpy.constFirst().constFirst().value<AgentEvent>().type,
+             AgentEventType::TurnFailed);
+    QCOMPARE(finishedSpy.count(), 1);
+
+    eventSpy.clear();
+    finishedSpy.clear();
+    const QUuid retryTurnId = QUuid::createUuid();
+    adapter.startTurn(codexTurnRequest(retryTurnId));
+    const auto retryRequest = lastRequest(transport);
+    const QString nativeTurnId = QStringLiteral("turn-retry-1");
+    feedResult(transport, retryRequest.id.toInteger(),
+               QJsonObject{{QStringLiteral("turn"),
+                            turnObject(nativeTurnId, QStringLiteral("inProgress"))}});
+    feedNotification(
+        transport, QStringLiteral("turn/started"),
+        {{QStringLiteral("threadId"), QStringLiteral("wrong-thread")},
+         {QStringLiteral("turn"), turnObject(nativeTurnId, QStringLiteral("inProgress"))}});
+    feedNotification(transport, QStringLiteral("turn/started"),
+                     {{QStringLiteral("threadId"), QStringLiteral("0198-thread-snack")},
+                      {QStringLiteral("turn"),
+                       turnObject(QStringLiteral("wrong-turn"), QStringLiteral("inProgress"))}});
+    feedNotification(transport, QStringLiteral("error"),
+                     {{QStringLiteral("threadId"), QStringLiteral("0198-thread-snack")},
+                      {QStringLiteral("turnId"), nativeTurnId},
+                      {QStringLiteral("error"),
+                       QJsonObject{{QStringLiteral("message"), QStringLiteral("retrying")}}},
+                      {QStringLiteral("willRetry"), true}});
+    QCOMPARE(eventSpy.count(), 3);
+    for (const auto& arguments : eventSpy) {
+        QCOMPARE(arguments.constFirst().value<AgentEvent>().type, AgentEventType::WarningRaised);
+    }
+    feedNotification(transport, QStringLiteral("error"),
+                     {{QStringLiteral("threadId"), QStringLiteral("0198-thread-snack")},
+                      {QStringLiteral("turnId"), nativeTurnId},
+                      {QStringLiteral("error"), QJsonObject{{QStringLiteral("message"),
+                                                             QStringLiteral("provider stopped")}}},
+                      {QStringLiteral("willRetry"), false}});
+    QCOMPARE(eventSpy.count(), 4);
+    QCOMPARE(eventSpy.constLast().constFirst().value<AgentEvent>().type,
+             AgentEventType::TurnFailed);
+    QCOMPARE(finishedSpy.count(), 1);
+    QCOMPARE(finishedSpy.constFirst().constFirst().toUuid(), retryTurnId);
+    adapter.closeAgent();
+}
+
+void TestCodexAppServer::adapterInterruptsAndDeclinesServerRequests() {
+    using namespace snack::agent::codex;
+    using snack::domain::AgentEvent;
+    using snack::domain::AgentEventType;
+
+    FakeProcessTransport transport;
+    CodexAdapter adapter({.status = CliStatus::Available,
+                          .executablePath = QStringLiteral("codex"),
+                          .version = QStringLiteral("0.149.0")},
+                         &transport);
+    connectAdapter(adapter, transport);
+    QSignalSpy eventSpy(&adapter, &CodexAdapter::eventReceived);
+    QSignalSpy finishedSpy(&adapter, &CodexAdapter::turnFinished);
+
+    const QUuid guiTurnId = QUuid::createUuid();
+    adapter.startTurn(codexTurnRequest(guiTurnId));
+    const auto startRequest = lastRequest(transport);
+    const qsizetype writesBeforeInterrupt = transport.writes.size();
+    adapter.interruptTurn();
+    adapter.interruptTurn();
+    QCOMPARE(transport.writes.size(), writesBeforeInterrupt);
+
+    const QString nativeTurnId = QStringLiteral("turn-interrupt-1");
+    feedResult(transport, startRequest.id.toInteger(),
+               QJsonObject{{QStringLiteral("turn"),
+                            turnObject(nativeTurnId, QStringLiteral("inProgress"))}});
+    const auto interruptRequest = lastRequest(transport);
+    QCOMPARE(interruptRequest.method, QStringLiteral("turn/interrupt"));
+    QCOMPARE(interruptRequest.params.toObject().value(QStringLiteral("turnId")).toString(),
+             nativeTurnId);
+    const qsizetype writesWithInterrupt = transport.writes.size();
+    adapter.interruptTurn();
+    QCOMPARE(transport.writes.size(), writesWithInterrupt);
+
+    transport.feedStandardOutput(
+        R"({"method":"approval/request","id":"approval-1","params":{"kind":"command"}})"
+        "\n");
+    const auto unsupportedResponse = parseMessage(transport.writes.constLast().trimmed());
+    QCOMPARE(unsupportedResponse.kind, MessageKind::Response);
+    QCOMPARE(unsupportedResponse.id.toString(), QStringLiteral("approval-1"));
+    QCOMPARE(unsupportedResponse.error.value(QStringLiteral("code")).toInt(), -32601);
+    QCOMPARE(eventSpy.count(), 1);
+    QCOMPARE(eventSpy.constFirst().constFirst().value<AgentEvent>().type,
+             AgentEventType::WarningRaised);
+
+    feedResult(transport, interruptRequest.id.toInteger(), {});
+    QCOMPARE(finishedSpy.count(), 0);
+    feedNotification(
+        transport, QStringLiteral("turn/started"),
+        {{QStringLiteral("threadId"), QStringLiteral("0198-thread-snack")},
+         {QStringLiteral("turn"), turnObject(nativeTurnId, QStringLiteral("inProgress"))}});
+    QCOMPARE(transport.writes.size(), writesWithInterrupt + 1);
+    feedNotification(
+        transport, QStringLiteral("turn/completed"),
+        {{QStringLiteral("threadId"), QStringLiteral("0198-thread-snack")},
+         {QStringLiteral("turn"), turnObject(nativeTurnId, QStringLiteral("interrupted"))}});
+    QCOMPARE(finishedSpy.count(), 1);
+    QVERIFY(finishedSpy.constFirst().at(1).toBool());
+    QCOMPARE(eventSpy.constLast().constFirst().value<AgentEvent>().type,
+             AgentEventType::TurnInterrupted);
+    const qsizetype writesAfterFinish = transport.writes.size();
+    adapter.interruptTurn();
+    QCOMPARE(transport.writes.size(), writesAfterFinish);
+    adapter.closeAgent();
+}
+
+void TestCodexAppServer::adapterFinishesTurnWhenProcessDisconnects() {
+    using namespace snack::agent::codex;
+    using snack::domain::AgentEvent;
+    using snack::domain::AgentEventType;
+
+    FakeProcessTransport transport;
+    CodexAdapter adapter({.status = CliStatus::Available,
+                          .executablePath = QStringLiteral("codex"),
+                          .version = QStringLiteral("0.149.0")},
+                         &transport);
+    QSignalSpy connectionSpy(&adapter, &CodexAdapter::connectionChanged);
+    connectAdapter(adapter, transport);
+    QSignalSpy eventSpy(&adapter, &CodexAdapter::eventReceived);
+    QSignalSpy finishedSpy(&adapter, &CodexAdapter::turnFinished);
+
+    const QUuid guiTurnId = QUuid::createUuid();
+    adapter.startTurn(codexTurnRequest(guiTurnId));
+    feedResult(transport, lastRequest(transport).id.toInteger(),
+               QJsonObject{{QStringLiteral("turn"), turnObject(QStringLiteral("turn-disconnect-1"),
+                                                               QStringLiteral("inProgress"))}});
+    transport.finish(9, snack::agent::process::ExitStatus::Crashed);
+    QCOMPARE(eventSpy.count(), 1);
+    QCOMPARE(eventSpy.constFirst().constFirst().value<AgentEvent>().type,
+             AgentEventType::TurnFailed);
+    QCOMPARE(finishedSpy.count(), 1);
+    QCOMPARE(finishedSpy.constFirst().constFirst().toUuid(), guiTurnId);
+    QCOMPARE(connectionSpy.count(), 2);
+    QVERIFY(!connectionSpy.constLast().constFirst().toBool());
 }
 
 void TestCodexAppServer::adapterHandlesCatalogFailures() {
@@ -536,17 +1028,27 @@ void TestCodexAppServer::adapterHandlesCatalogFailures() {
         {.status = CliStatus::NotFound, .detail = QStringLiteral("Codex was not found")},
         &unavailableTransport);
     QSignalSpy unavailableSpy(&unavailable, &CodexAdapter::connectionChanged);
-    unavailable.connectAgent(QStringLiteral("/workspace"));
+    unavailable.connectAgent({.workingDirectory = QStringLiteral("/workspace")});
     QTRY_COMPARE(unavailableSpy.count(), 1);
     QVERIFY(!unavailableSpy.constFirst().constFirst().toBool());
     QCOMPARE(unavailableTransport.writes.size(), 0);
+
+    FakeProcessTransport missingCwdTransport;
+    CodexAdapter missingCwd(
+        {.status = CliStatus::Available, .executablePath = QStringLiteral("codex")},
+        &missingCwdTransport);
+    QSignalSpy missingCwdSpy(&missingCwd, &CodexAdapter::connectionChanged);
+    missingCwd.connectAgent({});
+    QTRY_COMPARE(missingCwdSpy.count(), 1);
+    QVERIFY(missingCwdSpy.constFirst().at(1).toString().contains(QStringLiteral("directory")));
+    QCOMPARE(missingCwdTransport.writes.size(), 0);
 
     FakeProcessTransport errorTransport;
     CodexAdapter requestError(
         {.status = CliStatus::Available, .executablePath = QStringLiteral("codex")},
         &errorTransport);
     QSignalSpy requestErrorSpy(&requestError, &CodexAdapter::connectionChanged);
-    requestError.connectAgent(QStringLiteral("/workspace"));
+    requestError.connectAgent({.workingDirectory = QStringLiteral("/workspace")});
     QTRY_COMPARE(errorTransport.writes.size(), 1);
     completeHandshake(errorTransport);
     const qint64 requestId = lastRequest(errorTransport).id.toInteger();
@@ -562,7 +1064,7 @@ void TestCodexAppServer::adapterHandlesCatalogFailures() {
     CodexAdapter empty({.status = CliStatus::Available, .executablePath = QStringLiteral("codex")},
                        &emptyTransport);
     QSignalSpy emptySpy(&empty, &CodexAdapter::connectionChanged);
-    empty.connectAgent(QStringLiteral("/workspace"));
+    empty.connectAgent({.workingDirectory = QStringLiteral("/workspace")});
     QTRY_COMPARE(emptyTransport.writes.size(), 1);
     completeHandshake(emptyTransport);
     feedResult(emptyTransport, lastRequest(emptyTransport).id.toInteger(),
@@ -576,7 +1078,7 @@ void TestCodexAppServer::adapterHandlesCatalogFailures() {
         {.status = CliStatus::Available, .executablePath = QStringLiteral("codex")},
         &cursorTransport);
     QSignalSpy cursorSpy(&repeatedCursor, &CodexAdapter::connectionChanged);
-    repeatedCursor.connectAgent(QStringLiteral("/workspace"));
+    repeatedCursor.connectAgent({.workingDirectory = QStringLiteral("/workspace")});
     QTRY_COMPARE(cursorTransport.writes.size(), 1);
     completeHandshake(cursorTransport);
     const QJsonObject firstPage = loadObjectFixture(QStringLiteral("model-list-page-1.json"));
@@ -584,6 +1086,58 @@ void TestCodexAppServer::adapterHandlesCatalogFailures() {
     feedResult(cursorTransport, lastRequest(cursorTransport).id.toInteger(), firstPage);
     QCOMPARE(cursorSpy.count(), 1);
     QVERIFY(cursorSpy.constFirst().at(1).toString().contains(QStringLiteral("repeated cursor")));
+
+    FakeProcessTransport threadTransport;
+    CodexAdapter threadError(
+        {.status = CliStatus::Available, .executablePath = QStringLiteral("codex")},
+        &threadTransport);
+    QSignalSpy threadErrorSpy(&threadError, &CodexAdapter::connectionChanged);
+    threadError.connectAgent({.workingDirectory = QStringLiteral("/workspace")});
+    QTRY_COMPARE(threadTransport.writes.size(), 1);
+    completeHandshake(threadTransport);
+    QJsonObject singlePage = firstPage;
+    singlePage.insert(QStringLiteral("nextCursor"), QJsonValue::Null);
+    feedResult(threadTransport, lastRequest(threadTransport).id.toInteger(), singlePage);
+    QCOMPARE(lastRequest(threadTransport).method, QStringLiteral("thread/start"));
+    const qint64 threadRequestId = lastRequest(threadTransport).id.toInteger();
+    threadTransport.feedStandardOutput(
+        (QStringLiteral(R"({"id":%1,"error":{"code":-32002,"message":"thread denied"}})")
+             .arg(threadRequestId) +
+         QLatin1Char('\n'))
+            .toUtf8());
+    QCOMPARE(threadErrorSpy.count(), 1);
+    QVERIFY(threadErrorSpy.constFirst().at(1).toString().contains(QStringLiteral("thread denied")));
+
+    FakeProcessTransport mismatchTransport;
+    CodexAdapter mismatch(
+        {.status = CliStatus::Available, .executablePath = QStringLiteral("codex")},
+        &mismatchTransport);
+    QSignalSpy mismatchSpy(&mismatch, &CodexAdapter::connectionChanged);
+    mismatch.connectAgent({.workingDirectory = QStringLiteral("/workspace"),
+                           .nativeThreadId = QStringLiteral("expected-thread")});
+    QTRY_COMPARE(mismatchTransport.writes.size(), 1);
+    completeHandshake(mismatchTransport);
+    feedResult(mismatchTransport, lastRequest(mismatchTransport).id.toInteger(), singlePage);
+    QCOMPARE(lastRequest(mismatchTransport).method, QStringLiteral("thread/resume"));
+    feedResult(mismatchTransport, lastRequest(mismatchTransport).id.toInteger(),
+               threadResult(QStringLiteral("different-thread")));
+    QCOMPARE(mismatchSpy.count(), 1);
+    QVERIFY(mismatchSpy.constFirst().at(1).toString().contains(QStringLiteral("unexpected")));
+
+    FakeProcessTransport cwdTransport;
+    CodexAdapter cwdMismatch(
+        {.status = CliStatus::Available, .executablePath = QStringLiteral("codex")}, &cwdTransport);
+    QSignalSpy cwdSpy(&cwdMismatch, &CodexAdapter::connectionChanged);
+    cwdMismatch.connectAgent({.workingDirectory = QStringLiteral("/expected"),
+                              .nativeThreadId = QStringLiteral("expected-thread")});
+    QTRY_COMPARE(cwdTransport.writes.size(), 1);
+    completeHandshake(cwdTransport);
+    feedResult(cwdTransport, lastRequest(cwdTransport).id.toInteger(), singlePage);
+    feedResult(cwdTransport, lastRequest(cwdTransport).id.toInteger(),
+               threadResult(QStringLiteral("expected-thread"), QStringLiteral("session-root"),
+                            QStringLiteral("/different")));
+    QCOMPARE(cwdSpy.count(), 1);
+    QVERIFY(cwdSpy.constFirst().at(1).toString().contains(QStringLiteral("directory")));
 }
 
 void TestCodexAppServer::completesHandshakeFromFragmentedFixture() {
@@ -792,6 +1346,21 @@ void TestCodexAppServer::liveLocalHandshakeWhenEnabled() {
     const auto page = parseModelPage(responseSpy.constFirst().at(2).toJsonValue(), &parseError);
     QVERIFY2(page.has_value(), qPrintable(parseError));
     QVERIFY(!page->models.isEmpty());
+    responseSpy.clear();
+    const qint64 threadRequestId =
+        client.sendRequest(QStringLiteral("thread/start"),
+                           {{QStringLiteral("cwd"), QDir::currentPath()},
+                            {QStringLiteral("model"), page->models.constFirst().id},
+                            {QStringLiteral("approvalPolicy"), QStringLiteral("untrusted")},
+                            {QStringLiteral("sandbox"), QStringLiteral("read-only")},
+                            {QStringLiteral("ephemeral"), true}});
+    QVERIFY(threadRequestId > requestId);
+    QTRY_COMPARE_WITH_TIMEOUT(responseSpy.count(), 1, 5000);
+    const auto thread =
+        parseThreadLifecycleResponse(responseSpy.constFirst().at(2).toJsonValue(), &parseError);
+    QVERIFY2(thread.has_value(), qPrintable(parseError));
+    QVERIFY(!thread->id.isEmpty());
+    QVERIFY(!thread->sessionId.isEmpty());
     client.stop();
     QTRY_COMPARE_WITH_TIMEOUT(client.state(), ConnectionState::Stopped, 3000);
 }

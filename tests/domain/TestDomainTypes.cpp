@@ -8,6 +8,7 @@ class TestDomainTypes final : public QObject {
   private slots:
     void settingsSnapshotRoundTrips();
     void reasoningEffortNamesRoundTrip();
+    void conversationStatusNamesRoundTrip();
     void unknownValuesUseSafeDefaults();
     void eventTypeNamesRoundTrip();
 };
@@ -33,6 +34,18 @@ void TestDomainTypes::reasoningEffortNamesRoundTrip() {
     }
     QCOMPARE(snack::domain::enumName(ExtraHigh), QStringLiteral("xhigh"));
     QCOMPARE(snack::domain::reasoningEffortFromString(QStringLiteral("extra-high")), ExtraHigh);
+}
+
+void TestDomainTypes::conversationStatusNamesRoundTrip() {
+    using enum snack::domain::ConversationStatus;
+    const QList<snack::domain::ConversationStatus> values = {
+        Dormant,      Connecting,   Idle,   Running, WaitingApproval,
+        WaitingInput, Disconnected, Failed, Closed};
+    for (const auto value : values) {
+        QCOMPARE(snack::domain::conversationStatusFromString(snack::domain::enumName(value)),
+                 value);
+    }
+    QCOMPARE(snack::domain::conversationStatusFromString(QStringLiteral("future")), Dormant);
 }
 
 void TestDomainTypes::unknownValuesUseSafeDefaults() {

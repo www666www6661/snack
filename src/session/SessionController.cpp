@@ -50,12 +50,30 @@ SessionController::SessionController(domain::Conversation conversation,
             &SessionController::handleAdapterEvent);
     connect(adapter_, &agent::IAgentAdapter::capabilitiesChanged, this,
             &SessionController::handleCapabilitiesChanged);
+    connect(adapter_, &agent::IAgentAdapter::nativeIdentityChanged, this,
+            &SessionController::handleNativeIdentityChanged);
     connect(adapter_, &agent::IAgentAdapter::turnFinished, this, [this](const QUuid& turnId, bool) {
         if (turnId == activeTurnId_) {
             activeTurnId_ = QUuid{};
             setStatus(domain::ConversationStatus::Idle);
         }
     });
+}
+
+void SessionController::handleNativeIdentityChanged(const QString& threadId,
+                                                    const QString& sessionId) {
+    if (threadId.isEmpty() || sessionId.isEmpty() ||
+        (conversation_.nativeThreadId == threadId && conversation_.nativeSessionId == sessionId)) {
+        return;
+    }
+    conversation_.nativeThreadId = threadId;
+    conversation_.nativeSessionId = sessionId;
+    QString error;
+    if (!repository_->saveConversation(conversation_, &error)) {
+        emit persistenceError(error);
+        return;
+    }
+    emit nativeIdentityChanged(threadId, sessionId);
 }
 
 void SessionController::handleCapabilitiesChanged(const agent::CapabilitySet& capabilities) {
@@ -133,7 +151,9 @@ void SessionController::open() {
         return;
     }
     setStatus(domain::ConversationStatus::Connecting);
-    adapter_->connectAgent(conversation_.workingDirectory);
+    adapter_->connectAgent({.workingDirectory = conversation_.workingDirectory,
+                            .nativeThreadId = conversation_.nativeThreadId,
+                            .settings = nextTurnSettings_});
 }
 
 bool SessionController::sendMessage(const QString& message, QString* error) {

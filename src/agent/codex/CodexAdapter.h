@@ -4,7 +4,10 @@
 #include "agent/codex/CodexAppServerClient.h"
 #include "agent/codex/CodexCliDiscovery.h"
 #include "agent/codex/CodexModelCatalog.h"
+#include "agent/codex/CodexThreadLifecycle.h"
+#include "agent/codex/CodexTurnLifecycle.h"
 
+#include <QHash>
 #include <QSet>
 
 namespace snack::agent::codex {
@@ -18,7 +21,7 @@ class CodexAdapter final : public IAgentAdapter {
 
     [[nodiscard]] domain::AgentKind kind() const override;
     [[nodiscard]] CapabilitySet capabilities() const override;
-    void connectAgent(const QString& workingDirectory) override;
+    void connectAgent(const AgentConnectionRequest& request) override;
     void startTurn(const TurnRequest& request) override;
     void interruptTurn() override;
     void closeAgent() override;
@@ -29,6 +32,21 @@ class CodexAdapter final : public IAgentAdapter {
     void handleRequestFailure(qint64 id, const QString& method, int code, const QString& message);
     void appendModels(const QList<CodexModelInfo>& models);
     void finishModelDiscovery();
+    void requestThreadLifecycle();
+    void finishThreadLifecycle(const QJsonValue& result);
+    void finishTurnStart(const QJsonValue& result);
+    void handleNotification(const QString& method, const QJsonValue& params,
+                            const QJsonObject& raw);
+    void handleServerRequest(const QJsonValue& id, const QString& method, const QJsonValue& params,
+                             const QJsonObject& raw);
+    [[nodiscard]] bool acceptNativeContext(const QString& threadId, const QString& turnId,
+                                           const QJsonObject& raw);
+    void sendInterruptRequest();
+    void emitActiveEvent(domain::AgentEventType type, const QJsonObject& payload = {},
+                         const QJsonObject& raw = {});
+    void warnActive(const QString& message, const QJsonObject& raw = {});
+    void finishActiveTurn(domain::AgentEventType type, const QString& message,
+                          const QString& nativeStatus, const QJsonObject& raw, bool interrupted);
     void failConnection(const QString& detail);
 
     CliInstallation installation_;
@@ -36,8 +54,22 @@ class CodexAdapter final : public IAgentAdapter {
     CapabilitySet capabilities_;
     QList<CodexModelInfo> models_;
     QSet<QString> requestedCursors_;
-    QString workingDirectory_;
+    AgentConnectionRequest connectionRequest_;
+    QString nativeThreadId_;
+    QString nativeSessionId_;
+    TurnRequest activeTurn_;
+    QString nativeTurnId_;
+    QSet<QString> startedAgentMessages_;
+    QSet<QString> completedAgentMessages_;
+    QHash<QString, QString> streamedAgentText_;
+    QString threadRequestMethod_;
     qint64 modelRequestId_{0};
+    qint64 threadRequestId_{0};
+    qint64 turnRequestId_{0};
+    qint64 interruptRequestId_{0};
+    bool turnStartedEmitted_{false};
+    bool interruptRequested_{false};
+    bool interruptSent_{false};
     bool connecting_{false};
     bool connected_{false};
     bool closing_{false};

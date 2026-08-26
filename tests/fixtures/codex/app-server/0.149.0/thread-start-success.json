@@ -1,0 +1,17 @@
+{
+  "thread": {
+    "cliVersion": "0.149.0",
+    "createdAt": 1787673600,
+    "cwd": "C:/workspace",
+    "ephemeral": false,
+    "id": "0198-thread-snack",
+    "modelProvider": "openai",
+    "preview": "",
+    "projectId": null,
+    "sessionId": "0198-session-root",
+    "source": "appServer",
+    "status": {"type": "idle"},
+    "turns": [],
+    "updatedAt": 1787673600
+  }
+}

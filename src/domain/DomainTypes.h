@@ -56,6 +56,7 @@ struct Conversation {
     QString workingDirectory;
     AgentKind agentKind{AgentKind::Mock};
     ConversationStatus status{ConversationStatus::Dormant};
+    QString nativeThreadId;
     QString nativeSessionId;
     bool archived{false};
     bool pinned{false};
@@ -81,6 +82,7 @@ struct AgentEvent {
 [[nodiscard]] AgentKind agentKindFromString(const QString& value);
 [[nodiscard]] ReasoningEffort reasoningEffortFromString(const QString& value);
 [[nodiscard]] AccessLevel accessLevelFromString(const QString& value);
+[[nodiscard]] ConversationStatus conversationStatusFromString(const QString& value);
 [[nodiscard]] AgentEventType agentEventTypeFromString(const QString& value);
 
 } // namespace snack::domain

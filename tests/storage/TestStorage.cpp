@@ -88,6 +88,32 @@ QStringList legacyV1Schema() {
             "('legacy', 'Legacy conversation', 'C:/legacy', 'mock', 'idle', NULL, 0, 0)")};
 }
 
+QStringList legacyV2Schema() {
+    return {
+        QStringLiteral("CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, "
+                       "applied_at INTEGER NOT NULL, started_at INTEGER, completed_at INTEGER)"),
+        QStringLiteral("INSERT INTO schema_migrations VALUES (1, 1, 1, 1)"),
+        QStringLiteral("INSERT INTO schema_migrations VALUES (2, 2, 2, 2)"),
+        QStringLiteral("CREATE TABLE conversations ("
+                       "id TEXT PRIMARY KEY, title TEXT NOT NULL, working_directory TEXT NOT NULL, "
+                       "agent_kind TEXT NOT NULL, status TEXT NOT NULL, native_session_id TEXT, "
+                       "archived INTEGER NOT NULL DEFAULT 0, pinned INTEGER NOT NULL DEFAULT 0)"),
+        QStringLiteral("CREATE TABLE events ("
+                       "id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, turn_id TEXT, "
+                       "sequence INTEGER NOT NULL, type TEXT NOT NULL, payload TEXT NOT NULL, "
+                       "raw_payload TEXT NOT NULL, occurred_at INTEGER NOT NULL, "
+                       "FOREIGN KEY(conversation_id) REFERENCES conversations(id) ON DELETE "
+                       "CASCADE, UNIQUE(conversation_id, sequence))"),
+        QStringLiteral("CREATE INDEX events_conversation_sequence "
+                       "ON events(conversation_id, sequence)"),
+        QStringLiteral("CREATE INDEX conversations_working_directory "
+                       "ON conversations(working_directory)"),
+        QStringLiteral("INSERT INTO conversations VALUES "
+                       "('11111111-1111-1111-1111-111111111111', 'V2 conversation', 'C:/v2', "
+                       "'codex', 'idle', "
+                       "'legacy-session', 0, 0)")};
+}
+
 } // namespace
 
 class TestStorage final : public QObject {
@@ -100,6 +126,7 @@ class TestStorage final : public QObject {
     void contentStoreRejectsInvalidHash();
     void eventStoreRejectsInvalidWrites();
     void eventStoreBacksUpAndMigratesLegacySchema();
+    void eventStoreMigratesV2NativeIdentity();
     void eventStoreRollsBackIntoReadOnlyRecovery();
     void eventStoreOpensFutureSchemaReadOnly();
     void eventStoreRejectsIncompleteCurrentSchema();
@@ -119,7 +146,15 @@ void TestStorage::eventStorePersistsOrderedEvents() {
     snack::domain::Conversation conversation;
     conversation.title = QStringLiteral("Test");
     conversation.workingDirectory = directory.path();
+    conversation.nativeThreadId = QStringLiteral("thread-123");
+    conversation.nativeSessionId = QStringLiteral("session-root-123");
     QVERIFY2(store.saveConversation(conversation, &error), qPrintable(error));
+
+    const auto restoredConversation = store.conversationById(conversation.id, &error);
+    QVERIFY2(restoredConversation.has_value(), qPrintable(error));
+    QCOMPARE(restoredConversation->nativeThreadId, QStringLiteral("thread-123"));
+    QCOMPARE(restoredConversation->nativeSessionId, QStringLiteral("session-root-123"));
+    QVERIFY(!store.conversationById(QUuid::createUuid(), &error).has_value());
 
     for (quint64 sequence = 1; sequence <= 2; ++sequence) {
         snack::domain::AgentEvent event;
@@ -225,10 +260,16 @@ void TestStorage::eventStoreBacksUpAndMigratesLegacySchema() {
     QCOMPARE(queryScalar(databasePath, QStringLiteral("SELECT MAX(version) FROM schema_migrations"),
                          &error)
                  .toInt(),
-             2);
+             3);
     QCOMPARE(queryScalar(databasePath,
                          QStringLiteral("SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' "
                                         "AND name = 'conversations_working_directory'"),
+                         &error)
+                 .toInt(),
+             1);
+    QCOMPARE(queryScalar(databasePath,
+                         QStringLiteral("SELECT COUNT(*) FROM pragma_table_info("
+                                        "'conversations') WHERE name = 'native_thread_id'"),
                          &error)
                  .toInt(),
              1);
@@ -237,6 +278,39 @@ void TestStorage::eventStoreBacksUpAndMigratesLegacySchema() {
                          &error)
                  .toString(),
              QStringLiteral("Legacy conversation"));
+}
+
+void TestStorage::eventStoreMigratesV2NativeIdentity() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString databasePath = directory.filePath(QStringLiteral("v2.sqlite3"));
+    QString error;
+    QVERIFY2(executeSql(databasePath, legacyV2Schema(), &error), qPrintable(error));
+
+    snack::storage::EventStore store;
+    QVERIFY2(store.open(databasePath, &error), qPrintable(error));
+    QVERIFY(!store.migrationBackupPath().isEmpty());
+    QCOMPARE(queryScalar(databasePath, QStringLiteral("SELECT MAX(version) FROM schema_migrations"),
+                         &error)
+                 .toInt(),
+             3);
+    const auto restored = store.conversationById(
+        QUuid(QStringLiteral("11111111-1111-1111-1111-111111111111")), &error);
+    QVERIFY2(restored.has_value(), qPrintable(error));
+    QCOMPARE(restored->nativeSessionId, QStringLiteral("legacy-session"));
+    QVERIFY(restored->nativeThreadId.isEmpty());
+
+    QCOMPARE(queryScalar(databasePath,
+                         QStringLiteral("SELECT native_session_id FROM conversations "
+                                        "WHERE id = '11111111-1111-1111-1111-111111111111'"),
+                         &error)
+                 .toString(),
+             QStringLiteral("legacy-session"));
+    QVERIFY(queryScalar(databasePath,
+                        QStringLiteral("SELECT native_thread_id FROM conversations "
+                                       "WHERE id = '11111111-1111-1111-1111-111111111111'"),
+                        &error)
+                .isNull());
 }
 
 void TestStorage::eventStoreRollsBackIntoReadOnlyRecovery() {
@@ -312,7 +386,7 @@ void TestStorage::eventStoreRejectsIncompleteCurrentSchema() {
     const QStringList incompleteSchema = {
         QStringLiteral("CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, "
                        "applied_at INTEGER NOT NULL, started_at INTEGER, completed_at INTEGER)"),
-        QStringLiteral("INSERT INTO schema_migrations VALUES (2, 1, 1, 1)")};
+        QStringLiteral("INSERT INTO schema_migrations VALUES (3, 1, 1, 1)")};
     QVERIFY2(executeSql(databasePath, incompleteSchema, &error), qPrintable(error));
 
     snack::storage::EventStore store;

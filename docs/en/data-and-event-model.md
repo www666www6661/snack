@@ -25,6 +25,8 @@ Event types include user and agent message lifecycle, reasoning lifecycle, turn 
 
 Sequence numbers increase strictly within one conversation. A mapping failure stores the raw protocol event and a parse warning rather than dropping content.
 
+A Codex text turn keeps the GUI `QUuid` as its domain `turnId` and stores the app-server turn ID as `nativeTurnId` in event payloads; neither substitutes for the other as a database key. `item/agentMessage/delta` text becomes `AgentMessageDelta.payload.text`, while the original JSON-RPC notification remains in `rawPayload`. Terminal status is accepted once and maps `completed`, `interrupted`, and `failed` to their corresponding domain events.
+
 ## 4. Settings snapshots
 
 Every turn stores an immutable `TurnSettingsSnapshot`: agent, model ID, effort, access level, mapped sandbox/approval settings, cwd, isolated-change state, and protocol capability version. UI edits during a turn update only `nextTurnSettings`.
@@ -53,4 +55,4 @@ Raw logs and reviewed snapshots default to 30 days with a 10 GB cap. Pending rev
 
 Migrations are forward-only, idempotent, and record start/completion. Back up the database before upgrading. Failure enters read-only recovery mode and never replaces old data with an empty database.
 
-The M1 store currently uses schema version 2. Before any pending upgrade of an existing file, `EventStore` creates a consistent SQLite snapshot beside the database with a `.pre-migration-v<version>-<timestamp>-<id>.bak` suffix. All pending steps execute in one transaction. A statement or commit failure rolls the transaction back and reopens the original database read-only; write APIs then fail closed. Databases created by a newer Snack version follow the same read-only path without being modified. Successful safety backups are retained for explicit user recovery and later maintenance policy.
+The store currently uses schema version 3. Conversations persist `native_thread_id` and `native_session_id` separately so Codex resume never reconstructs one identity from the other. Before any pending upgrade of an existing file, `EventStore` creates a consistent SQLite snapshot beside the database with a `.pre-migration-v<version>-<timestamp>-<id>.bak` suffix. All pending steps execute in one transaction. A statement or commit failure rolls the transaction back and reopens the original database read-only; write APIs then fail closed. Databases created by a newer Snack version follow the same read-only path without being modified. Successful safety backups are retained for explicit user recovery and later maintenance policy.

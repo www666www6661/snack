@@ -123,6 +123,34 @@ AccessLevel accessLevelFromString(const QString& value) {
     return enumFromString(value, accessLevels, AccessLevel::Strict);
 }
 
+ConversationStatus conversationStatusFromString(const QString& value) {
+    if (value == QLatin1String("connecting")) {
+        return ConversationStatus::Connecting;
+    }
+    if (value == QLatin1String("idle")) {
+        return ConversationStatus::Idle;
+    }
+    if (value == QLatin1String("running")) {
+        return ConversationStatus::Running;
+    }
+    if (value == QLatin1String("waiting-approval")) {
+        return ConversationStatus::WaitingApproval;
+    }
+    if (value == QLatin1String("waiting-input")) {
+        return ConversationStatus::WaitingInput;
+    }
+    if (value == QLatin1String("disconnected")) {
+        return ConversationStatus::Disconnected;
+    }
+    if (value == QLatin1String("failed")) {
+        return ConversationStatus::Failed;
+    }
+    if (value == QLatin1String("closed")) {
+        return ConversationStatus::Closed;
+    }
+    return ConversationStatus::Dormant;
+}
+
 AgentEventType agentEventTypeFromString(const QString& value) {
     return enumFromString(value, eventTypes, AgentEventType::RawProtocolObserved);
 }

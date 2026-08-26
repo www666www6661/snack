@@ -30,9 +30,11 @@ class SessionController final : public QObject {
     void eventRecorded(const snack::domain::AgentEvent& event);
     void persistenceError(const QString& error);
     void nextTurnSettingsChanged(const snack::domain::TurnSettingsSnapshot& settings);
+    void nativeIdentityChanged(const QString& threadId, const QString& sessionId);
 
   private:
     void handleCapabilitiesChanged(const agent::CapabilitySet& capabilities);
+    void handleNativeIdentityChanged(const QString& threadId, const QString& sessionId);
     void handleAdapterEvent(domain::AgentEvent event);
     void recordEvent(domain::AgentEvent event);
     void setStatus(domain::ConversationStatus status);

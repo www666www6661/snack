@@ -34,6 +34,12 @@ struct CapabilitySet {
     bool supportsInterrupt{true};
 };
 
+struct AgentConnectionRequest {
+    QString workingDirectory;
+    QString nativeThreadId;
+    domain::TurnSettingsSnapshot settings;
+};
+
 struct TurnRequest {
     QUuid turnId;
     QString message;
@@ -49,7 +55,7 @@ class IAgentAdapter : public QObject {
 
     [[nodiscard]] virtual domain::AgentKind kind() const = 0;
     [[nodiscard]] virtual CapabilitySet capabilities() const = 0;
-    virtual void connectAgent(const QString& workingDirectory) = 0;
+    virtual void connectAgent(const AgentConnectionRequest& request) = 0;
     virtual void startTurn(const TurnRequest& request) = 0;
     virtual void interruptTurn() = 0;
     virtual void closeAgent() = 0;
@@ -57,6 +63,7 @@ class IAgentAdapter : public QObject {
   signals:
     void connectionChanged(bool connected, const QString& detail);
     void capabilitiesChanged(const snack::agent::CapabilitySet& capabilities);
+    void nativeIdentityChanged(const QString& threadId, const QString& sessionId);
     void eventReceived(const snack::domain::AgentEvent& event);
     void turnFinished(const QUuid& turnId, bool interrupted);
 };

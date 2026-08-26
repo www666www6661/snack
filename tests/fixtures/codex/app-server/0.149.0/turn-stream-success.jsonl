@@ -1,0 +1,6 @@
+{"id":4,"result":{"turn":{"id":"turn-snack-stream","items":[],"status":"inProgress"}}}
+{"method":"turn/started","params":{"threadId":"thread-snack","turn":{"id":"turn-snack-stream","items":[],"status":"inProgress"}}}
+{"method":"item/started","params":{"threadId":"thread-snack","turnId":"turn-snack-stream","startedAtMs":1,"item":{"id":"message-snack","type":"agentMessage","text":""}}}
+{"method":"item/agentMessage/delta","params":{"threadId":"thread-snack","turnId":"turn-snack-stream","itemId":"message-snack","delta":"Hello"}}
+{"method":"item/completed","params":{"threadId":"thread-snack","turnId":"turn-snack-stream","completedAtMs":2,"item":{"id":"message-snack","type":"agentMessage","text":"Hello"}}}
+{"method":"turn/completed","params":{"threadId":"thread-snack","turn":{"id":"turn-snack-stream","items":[],"status":"completed"}}}

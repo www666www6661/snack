@@ -93,6 +93,20 @@ void CodexAppServerClient::sendNotification(const QString& method, const QJsonOb
     writeMessage(encodeNotification(method, params));
 }
 
+void CodexAppServerClient::sendErrorResponse(const QJsonValue& id, int code,
+                                             const QString& message) {
+    if (state_ != ConnectionState::Ready) {
+        emit protocolWarning(QStringLiteral("Cannot send response before initialization"));
+        return;
+    }
+    if (id.isUndefined() || id.isNull() || (!id.isString() && !id.isDouble())) {
+        emit protocolWarning(
+            QStringLiteral("Cannot respond to a server request with an invalid id"));
+        return;
+    }
+    writeMessage(encodeErrorResponse(id, code, message));
+}
+
 void CodexAppServerClient::stop() {
     if (state_ == ConnectionState::Stopped || state_ == ConnectionState::Stopping) {
         return;

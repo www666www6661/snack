@@ -2,7 +2,7 @@
 
 ## 当前垂直切片
 
-`0.1.0-alpha.1` 工程骨架包含 Qt Widgets 主窗口、单实例 IPC、设置、声明式主题校验、SQLite 事件仓库、SHA-256 内容存储、统一 Agent 接口、模拟 Agent、会话状态机和 Qt Test 测试。M2 已加入真实 Codex 的 CLI 探测、stdio JSONL 传输、初始化握手和分页模型能力，但原生 Codex Thread 尚未接入主窗口。
+`0.1.0-alpha.1` 工程骨架包含 Qt Widgets 主窗口、单实例 IPC、设置、声明式主题校验、SQLite 事件仓库、SHA-256 内容存储、统一 Agent 接口、模拟 Agent、会话状态机和 Qt Test 测试。M2 已加入真实 Codex 的 CLI 探测、stdio JSONL 传输、初始化握手、分页模型能力、带身份持久化的原生 Thread 创建/恢复，以及经过 fixture 验证的文本 Turn 流与中断。主窗口仍使用模拟适配器，真实 Codex Turn 不会在普通测试中调用模型。
 
 ## 前置环境
 
@@ -80,4 +80,4 @@ ctest --test-dir build/macos-debug --output-on-failure
 
 新增行为必须同步添加 Qt Test。CI 在三个桌面平台构建并运行测试，Linux 使用 LLVM source-based coverage 执行第一方代码 80% 行覆盖率门禁。CI 不调用真实 Agent。
 
-2026-08-26 的 Windows LLVM-MinGW 基线：9/9 Debug 测试通过（包含运行库部署布局检查）；单实例 IPC 连续重复 30 次通过；第一方代码行覆盖率为 84.33%；本机真实 Codex CLI 初始化与 `model/list` 烟雾测试也通过。正式 M1 验收仍需完成 Windows `clang-cl`、Linux 和 macOS 构建。
+2026-08-26 的 Windows LLVM-MinGW 基线：9/9 Debug 测试通过（包含运行库部署布局检查）；单实例 IPC 连续重复 30 次通过；第一方代码行覆盖率为 84.89%；本机真实 Codex CLI 初始化、`model/list` 与临时 `thread/start` 烟雾测试也通过，全程不调用模型。正式 M1 验收仍需完成 Windows `clang-cl`、Linux 和 macOS 构建。

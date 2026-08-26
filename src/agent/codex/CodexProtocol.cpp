@@ -61,4 +61,12 @@ QByteArray encodeNotification(const QString& method, const QJsonObject& params) 
         .toJson(QJsonDocument::Compact);
 }
 
+QByteArray encodeErrorResponse(const QJsonValue& id, int code, const QString& message) {
+    return QJsonDocument(QJsonObject{{QStringLiteral("id"), id},
+                                     {QStringLiteral("error"),
+                                      QJsonObject{{QStringLiteral("code"), code},
+                                                  {QStringLiteral("message"), message}}}})
+        .toJson(QJsonDocument::Compact);
+}
+
 } // namespace snack::agent::codex

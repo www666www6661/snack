@@ -34,8 +34,12 @@ CapabilitySet FakeAgentAdapter::capabilities() const {
             .supportsInterrupt = true};
 }
 
-void FakeAgentAdapter::connectAgent(const QString& workingDirectory) {
-    Q_UNUSED(workingDirectory)
+AgentConnectionRequest FakeAgentAdapter::lastConnectionRequest() const {
+    return lastConnectionRequest_;
+}
+
+void FakeAgentAdapter::connectAgent(const AgentConnectionRequest& request) {
+    lastConnectionRequest_ = request;
     QTimer::singleShot(0, this, [this] {
         connected_ = true;
         emit connectionChanged(true, QStringLiteral("mock-v1"));

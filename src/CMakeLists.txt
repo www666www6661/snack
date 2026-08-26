@@ -9,6 +9,10 @@ set(SNACK_CORE_SOURCES
     agent/codex/CodexModelCatalog.h
     agent/codex/CodexProtocol.cpp
     agent/codex/CodexProtocol.h
+    agent/codex/CodexThreadLifecycle.cpp
+    agent/codex/CodexThreadLifecycle.h
+    agent/codex/CodexTurnLifecycle.cpp
+    agent/codex/CodexTurnLifecycle.h
     agent/FakeAgentAdapter.cpp
     agent/FakeAgentAdapter.h
     agent/IAgentAdapter.h
