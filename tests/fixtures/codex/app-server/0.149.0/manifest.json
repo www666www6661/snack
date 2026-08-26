@@ -35,7 +35,10 @@
     "schema/CommandExecutionRequestApprovalResponse.json",
     "schema/FileChangeRequestApprovalParams.json",
     "schema/FileChangeRequestApprovalResponse.json",
-    "schema/ServerRequestResolvedNotification.json"
+    "schema/ServerRequestResolvedNotification.json",
+    "schema/ToolRequestUserInputParams.json",
+    "schema/ToolRequestUserInputResponse.json",
+    "schema/ThreadTokenUsageUpdatedNotification.json"
   ],
   "fixtures": [
     "initialize-success.jsonl",
@@ -46,6 +49,7 @@
     "turn-failed.jsonl",
     "turn-interrupted.jsonl",
     "approval-flow.jsonl",
-    "tool-reasoning-plan.jsonl"
+    "tool-reasoning-plan.jsonl",
+    "user-input-usage.jsonl"
   ]
 }

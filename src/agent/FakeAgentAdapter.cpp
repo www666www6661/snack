@@ -44,6 +44,10 @@ domain::ApprovalDecision FakeAgentAdapter::lastApprovalDecision() const {
     return lastApprovalDecision_;
 }
 
+QString FakeAgentAdapter::lastUserInputRequestId() const { return lastUserInputRequestId_; }
+
+QJsonObject FakeAgentAdapter::lastUserInputAnswers() const { return lastUserInputAnswers_; }
+
 void FakeAgentAdapter::connectAgent(const AgentConnectionRequest& request) {
     lastConnectionRequest_ = request;
     QTimer::singleShot(0, this, [this] {
@@ -75,6 +79,15 @@ bool FakeAgentAdapter::respondToApproval(const QString& requestId,
     }
     lastApprovalRequestId_ = requestId;
     lastApprovalDecision_ = decision;
+    return true;
+}
+
+bool FakeAgentAdapter::respondToUserInput(const QString& requestId, const QJsonObject& answers) {
+    if (requestId.isEmpty() || activeRequest_.turnId.isNull()) {
+        return false;
+    }
+    lastUserInputRequestId_ = requestId;
+    lastUserInputAnswers_ = answers;
     return true;
 }
 

@@ -180,6 +180,8 @@ void CodexAdapter::startTurn(const TurnRequest& request) {
     activeItems_.clear();
     pendingApprovals_.clear();
     approvalTokenByNativeKey_.clear();
+    pendingUserInputs_.clear();
+    userInputTokenByNativeKey_.clear();
     turnStartedEmitted_ = false;
     interruptRequested_ = false;
     interruptSent_ = false;
@@ -208,6 +210,21 @@ bool CodexAdapter::respondToApproval(const QString& requestId, domain::ApprovalD
     }
     approvalTokenByNativeKey_.remove(nativeRequestKey(iterator->nativeRequestId));
     pendingApprovals_.erase(iterator);
+    return true;
+}
+
+bool CodexAdapter::respondToUserInput(const QString& requestId, const QJsonObject& answers) {
+    const auto iterator = pendingUserInputs_.find(requestId);
+    if (iterator == pendingUserInputs_.end() || activeTurn_.turnId.isNull()) {
+        return false;
+    }
+    QString error;
+    if (!validateUserInputAnswers(*iterator, answers, &error) ||
+        !client_.sendResponse(iterator->nativeRequestId, userInputResponse(answers))) {
+        return false;
+    }
+    userInputTokenByNativeKey_.remove(nativeRequestKey(iterator->nativeRequestId));
+    pendingUserInputs_.erase(iterator);
     return true;
 }
 
@@ -490,6 +507,23 @@ void CodexAdapter::handleNotification(const QString& method, const QJsonValue& p
 
     if (method == QLatin1String("serverRequest/resolved")) {
         handleServerRequestResolved(params, raw);
+        return;
+    }
+
+    if (method == QLatin1String("thread/tokenUsage/updated")) {
+        QString threadId;
+        QString turnId;
+        QString error;
+        const auto usage = parseThreadTokenUsage(params, &threadId, &turnId, &error);
+        if (!usage.has_value()) {
+            warnActive(
+                QStringLiteral("Ignored invalid Codex token usage notification: %1").arg(error),
+                raw);
+            return;
+        }
+        if (acceptNativeContext(threadId, turnId, raw)) {
+            emitActiveEvent(domain::AgentEventType::UsageUpdated, *usage, raw);
+        }
         return;
     }
 
@@ -834,6 +868,37 @@ void CodexAdapter::handleNotification(const QString& method, const QJsonValue& p
 
 void CodexAdapter::handleServerRequest(const QJsonValue& id, const QString& method,
                                        const QJsonValue& params, const QJsonObject& raw) {
+    if (method == QLatin1String("tool/requestUserInput")) {
+        QString error;
+        auto request = parseUserInputRequest(id, params, &error);
+        if (!request.has_value()) {
+            client_.sendErrorResponse(
+                id, -32602, QStringLiteral("Invalid Codex user input request: %1").arg(error));
+            warnActive(QStringLiteral("Declined invalid Codex user input request: %1").arg(error),
+                       raw);
+            return;
+        }
+        if (!connected_ || activeTurn_.turnId.isNull() ||
+            !acceptNativeContext(request->threadId, request->turnId, raw)) {
+            (void)client_.sendResponse(id, userInputResponse({}));
+            return;
+        }
+        const QString nativeKey = nativeRequestKey(id);
+        if (approvalTokenByNativeKey_.contains(nativeKey) ||
+            userInputTokenByNativeKey_.contains(nativeKey)) {
+            client_.sendErrorResponse(id, -32602,
+                                      QStringLiteral("Duplicate Codex server request id"));
+            warnActive(QStringLiteral("Rejected duplicate Codex user input request id"), raw);
+            return;
+        }
+        const QString requestId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        pendingUserInputs_.insert(requestId, *request);
+        userInputTokenByNativeKey_.insert(nativeKey, requestId);
+        emitActiveEvent(domain::AgentEventType::UserInputRequested,
+                        userInputEventPayload(requestId, *request), raw);
+        return;
+    }
+
     const bool isApproval = method == QLatin1String("item/commandExecution/requestApproval") ||
                             method == QLatin1String("item/fileChange/requestApproval");
     if (!isApproval) {
@@ -859,8 +924,10 @@ void CodexAdapter::handleServerRequest(const QJsonValue& id, const QString& meth
     }
 
     const QString nativeKey = nativeRequestKey(id);
-    if (approvalTokenByNativeKey_.contains(nativeKey)) {
-        warnActive(QStringLiteral("Ignored duplicate Codex approval request id"), raw);
+    if (approvalTokenByNativeKey_.contains(nativeKey) ||
+        userInputTokenByNativeKey_.contains(nativeKey)) {
+        client_.sendErrorResponse(id, -32602, QStringLiteral("Duplicate Codex server request id"));
+        warnActive(QStringLiteral("Rejected duplicate Codex approval request id"), raw);
         return;
     }
 
@@ -895,16 +962,26 @@ void CodexAdapter::handleServerRequestResolved(const QJsonValue& params, const Q
     const QJsonValue nativeId = object.value(QStringLiteral("requestId"));
     const QString nativeKey = nativeRequestKey(nativeId);
     const auto tokenIterator = approvalTokenByNativeKey_.find(nativeKey);
-    if (tokenIterator == approvalTokenByNativeKey_.end()) {
+    if (tokenIterator != approvalTokenByNativeKey_.end()) {
+        const QString requestId = *tokenIterator;
+        approvalTokenByNativeKey_.erase(tokenIterator);
+        pendingApprovals_.remove(requestId);
+        emitActiveEvent(domain::AgentEventType::ApprovalResolved,
+                        {{QStringLiteral("requestId"), requestId},
+                         {QStringLiteral("resolution"), QStringLiteral("cleared")}},
+                        raw);
         return;
     }
-    const QString requestId = *tokenIterator;
-    approvalTokenByNativeKey_.erase(tokenIterator);
-    pendingApprovals_.remove(requestId);
-    emitActiveEvent(domain::AgentEventType::ApprovalResolved,
-                    {{QStringLiteral("requestId"), requestId},
-                     {QStringLiteral("resolution"), QStringLiteral("cleared")}},
-                    raw);
+    const auto inputIterator = userInputTokenByNativeKey_.find(nativeKey);
+    if (inputIterator != userInputTokenByNativeKey_.end()) {
+        const QString requestId = *inputIterator;
+        userInputTokenByNativeKey_.erase(inputIterator);
+        pendingUserInputs_.remove(requestId);
+        emitActiveEvent(domain::AgentEventType::UserInputResolved,
+                        {{QStringLiteral("requestId"), requestId},
+                         {QStringLiteral("resolution"), QStringLiteral("cleared")}},
+                        raw);
+    }
 }
 
 bool CodexAdapter::acceptNativeContext(const QString& threadId, const QString& turnId,
@@ -973,6 +1050,15 @@ void CodexAdapter::finishActiveTurn(domain::AgentEventType type, const QString& 
     }
     pendingApprovals_.clear();
     approvalTokenByNativeKey_.clear();
+    const QList<QString> pendingInputIds = pendingUserInputs_.keys();
+    for (const QString& requestId : pendingInputIds) {
+        emitActiveEvent(domain::AgentEventType::UserInputResolved,
+                        {{QStringLiteral("requestId"), requestId},
+                         {QStringLiteral("resolution"), QStringLiteral("turn-ended")}},
+                        raw);
+    }
+    pendingUserInputs_.clear();
+    userInputTokenByNativeKey_.clear();
     QJsonObject payload{{QStringLiteral("nativeTurnId"), nativeTurnId_},
                         {QStringLiteral("nativeStatus"), nativeStatus}};
     if (!message.isEmpty()) {

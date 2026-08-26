@@ -7,6 +7,7 @@
 #include "agent/codex/CodexModelCatalog.h"
 #include "agent/codex/CodexThreadLifecycle.h"
 #include "agent/codex/CodexTurnLifecycle.h"
+#include "agent/codex/CodexUserInputLifecycle.h"
 
 #include <QHash>
 #include <QSet>
@@ -25,6 +26,7 @@ class CodexAdapter final : public IAgentAdapter {
     void connectAgent(const AgentConnectionRequest& request) override;
     void startTurn(const TurnRequest& request) override;
     bool respondToApproval(const QString& requestId, domain::ApprovalDecision decision) override;
+    bool respondToUserInput(const QString& requestId, const QJsonObject& answers) override;
     void interruptTurn() override;
     void closeAgent() override;
 
@@ -74,6 +76,8 @@ class CodexAdapter final : public IAgentAdapter {
     QHash<QString, QJsonObject> activeItems_;
     QHash<QString, CodexApprovalRequest> pendingApprovals_;
     QHash<QString, QString> approvalTokenByNativeKey_;
+    QHash<QString, CodexUserInputRequest> pendingUserInputs_;
+    QHash<QString, QString> userInputTokenByNativeKey_;
     QString threadRequestMethod_;
     qint64 modelRequestId_{0};
     qint64 threadRequestId_{0};

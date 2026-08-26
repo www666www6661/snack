@@ -2,7 +2,7 @@
 
 ## Current status
 
-The M2 connection, thread, text-turn, approval, and activity slices are fixture-validated against Codex CLI `0.149.0`. They establish CLI discovery, subprocess transport, JSONL parsing, initialization, paginated `model/list`, native `thread/start`/`thread/resume`, `turn/start`, streamed text, tool execution, reasoning summaries, plans, `turn/interrupt`, and command/file approval responses. The main application probes and starts Codex by default, with an explicit Mock Agent fallback when the CLI is unavailable.
+The M2 connection, thread, text-turn, approval, user-input, usage, and activity slices are fixture-validated against Codex CLI `0.149.0`. They establish CLI discovery, subprocess transport, JSONL parsing, initialization, paginated `model/list`, native `thread/start`/`thread/resume`, `turn/start`, streamed text, tool execution, reasoning summaries, plans, `turn/interrupt`, command/file approval responses, question responses, and token/context display. The main application probes and starts Codex by default, with an explicit Mock Agent fallback when the CLI is unavailable.
 
 Protocol source: [OpenAI Docs - Codex App Server](https://developers.openai.com/codex/app-server). The default transport is newline-delimited JSON over stdio, with the `jsonrpc: "2.0"` member omitted on the wire. Every connection sends one `initialize` request and waits for its successful response before sending the `initialized` notification.
 
@@ -17,6 +17,7 @@ Protocol source: [OpenAI Docs - Codex App Server](https://developers.openai.com/
 - `CodexThreadLifecycle` validates `thread.id`, `thread.sessionId`, and cwd and defines the audited access-level mapping.
 - `CodexTurnLifecycle` builds per-turn overrides and strictly parses turn, item, text-delta, and error notifications.
 - `CodexApprovalLifecycle` validates command and file approval routing, preserves display metadata, and builds the versioned decision payload.
+- `CodexUserInputLifecycle` validates one-to-three question requests and answer maps, and strictly parses thread token-usage notifications.
 - `CodexAdapter` publishes the complete catalog, starts or resumes the native thread, and serially correlates one GUI turn with one native turn.
 
 `model/list` is requested with hidden entries excluded. Pagination follows the opaque `nextCursor`; duplicate IDs are replaced by their latest entry. A missing `inputModalities` field uses the documented `text` and `image` compatibility default. Unknown future effort IDs stay in the model metadata but are not mapped to a domain enum. If the selected model or effort disappears after a capability refresh, `SessionController` switches to the advertised model and effort defaults for the next turn.
@@ -30,6 +31,10 @@ Command, file-change, MCP, dynamic, collaboration, search, image-view, and compa
 Reasoning items expose only the protocol-provided summary in this slice. `summaryTextDelta` streams into a reasoning card and the final summary array replaces the draft; `reasoning/textDelta` is deliberately not rendered or persisted as visible reasoning. Plan-item deltas can populate the inline plan text, while the completed plan item replaces the draft. `turn/plan/updated` drives the dockable task list with `pending`, `inProgress`, and `completed` states.
 
 Command and file approvals arrive as server-initiated `item/commandExecution/requestApproval` and `item/fileChange/requestApproval` requests. The adapter verifies the native thread, turn, item, and JSON-RPC request identity before emitting a persisted `ApprovalRequested` event. The UI renders the command, cwd, reason, file grant root, or network host/protocol and offers `accept`, `acceptForSession`, `decline`, and `cancel`. A successful response records `ApprovalResolved`; `serverRequest/resolved`, turn completion, interruption, and disconnect also clear pending state. Restored unanswered cards are disabled because their originating app-server process no longer exists. Multiple concurrent requests remain independently addressable, and duplicate native request IDs never create duplicate cards or responses.
+
+`tool/requestUserInput` becomes a common question card with option, Other, free-form, and password controls. A blocking request takes the session to `WaitingInput`; a non-blocking request leaves it running. Blocking input takes precedence over approval in the visible state, then approval, then running. Responses are returned only to the originating native request. Persisted resolution events contain request identity and outcome but never answer values, and password controls are cleared immediately after submission. Restored unanswered cards are expired and read-only.
+
+`thread/tokenUsage/updated` maps supplied `last`, `total`, and `modelContextWindow` values into `UsageUpdated`. The header shows total/context consumption and an input/cache/output/reasoning tooltip; a missing context window hides the ratio. Snack neither infers costs nor repairs token arithmetic.
 
 Windows discovery prefers `codex.cmd` and starts npm wrappers through `cmd.exe /c call`; Linux and macOS start `codex` directly. The Windows path is verified with a live local handshake.
 

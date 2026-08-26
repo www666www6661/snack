@@ -6,6 +6,7 @@
 #include "agent/codex/CodexProtocol.h"
 #include "agent/codex/CodexThreadLifecycle.h"
 #include "agent/codex/CodexTurnLifecycle.h"
+#include "agent/codex/CodexUserInputLifecycle.h"
 #include "agent/process/IProcessTransport.h"
 #include "agent/process/QProcessTransport.h"
 
@@ -86,12 +87,14 @@ class TestCodexAppServer final : public QObject {
     void mapsThreadAccessLevels();
     void mapsAndParsesTurnLifecycle();
     void parsesApprovalLifecycle();
+    void parsesUserInputAndTokenUsage();
     void adapterPublishesPaginatedCapabilities();
     void adapterStreamsAndCompletesTurn();
     void adapterMapsToolReasoningAndPlanEvents();
     void adapterHandlesTurnFailuresAndStaleEvents();
     void adapterInterruptsAndDeclinesServerRequests();
     void adapterHandlesApprovalRequests();
+    void adapterHandlesUserInputAndTokenUsage();
     void adapterFinishesTurnWhenProcessDisconnects();
     void adapterHandlesCatalogFailures();
     void streamsQProcessIoAndReportsStartFailure();
@@ -362,7 +365,8 @@ void TestCodexAppServer::loadsVersionedSchemaContract() {
     QVERIFY(manifestFile.open(QIODevice::ReadOnly));
     const QJsonObject manifest = QJsonDocument::fromJson(manifestFile.readAll()).object();
     QCOMPARE(manifest.value(QStringLiteral("cliVersion")).toString(), QStringLiteral("0.149.0"));
-    QCOMPARE(manifest.value(QStringLiteral("schemas")).toArray().size(), 33);
+    QCOMPARE(manifest.value(QStringLiteral("schemas")).toArray().size(), 36);
+    QCOMPARE(manifest.value(QStringLiteral("fixtures")).toArray().size(), 10);
 
     const QStringList schemaNames = {QStringLiteral("JSONRPCMessage.json"),
                                      QStringLiteral("InitializeParams.json"),
@@ -396,7 +400,10 @@ void TestCodexAppServer::loadsVersionedSchemaContract() {
                                      QStringLiteral("CommandExecutionRequestApprovalResponse.json"),
                                      QStringLiteral("FileChangeRequestApprovalParams.json"),
                                      QStringLiteral("FileChangeRequestApprovalResponse.json"),
-                                     QStringLiteral("ServerRequestResolvedNotification.json")};
+                                     QStringLiteral("ServerRequestResolvedNotification.json"),
+                                     QStringLiteral("ToolRequestUserInputParams.json"),
+                                     QStringLiteral("ToolRequestUserInputResponse.json"),
+                                     QStringLiteral("ThreadTokenUsageUpdatedNotification.json")};
     for (const QString& schemaName : schemaNames) {
         QFile schemaFile(fixtureRoot + QStringLiteral("/schema/") + schemaName);
         QVERIFY2(schemaFile.open(QIODevice::ReadOnly), qPrintable(schemaFile.errorString()));
@@ -405,6 +412,22 @@ void TestCodexAppServer::loadsVersionedSchemaContract() {
         QCOMPARE(error.error, QJsonParseError::NoError);
         QVERIFY(schema.isObject());
         QVERIFY(!schema.object().value(QStringLiteral("title")).toString().isEmpty());
+    }
+    for (const QJsonValue& fixtureValue : manifest.value(QStringLiteral("fixtures")).toArray()) {
+        const QString fixtureName = fixtureValue.toString();
+        QFile fixtureFile(fixtureRoot + QLatin1Char('/') + fixtureName);
+        QVERIFY2(fixtureFile.open(QIODevice::ReadOnly), qPrintable(fixtureFile.errorString()));
+        const QList<QByteArray> documents = fixtureName.endsWith(QLatin1String(".jsonl"))
+                                                ? fixtureFile.readAll().split('\n')
+                                                : QList<QByteArray>{fixtureFile.readAll()};
+        for (const QByteArray& document : documents) {
+            if (document.trimmed().isEmpty()) {
+                continue;
+            }
+            QJsonParseError error;
+            QVERIFY2(!QJsonDocument::fromJson(document, &error).isNull(),
+                     qPrintable(QStringLiteral("%1: %2").arg(fixtureName, error.errorString())));
+        }
     }
 }
 
@@ -755,6 +778,79 @@ void TestCodexAppServer::parsesApprovalLifecycle() {
     QVERIFY(!parseApprovalRequest(QStringLiteral("approval-3"), QStringLiteral("future/request"),
                                   params, &error)
                  .has_value());
+}
+
+void TestCodexAppServer::parsesUserInputAndTokenUsage() {
+    using namespace snack::agent::codex;
+    const QJsonArray questions{
+        QJsonObject{{QStringLiteral("id"), QStringLiteral("scope")},
+                    {QStringLiteral("header"), QStringLiteral("Scope")},
+                    {QStringLiteral("question"), QStringLiteral("Which scope?")},
+                    {QStringLiteral("isOther"), true},
+                    {QStringLiteral("options"),
+                     QJsonArray{QJsonObject{
+                         {QStringLiteral("label"), QStringLiteral("Core")},
+                         {QStringLiteral("description"), QStringLiteral("Core only")}}}}},
+        QJsonObject{{QStringLiteral("id"), QStringLiteral("token")},
+                    {QStringLiteral("header"), QStringLiteral("Token")},
+                    {QStringLiteral("question"), QStringLiteral("Provide token")},
+                    {QStringLiteral("isSecret"), true},
+                    {QStringLiteral("options"), QJsonValue::Null}}};
+    const QJsonObject params{{QStringLiteral("threadId"), QStringLiteral("thread-1")},
+                             {QStringLiteral("turnId"), QStringLiteral("turn-1")},
+                             {QStringLiteral("itemId"), QStringLiteral("item-1")},
+                             {QStringLiteral("isBlocking"), true},
+                             {QStringLiteral("questions"), questions}};
+    QString error;
+    const auto request = parseUserInputRequest(QStringLiteral("request-1"), params, &error);
+    QVERIFY2(request.has_value(), qPrintable(error));
+    QVERIFY(request->isBlocking);
+    QCOMPARE(request->questions.size(), 2);
+    QVERIFY(request->questions.at(1).toObject().value(QStringLiteral("isSecret")).toBool());
+
+    const QJsonObject answers{
+        {QStringLiteral("scope"),
+         QJsonObject{{QStringLiteral("answers"), QJsonArray{QStringLiteral("Core")}}}},
+        {QStringLiteral("token"),
+         QJsonObject{{QStringLiteral("answers"), QJsonArray{QStringLiteral("secret")}}}}};
+    QVERIFY(validateUserInputAnswers(*request, answers, &error));
+    QCOMPARE(userInputResponse(answers).value(QStringLiteral("answers")).toObject(), answers);
+    QVERIFY(!validateUserInputAnswers(*request, QJsonObject{}, &error));
+
+    QJsonObject duplicateParams = params;
+    QJsonArray duplicateQuestions = questions;
+    duplicateQuestions[1] = duplicateQuestions.at(0);
+    duplicateParams.insert(QStringLiteral("questions"), duplicateQuestions);
+    QVERIFY(!parseUserInputRequest(2, duplicateParams, &error).has_value());
+    duplicateParams.insert(QStringLiteral("questions"), QJsonArray{});
+    QVERIFY(!parseUserInputRequest(3, duplicateParams, &error).has_value());
+
+    const QJsonObject breakdown{{QStringLiteral("inputTokens"), 10},
+                                {QStringLiteral("cachedInputTokens"), 2},
+                                {QStringLiteral("outputTokens"), 5},
+                                {QStringLiteral("reasoningOutputTokens"), 1},
+                                {QStringLiteral("totalTokens"), 16}};
+    QString threadId;
+    QString turnId;
+    const QJsonObject usageParams{
+        {QStringLiteral("threadId"), QStringLiteral("thread-1")},
+        {QStringLiteral("turnId"), QStringLiteral("turn-1")},
+        {QStringLiteral("tokenUsage"),
+         QJsonObject{{QStringLiteral("last"), breakdown},
+                     {QStringLiteral("total"), breakdown},
+                     {QStringLiteral("modelContextWindow"), QJsonValue::Null}}}};
+    const auto usage = parseThreadTokenUsage(usageParams, &threadId, &turnId, &error);
+    QVERIFY2(usage.has_value(), qPrintable(error));
+    QCOMPARE(threadId, QStringLiteral("thread-1"));
+    QVERIFY(usage->value(QStringLiteral("modelContextWindow")).isNull());
+    QCOMPARE(usage->value(QStringLiteral("total"))
+                 .toObject()
+                 .value(QStringLiteral("cacheWriteInputTokens"))
+                 .toInt(),
+             0);
+    QJsonObject invalidUsage = usageParams;
+    invalidUsage.insert(QStringLiteral("tokenUsage"), QJsonObject{});
+    QVERIFY(!parseThreadTokenUsage(invalidUsage, &threadId, &turnId, &error).has_value());
 }
 
 void TestCodexAppServer::adapterPublishesPaginatedCapabilities() {
@@ -1269,6 +1365,160 @@ void TestCodexAppServer::adapterHandlesApprovalRequests() {
         transport, QStringLiteral("turn/completed"),
         {{QStringLiteral("threadId"), QStringLiteral("0198-thread-snack")},
          {QStringLiteral("turn"), turnObject(nativeTurnId, QStringLiteral("completed"))}});
+    adapter.closeAgent();
+}
+
+void TestCodexAppServer::adapterHandlesUserInputAndTokenUsage() {
+    using namespace snack::agent::codex;
+    using snack::domain::AgentEvent;
+    using snack::domain::AgentEventType;
+
+    FakeProcessTransport transport;
+    CodexAdapter adapter({.status = CliStatus::Available,
+                          .executablePath = QStringLiteral("codex"),
+                          .version = QStringLiteral("0.149.0")},
+                         &transport);
+    connectAdapter(adapter, transport);
+    QSignalSpy eventSpy(&adapter, &CodexAdapter::eventReceived);
+    adapter.startTurn(codexTurnRequest(QUuid::createUuid()));
+    const QString nativeTurnId = QStringLiteral("turn-input-1");
+    feedResult(transport, lastRequest(transport).id.toInteger(),
+               QJsonObject{{QStringLiteral("turn"),
+                            turnObject(nativeTurnId, QStringLiteral("inProgress"))}});
+
+    const QJsonObject question{{QStringLiteral("id"), QStringLiteral("token")},
+                               {QStringLiteral("header"), QStringLiteral("Token")},
+                               {QStringLiteral("question"), QStringLiteral("Provide token")},
+                               {QStringLiteral("isSecret"), true},
+                               {QStringLiteral("options"), QJsonValue::Null}};
+    const QJsonObject requestParams{
+        {QStringLiteral("threadId"), QStringLiteral("0198-thread-snack")},
+        {QStringLiteral("turnId"), nativeTurnId},
+        {QStringLiteral("itemId"), QStringLiteral("input-tool")},
+        {QStringLiteral("isBlocking"), true},
+        {QStringLiteral("questions"), QJsonArray{question}}};
+    feedServerRequest(transport, QStringLiteral("input-1"), QStringLiteral("tool/requestUserInput"),
+                      requestParams);
+    QCOMPARE(eventSpy.count(), 1);
+    const AgentEvent inputEvent = eventSpy.constFirst().constFirst().value<AgentEvent>();
+    QCOMPARE(inputEvent.type, AgentEventType::UserInputRequested);
+    const QString requestId = inputEvent.payload.value(QStringLiteral("requestId")).toString();
+    QVERIFY(!requestId.isEmpty());
+
+    feedServerRequest(transport, QStringLiteral("input-1"), QStringLiteral("tool/requestUserInput"),
+                      requestParams);
+    QCOMPARE(eventSpy.constLast().constFirst().value<AgentEvent>().type,
+             AgentEventType::WarningRaised);
+    QCOMPARE(parseMessage(transport.writes.constLast().trimmed())
+                 .error.value(QStringLiteral("code"))
+                 .toInt(),
+             -32602);
+
+    const QJsonObject answers{
+        {QStringLiteral("token"),
+         QJsonObject{{QStringLiteral("answers"), QJsonArray{QStringLiteral("supersecret")}}}}};
+    QVERIFY(adapter.respondToUserInput(requestId, answers));
+    const auto response = parseMessage(transport.writes.constLast().trimmed());
+    QCOMPARE(response.id.toString(), QStringLiteral("input-1"));
+    QCOMPARE(response.result.toObject().value(QStringLiteral("answers")).toObject(), answers);
+    QVERIFY(!adapter.respondToUserInput(requestId, answers));
+
+    const QJsonObject breakdown{{QStringLiteral("inputTokens"), 120},
+                                {QStringLiteral("cachedInputTokens"), 20},
+                                {QStringLiteral("outputTokens"), 30},
+                                {QStringLiteral("reasoningOutputTokens"), 10},
+                                {QStringLiteral("totalTokens"), 160}};
+    feedNotification(transport, QStringLiteral("thread/tokenUsage/updated"),
+                     {{QStringLiteral("threadId"), QStringLiteral("0198-thread-snack")},
+                      {QStringLiteral("turnId"), nativeTurnId},
+                      {QStringLiteral("tokenUsage"),
+                       QJsonObject{{QStringLiteral("last"), breakdown},
+                                   {QStringLiteral("total"), breakdown},
+                                   {QStringLiteral("modelContextWindow"), 200000}}}});
+    QCOMPARE(eventSpy.constLast().constFirst().value<AgentEvent>().type,
+             AgentEventType::UsageUpdated);
+    QCOMPARE(eventSpy.constLast()
+                 .constFirst()
+                 .value<AgentEvent>()
+                 .payload.value(QStringLiteral("modelContextWindow"))
+                 .toInt(),
+             200000);
+
+    feedNotification(transport, QStringLiteral("thread/tokenUsage/updated"), QJsonObject{});
+    QCOMPARE(eventSpy.constLast().constFirst().value<AgentEvent>().type,
+             AgentEventType::WarningRaised);
+    QJsonObject staleUsage{{QStringLiteral("threadId"), QStringLiteral("0198-thread-snack")},
+                           {QStringLiteral("turnId"), QStringLiteral("stale-turn")},
+                           {QStringLiteral("tokenUsage"),
+                            QJsonObject{{QStringLiteral("last"), breakdown},
+                                        {QStringLiteral("total"), breakdown},
+                                        {QStringLiteral("modelContextWindow"), QJsonValue::Null}}}};
+    feedNotification(transport, QStringLiteral("thread/tokenUsage/updated"), staleUsage);
+    QCOMPARE(eventSpy.constLast().constFirst().value<AgentEvent>().type,
+             AgentEventType::WarningRaised);
+    feedServerRequest(transport, QStringLiteral("input-2"), QStringLiteral("tool/requestUserInput"),
+                      requestParams);
+    const QString secondRequestId = eventSpy.constLast()
+                                        .constFirst()
+                                        .value<AgentEvent>()
+                                        .payload.value(QStringLiteral("requestId"))
+                                        .toString();
+    feedNotification(transport, QStringLiteral("serverRequest/resolved"),
+                     {{QStringLiteral("threadId"), QStringLiteral("0198-thread-snack")},
+                      {QStringLiteral("requestId"), QStringLiteral("input-2")}});
+    QCOMPARE(eventSpy.constLast().constFirst().value<AgentEvent>().type,
+             AgentEventType::UserInputResolved);
+    QCOMPARE(eventSpy.constLast()
+                 .constFirst()
+                 .value<AgentEvent>()
+                 .payload.value(QStringLiteral("requestId"))
+                 .toString(),
+             secondRequestId);
+
+    feedServerRequest(transport, QStringLiteral("invalid-input"),
+                      QStringLiteral("tool/requestUserInput"), QJsonObject{});
+    QCOMPARE(parseMessage(transport.writes.constLast().trimmed())
+                 .error.value(QStringLiteral("code"))
+                 .toInt(),
+             -32602);
+    QJsonObject staleRequest = requestParams;
+    staleRequest.insert(QStringLiteral("turnId"), QStringLiteral("stale-turn"));
+    feedServerRequest(transport, QStringLiteral("stale-input"),
+                      QStringLiteral("tool/requestUserInput"), staleRequest);
+    QCOMPARE(parseMessage(transport.writes.constLast().trimmed())
+                 .result.toObject()
+                 .value(QStringLiteral("answers"))
+                 .toObject()
+                 .size(),
+             0);
+
+    feedServerRequest(transport, QStringLiteral("input-pending"),
+                      QStringLiteral("tool/requestUserInput"), requestParams);
+    const QString pendingRequestId = eventSpy.constLast()
+                                         .constFirst()
+                                         .value<AgentEvent>()
+                                         .payload.value(QStringLiteral("requestId"))
+                                         .toString();
+    for (const QList<QVariant>& arguments : eventSpy) {
+        const AgentEvent event = arguments.constFirst().value<AgentEvent>();
+        QVERIFY(
+            !QJsonDocument(event.payload).toJson(QJsonDocument::Compact).contains("supersecret"));
+    }
+
+    feedNotification(
+        transport, QStringLiteral("turn/completed"),
+        {{QStringLiteral("threadId"), QStringLiteral("0198-thread-snack")},
+         {QStringLiteral("turn"), turnObject(nativeTurnId, QStringLiteral("completed"))}});
+    QCOMPARE(eventSpy.at(eventSpy.size() - 2).constFirst().value<AgentEvent>().type,
+             AgentEventType::UserInputResolved);
+    QCOMPARE(eventSpy.at(eventSpy.size() - 2)
+                 .constFirst()
+                 .value<AgentEvent>()
+                 .payload.value(QStringLiteral("requestId"))
+                 .toString(),
+             pendingRequestId);
+    QCOMPARE(eventSpy.constLast().constFirst().value<AgentEvent>().type,
+             AgentEventType::TurnCompleted);
     adapter.closeAgent();
 }
 

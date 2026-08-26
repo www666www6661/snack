@@ -53,6 +53,7 @@ SessionController::SessionController(domain::Conversation conversation,
                 }
                 if (!connected) {
                     pendingApprovals_.clear();
+                    pendingUserInputs_.clear();
                 }
                 setStatus(connected ? domain::ConversationStatus::Idle
                                     : domain::ConversationStatus::Disconnected);
@@ -67,6 +68,7 @@ SessionController::SessionController(domain::Conversation conversation,
         if (turnId == activeTurnId_) {
             activeTurnId_ = QUuid{};
             pendingApprovals_.clear();
+            pendingUserInputs_.clear();
             setStatus(domain::ConversationStatus::Idle);
         }
     });
@@ -153,6 +155,7 @@ domain::TurnSettingsSnapshot SessionController::nextTurnSettings() const {
 const agent::CapabilitySet& SessionController::capabilities() const { return capabilities_; }
 QString SessionController::connectionDetail() const { return connectionDetail_; }
 qsizetype SessionController::pendingApprovalCount() const { return pendingApprovals_.size(); }
+qsizetype SessionController::pendingInputCount() const { return pendingUserInputs_.size(); }
 
 QList<domain::AgentEvent> SessionController::restoredEvents(QString* error) {
     const auto events = repository_->eventsForConversation(conversation_.id, error);
@@ -210,8 +213,7 @@ bool SessionController::sendMessage(const QString& message, QString* error) {
 
 bool SessionController::respondToApproval(const QString& requestId,
                                           domain::ApprovalDecision decision, QString* error) {
-    if (conversation_.status != domain::ConversationStatus::WaitingApproval ||
-        !pendingApprovals_.contains(requestId)) {
+    if (!pendingApprovals_.contains(requestId)) {
         if (error != nullptr) {
             *error = QStringLiteral("Approval request is no longer active");
         }
@@ -240,9 +242,33 @@ bool SessionController::respondToApproval(const QString& requestId,
                         {QStringLiteral("decision"), domain::enumName(decision)},
                         {QStringLiteral("resolution"), QStringLiteral("answered")}};
     recordEvent(resolved);
-    if (pendingApprovals_.isEmpty() && !activeTurnId_.isNull()) {
-        setStatus(domain::ConversationStatus::Running);
+    recomputeActiveStatus();
+    return true;
+}
+
+bool SessionController::respondToUserInput(const QString& requestId, const QJsonObject& answers,
+                                           QString* error) {
+    if (!pendingUserInputs_.contains(requestId)) {
+        if (error != nullptr) {
+            *error = QStringLiteral("User input request is no longer active");
+        }
+        return false;
     }
+    if (!adapter_->respondToUserInput(requestId, answers)) {
+        if (error != nullptr) {
+            *error = QStringLiteral("Failed to send user input response");
+        }
+        return false;
+    }
+
+    pendingUserInputs_.remove(requestId);
+    domain::AgentEvent resolved;
+    resolved.turnId = activeTurnId_;
+    resolved.type = domain::AgentEventType::UserInputResolved;
+    resolved.payload = {{QStringLiteral("requestId"), requestId},
+                        {QStringLiteral("resolution"), QStringLiteral("answered")}};
+    recordEvent(resolved);
+    recomputeActiveStatus();
     return true;
 }
 
@@ -258,6 +284,7 @@ void SessionController::close() {
     adapter_->closeAgent();
     activeTurnId_ = QUuid{};
     pendingApprovals_.clear();
+    pendingUserInputs_.clear();
     setStatus(domain::ConversationStatus::Closed);
 }
 
@@ -294,15 +321,50 @@ void SessionController::handleAdapterEvent(domain::AgentEvent event) {
             return;
         }
         pendingApprovals_.insert(requestId, event.payload);
-        setStatus(domain::ConversationStatus::WaitingApproval);
+        recomputeActiveStatus();
     } else if (event.type == domain::AgentEventType::ApprovalResolved) {
         const QString requestId = event.payload.value(QStringLiteral("requestId")).toString();
-        if (pendingApprovals_.remove(requestId) > 0 && pendingApprovals_.isEmpty() &&
-            !activeTurnId_.isNull()) {
-            setStatus(domain::ConversationStatus::Running);
+        if (pendingApprovals_.remove(requestId) > 0) {
+            recomputeActiveStatus();
+        }
+    } else if (event.type == domain::AgentEventType::UserInputRequested) {
+        const QString requestId = event.payload.value(QStringLiteral("requestId")).toString();
+        if (requestId.isEmpty() || pendingUserInputs_.contains(requestId)) {
+            domain::AgentEvent warning;
+            warning.turnId = activeTurnId_;
+            warning.type = domain::AgentEventType::WarningRaised;
+            warning.payload = {{QStringLiteral("message"),
+                                QStringLiteral("Ignored invalid or duplicate user input request")}};
+            warning.rawPayload = event.rawPayload;
+            recordEvent(warning);
+            return;
+        }
+        pendingUserInputs_.insert(requestId, event.payload);
+        recomputeActiveStatus();
+    } else if (event.type == domain::AgentEventType::UserInputResolved) {
+        const QString requestId = event.payload.value(QStringLiteral("requestId")).toString();
+        if (pendingUserInputs_.remove(requestId) > 0) {
+            recomputeActiveStatus();
         }
     }
     recordEvent(std::move(event));
+}
+
+void SessionController::recomputeActiveStatus() {
+    if (activeTurnId_.isNull()) {
+        return;
+    }
+    const bool hasBlockingInput = std::any_of(
+        pendingUserInputs_.cbegin(), pendingUserInputs_.cend(), [](const QJsonObject& payload) {
+            return payload.value(QStringLiteral("isBlocking")).toBool();
+        });
+    if (hasBlockingInput) {
+        setStatus(domain::ConversationStatus::WaitingInput);
+    } else if (!pendingApprovals_.isEmpty()) {
+        setStatus(domain::ConversationStatus::WaitingApproval);
+    } else {
+        setStatus(domain::ConversationStatus::Running);
+    }
 }
 
 void SessionController::recordEvent(domain::AgentEvent event) {

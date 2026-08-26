@@ -12,6 +12,7 @@
 #include <QFrame>
 #include <QJsonArray>
 #include <QLabel>
+#include <QLineEdit>
 #include <QListWidget>
 #include <QMessageBox>
 #include <QPlainTextEdit>
@@ -59,6 +60,7 @@ class TestMainWindow final : public QObject {
     void restoresWindowLayout();
     void interruptsRunningTurnFromSendButton();
     void handlesApprovalCard();
+    void handlesUserInputCardAndUsage();
     void cancelsQuitWhileAgentIsRunning();
 };
 
@@ -179,17 +181,50 @@ void TestMainWindow::restoresPersistedTimeline() {
                              {QStringLiteral("kind"), QStringLiteral("fileChange")},
                              {QStringLiteral("grantRoot"), QStringLiteral("/outside")}};
     repository.events.append(approvalEvent);
+    snack::domain::AgentEvent inputEvent;
+    inputEvent.conversationId = conversation.id;
+    inputEvent.turnId = approvalEvent.turnId;
+    inputEvent.sequence = 5;
+    inputEvent.type = snack::domain::AgentEventType::UserInputRequested;
+    inputEvent.payload = {
+        {QStringLiteral("requestId"), QStringLiteral("restored-input")},
+        {QStringLiteral("isBlocking"), true},
+        {QStringLiteral("questions"),
+         QJsonArray{QJsonObject{{QStringLiteral("id"), QStringLiteral("name")},
+                                {QStringLiteral("header"), QStringLiteral("Name")},
+                                {QStringLiteral("question"), QStringLiteral("Your name?")},
+                                {QStringLiteral("options"), QJsonValue::Null}}}}};
+    repository.events.append(inputEvent);
+    snack::domain::AgentEvent usageEvent;
+    usageEvent.conversationId = conversation.id;
+    usageEvent.turnId = approvalEvent.turnId;
+    usageEvent.sequence = 6;
+    usageEvent.type = snack::domain::AgentEventType::UsageUpdated;
+    usageEvent.payload = {
+        {QStringLiteral("total"), QJsonObject{{QStringLiteral("inputTokens"), 10},
+                                              {QStringLiteral("cachedInputTokens"), 2},
+                                              {QStringLiteral("outputTokens"), 5},
+                                              {QStringLiteral("reasoningOutputTokens"), 1},
+                                              {QStringLiteral("totalTokens"), 16}}},
+        {QStringLiteral("modelContextWindow"), QJsonValue::Null}};
+    repository.events.append(usageEvent);
 
     snack::session::SessionController controller(conversation, &adapter, &repository);
     snack::ui::MainWindow window(&controller, &settings);
     auto* timeline = window.findChild<QListWidget*>(QStringLiteral("timeline"));
     QVERIFY(timeline != nullptr);
-    QCOMPARE(timeline->count(), 3);
+    QCOMPARE(timeline->count(), 4);
     QVERIFY(timeline->item(0)->text().contains(QStringLiteral("Persisted question")));
     QVERIFY(timeline->item(1)->text().contains(QStringLiteral("Persisted answer")));
     auto* restoredApproval = window.findChild<QPushButton*>(QStringLiteral("approvalAcceptButton"));
     QVERIFY(restoredApproval != nullptr);
     QVERIFY(!restoredApproval->isEnabled());
+    auto* restoredInput = window.findChild<QPushButton*>(QStringLiteral("userInputSubmitButton"));
+    auto* restoredUsage = window.findChild<QLabel*>(QStringLiteral("tokenUsageLabel"));
+    QVERIFY(restoredInput != nullptr);
+    QVERIFY(!restoredInput->isEnabled());
+    QVERIFY(restoredUsage != nullptr);
+    QVERIFY(restoredUsage->text().contains(QStringLiteral("16")));
 }
 
 void TestMainWindow::restoresToolReasoningAndPlanViews() {
@@ -445,6 +480,108 @@ void TestMainWindow::handlesApprovalCard() {
 
     sendButton->click();
     QCOMPARE(controller.status(), ConversationStatus::Idle);
+    window.close();
+}
+
+void TestMainWindow::handlesUserInputCardAndUsage() {
+    using snack::domain::AgentEvent;
+    using snack::domain::AgentEventType;
+    using snack::domain::ConversationStatus;
+
+    QTemporaryDir directory;
+    snack::app::AppSettings settings(directory.filePath(QStringLiteral("settings.ini")));
+    UiMemoryEventRepository repository;
+    snack::agent::FakeAgentAdapter adapter(nullptr, 1000);
+    snack::domain::Conversation conversation;
+    conversation.title = QStringLiteral("Input UI");
+    conversation.workingDirectory = directory.path();
+    snack::session::SessionController controller(conversation, &adapter, &repository);
+    snack::ui::MainWindow window(&controller, &settings, false);
+
+    auto* composer = window.findChild<QPlainTextEdit*>(QStringLiteral("composer"));
+    auto* sendButton = window.findChild<QPushButton*>(QStringLiteral("sendButton"));
+    QTRY_COMPARE(controller.status(), ConversationStatus::Idle);
+    composer->setPlainText(QStringLiteral("Ask a question"));
+    sendButton->click();
+    const QUuid turnId = repository.events.constFirst().turnId;
+
+    AgentEvent usage;
+    usage.turnId = turnId;
+    usage.type = AgentEventType::UsageUpdated;
+    usage.payload = {
+        {QStringLiteral("last"), QJsonObject{{QStringLiteral("totalTokens"), 160}}},
+        {QStringLiteral("total"), QJsonObject{{QStringLiteral("inputTokens"), 1000},
+                                              {QStringLiteral("cachedInputTokens"), 200},
+                                              {QStringLiteral("outputTokens"), 300},
+                                              {QStringLiteral("reasoningOutputTokens"), 100},
+                                              {QStringLiteral("totalTokens"), 1400}}},
+        {QStringLiteral("modelContextWindow"), 200000}};
+    adapter.eventReceived(usage);
+    auto* usageLabel = window.findChild<QLabel*>(QStringLiteral("tokenUsageLabel"));
+    QVERIFY(usageLabel != nullptr);
+    QVERIFY(usageLabel->text().contains(QStringLiteral("1,400")) ||
+            usageLabel->text().contains(QStringLiteral("1400")));
+    QVERIFY(usageLabel->text().contains(QStringLiteral("0.7%")));
+    QVERIFY(usageLabel->toolTip().contains(QStringLiteral("1,000")) ||
+            usageLabel->toolTip().contains(QStringLiteral("1000")));
+
+    AgentEvent request;
+    request.turnId = turnId;
+    request.type = AgentEventType::UserInputRequested;
+    request.payload = {
+        {QStringLiteral("requestId"), QStringLiteral("ui-input")},
+        {QStringLiteral("isBlocking"), true},
+        {QStringLiteral("questions"),
+         QJsonArray{
+             QJsonObject{{QStringLiteral("id"), QStringLiteral("scope")},
+                         {QStringLiteral("header"), QStringLiteral("Scope")},
+                         {QStringLiteral("question"), QStringLiteral("Which scope?")},
+                         {QStringLiteral("isOther"), true},
+                         {QStringLiteral("options"),
+                          QJsonArray{QJsonObject{
+                              {QStringLiteral("label"), QStringLiteral("Core")},
+                              {QStringLiteral("description"), QStringLiteral("Core only")}}}}},
+             QJsonObject{{QStringLiteral("id"), QStringLiteral("token")},
+                         {QStringLiteral("header"), QStringLiteral("Token")},
+                         {QStringLiteral("question"), QStringLiteral("Provide token")},
+                         {QStringLiteral("isSecret"), true},
+                         {QStringLiteral("options"), QJsonValue::Null}}}}};
+    adapter.eventReceived(request);
+    QCOMPARE(controller.status(), ConversationStatus::WaitingInput);
+
+    auto* card = window.findChild<QFrame*>(QStringLiteral("userInputCard"));
+    auto* options = window.findChild<QComboBox*>(QStringLiteral("userInputOption_scope"));
+    auto* other = window.findChild<QLineEdit*>(QStringLiteral("userInputOther_scope"));
+    auto* secret = window.findChild<QLineEdit*>(QStringLiteral("userInputText_token"));
+    auto* submit = window.findChild<QPushButton*>(QStringLiteral("userInputSubmitButton"));
+    auto* inputStatus = window.findChild<QLabel*>(QStringLiteral("userInputStatus"));
+    QVERIFY(card != nullptr);
+    QVERIFY(options != nullptr);
+    QVERIFY(other != nullptr);
+    QVERIFY(secret != nullptr);
+    QVERIFY(submit != nullptr);
+    QVERIFY(inputStatus != nullptr);
+    QCOMPARE(secret->echoMode(), QLineEdit::Password);
+    options->setCurrentIndex(options->count() - 1);
+    QVERIFY(!other->isHidden());
+    other->setText(QStringLiteral("Custom"));
+    secret->setText(QStringLiteral("ui-secret"));
+    submit->click();
+
+    QCOMPARE(adapter.lastUserInputRequestId(), QStringLiteral("ui-input"));
+    QCOMPARE(adapter.lastUserInputAnswers()
+                 .value(QStringLiteral("scope"))
+                 .toObject()
+                 .value(QStringLiteral("answers"))
+                 .toArray()
+                 .at(0)
+                 .toString(),
+             QStringLiteral("Custom"));
+    QCOMPARE(controller.status(), ConversationStatus::Running);
+    QVERIFY(!submit->isEnabled());
+    QVERIFY(secret->text().isEmpty());
+    QVERIFY(inputStatus->text().contains(QStringLiteral("sent"), Qt::CaseInsensitive));
+    sendButton->click();
     window.close();
 }
 

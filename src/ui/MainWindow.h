@@ -13,6 +13,7 @@ class QComboBox;
 class QDockWidget;
 class QFrame;
 class QLabel;
+class QLineEdit;
 class QListWidgetItem;
 class QListWidget;
 class QPlainTextEdit;
@@ -54,6 +55,9 @@ class MainWindow final : public QMainWindow {
     void appendEvent(const domain::AgentEvent& event);
     void appendApprovalRequest(const domain::AgentEvent& event);
     void resolveApprovalCard(const domain::AgentEvent& event);
+    void appendUserInputRequest(const domain::AgentEvent& event);
+    void resolveUserInputCard(const domain::AgentEvent& event);
+    void updateUsage(const QJsonObject& payload);
     void appendToolStarted(const domain::AgentEvent& event);
     void appendToolProgress(const domain::AgentEvent& event);
     void completeTool(const domain::AgentEvent& event);
@@ -87,6 +91,7 @@ class MainWindow final : public QMainWindow {
     QPushButton* sendButton_{nullptr};
     QLabel* statusLabel_{nullptr};
     QLabel* titleLabel_{nullptr};
+    QLabel* usageLabel_{nullptr};
     QLabel* sessionRow_{nullptr};
     QComboBox* modelCombo_{nullptr};
     QComboBox* effortCombo_{nullptr};
@@ -108,6 +113,16 @@ class MainWindow final : public QMainWindow {
         QLabel* status{nullptr};
         QPlainTextEdit* output{nullptr};
     };
+    struct QuestionInputState {
+        QString questionId;
+        QComboBox* options{nullptr};
+        QLineEdit* text{nullptr};
+    };
+    struct UserInputCardState {
+        QLabel* status{nullptr};
+        QPushButton* submit{nullptr};
+        QList<QuestionInputState> questions;
+    };
     struct ReasoningCardState {
         QListWidgetItem* item{nullptr};
         QFrame* card{nullptr};
@@ -115,6 +130,7 @@ class MainWindow final : public QMainWindow {
         QLabel* status{nullptr};
     };
     QHash<QString, ApprovalCardState> approvalCards_;
+    QHash<QString, UserInputCardState> userInputCards_;
     QHash<QString, ToolCardState> toolCards_;
     QHash<QString, ReasoningCardState> reasoningCards_;
     QString streamedPlanText_;

@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-M2 的连接、Thread、文本 Turn、审批与活动事件垂直链路已在 Codex CLI `0.149.0` 上完成 fixture 验证。当前代码已经建立独立的 CLI 探测、子进程传输、JSONL 协议解析、初始化握手、分页 `model/list`、原生 `thread/start`/`thread/resume`、`turn/start`、文本流、工具执行、推理摘要、计划、`turn/interrupt` 和命令/文件审批响应。主应用默认探测并启动 Codex；CLI 不可用时明确回退到 Mock Agent。
+M2 的连接、Thread、文本 Turn、审批、用户提问、用量与活动事件垂直链路已在 Codex CLI `0.149.0` 上完成 fixture 验证。当前代码已经建立独立的 CLI 探测、子进程传输、JSONL 协议解析、初始化握手、分页 `model/list`、原生 `thread/start`/`thread/resume`、`turn/start`、文本流、工具执行、推理摘要、计划、`turn/interrupt`、命令/文件审批响应、问题回答和 Token/上下文显示。主应用默认探测并启动 Codex；CLI 不可用时明确回退到 Mock Agent。
 
 官方协议依据：[OpenAI Docs - Codex App Server](https://developers.openai.com/codex/app-server)。默认传输是 stdio 上逐行 JSON；线上消息省略 `jsonrpc: "2.0"`。每个连接必须先发送 `initialize` 请求，收到成功响应后再发送 `initialized` 通知。
 
@@ -17,6 +17,7 @@ M2 的连接、Thread、文本 Turn、审批与活动事件垂直链路已在 Co
 - `CodexThreadLifecycle` 校验 `thread.id`、`thread.sessionId` 与 cwd，并定义经过审计的访问层级映射。
 - `CodexTurnLifecycle` 构造逐轮设置覆盖，严格解析 Turn、Item、文本 Delta 与 Error 通知。
 - `CodexApprovalLifecycle` 校验命令与文件审批的路由字段，保留展示元数据，并构造与版本 Schema 一致的决策载荷。
+- `CodexUserInputLifecycle` 校验一至三个问题及其回答映射，并严格解析 Thread Token 用量通知。
 - `CodexAdapter` 读取全部分页、发布完整 `CapabilitySet`，创建或恢复原生 Thread，并将一个 GUI Turn 串行关联到一个原生 Turn。
 
 `model/list` 默认排除隐藏条目，并使用不透明 `nextCursor` 翻页；重复模型 ID 采用最后一条。缺少 `inputModalities` 时按官方兼容规则使用 `text` 与 `image`。未知的新推理强度 ID 保留在模型元数据中，但不映射为领域枚举。能力刷新后，如果当前模型或强度已失效，`SessionController` 会为下一轮切换到服务端声明的模型和强度默认值。
@@ -30,6 +31,10 @@ M2 的连接、Thread、文本 Turn、审批与活动事件垂直链路已在 Co
 当前切片只展示协议提供的推理摘要。`summaryTextDelta` 流入推理卡片，最终 summary 数组覆盖草稿；`reasoning/textDelta` 不会作为可见推理渲染或持久化。Plan Item Delta 可填充行内计划文本，完成 Item 覆盖草稿；`turn/plan/updated` 驱动可停靠任务列表，并显示 `pending`、`inProgress` 与 `completed` 三态。
 
 命令与文件审批以 app-server 主动发起的 `item/commandExecution/requestApproval` 和 `item/fileChange/requestApproval` 请求到达。适配器校验原生 Thread、Turn、Item 和 JSON-RPC 请求身份后，才产生持久化的 `ApprovalRequested` 事件。界面展示命令、cwd、原因、文件授权根目录或网络 host/protocol，并提供 `accept`、`acceptForSession`、`decline` 与 `cancel`。成功响应会记录 `ApprovalResolved`；`serverRequest/resolved`、Turn 结束、中断与断连也会清理等待状态。恢复出来但未回答的历史卡片保持禁用，因为其来源 app-server 进程已经不存在。并发请求分别寻址，重复原生请求 ID 不会产生重复卡片或重复响应。
+
+`tool/requestUserInput` 会转为统一问题卡片，支持选项、Other、自由文本和密码输入。阻塞请求使会话进入 `WaitingInput`，非阻塞请求保持运行；可见状态优先级依次为阻塞提问、审批、运行。回答只返回原生请求来源；持久化的解决事件仅含请求身份和结果，绝不包含回答值，密码控件提交后立即清空。恢复出来的未回答卡片标记过期并只读。
+
+`thread/tokenUsage/updated` 提供的 `last`、`total` 与 `modelContextWindow` 会映射为 `UsageUpdated`。标题栏展示总 Token/上下文占用，提示中细分输入、缓存、输出与推理；上下文窗口缺失时隐藏比例。零食不会估算费用，也不会修正服务端 Token 算术。
 
 Windows 优先探测 `codex.cmd`，并通过 `cmd.exe /c call` 启动 npm 包装器；Linux 和 macOS 直接启动 `codex`。这条 Windows 路径已通过真实本机握手测试。
 

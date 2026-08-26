@@ -2,6 +2,7 @@
 #include "session/SessionController.h"
 
 #include <QJsonArray>
+#include <QJsonDocument>
 #include <QSignalSpy>
 #include <QTest>
 
@@ -47,6 +48,7 @@ class TestSessionController final : public QObject {
     void snapshotsSettingsPerTurn();
     void interruptsActiveTurn();
     void handlesApprovalLifecycle();
+    void handlesUserInputLifecycleAndConcurrentWaitingStates();
     void validatesStateAndNormalizesSettings();
     void followsDynamicCapabilities();
     void persistsNativeIdentityForResume();
@@ -161,6 +163,79 @@ void TestSessionController::handlesApprovalLifecycle() {
     controller.interrupt();
     QCOMPARE(controller.status(), ConversationStatus::Idle);
     QCOMPARE(controller.pendingApprovalCount(), 0);
+}
+
+void TestSessionController::handlesUserInputLifecycleAndConcurrentWaitingStates() {
+    using snack::domain::AgentEvent;
+    using snack::domain::AgentEventType;
+    using snack::domain::ApprovalDecision;
+    using snack::domain::ConversationStatus;
+
+    MemoryEventRepository repository;
+    snack::agent::FakeAgentAdapter adapter(nullptr, 1000);
+    snack::session::SessionController controller(conversation(), &adapter, &repository);
+    controller.open();
+    QTRY_COMPARE(controller.status(), ConversationStatus::Idle);
+    QVERIFY(controller.sendMessage(QStringLiteral("ask me")));
+    const QUuid turnId = repository.events_.constFirst().turnId;
+
+    const auto inputRequest = [turnId](const QString& requestId, bool blocking) {
+        AgentEvent event;
+        event.turnId = turnId;
+        event.type = AgentEventType::UserInputRequested;
+        event.payload = {{QStringLiteral("requestId"), requestId},
+                         {QStringLiteral("isBlocking"), blocking},
+                         {QStringLiteral("questions"),
+                          QJsonArray{QJsonObject{{QStringLiteral("id"), QStringLiteral("value")},
+                                                 {QStringLiteral("isSecret"), true}}}}};
+        return event;
+    };
+    adapter.eventReceived(inputRequest(QStringLiteral("nonblocking"), false));
+    QCOMPARE(controller.status(), ConversationStatus::Running);
+    QCOMPARE(controller.pendingInputCount(), 1);
+
+    AgentEvent approval;
+    approval.turnId = turnId;
+    approval.type = AgentEventType::ApprovalRequested;
+    approval.payload = {{QStringLiteral("requestId"), QStringLiteral("approval")}};
+    adapter.eventReceived(approval);
+    QCOMPARE(controller.status(), ConversationStatus::WaitingApproval);
+
+    adapter.eventReceived(inputRequest(QStringLiteral("blocking"), true));
+    QCOMPARE(controller.status(), ConversationStatus::WaitingInput);
+    QCOMPARE(controller.pendingInputCount(), 2);
+    adapter.eventReceived(inputRequest(QStringLiteral("blocking"), true));
+    QCOMPARE(controller.pendingInputCount(), 2);
+    QCOMPARE(repository.events_.constLast().type, AgentEventType::WarningRaised);
+
+    const QJsonObject secretAnswers{
+        {QStringLiteral("value"),
+         QJsonObject{{QStringLiteral("answers"), QJsonArray{QStringLiteral("top-secret")}}}}};
+    QString error;
+    QVERIFY(controller.respondToUserInput(QStringLiteral("blocking"), secretAnswers, &error));
+    QCOMPARE(adapter.lastUserInputRequestId(), QStringLiteral("blocking"));
+    QCOMPARE(adapter.lastUserInputAnswers(), secretAnswers);
+    QCOMPARE(controller.status(), ConversationStatus::WaitingApproval);
+    QCOMPARE(repository.events_.constLast().type, AgentEventType::UserInputResolved);
+    QCOMPARE(repository.events_.constLast().payload.keys(),
+             QStringList({QStringLiteral("requestId"), QStringLiteral("resolution")}));
+
+    QVERIFY(
+        controller.respondToApproval(QStringLiteral("approval"), ApprovalDecision::Accept, &error));
+    QCOMPARE(controller.status(), ConversationStatus::Running);
+    QVERIFY(controller.respondToUserInput(QStringLiteral("nonblocking"), secretAnswers, &error));
+    QCOMPARE(controller.pendingInputCount(), 0);
+    QVERIFY(!controller.respondToUserInput(QStringLiteral("nonblocking"), secretAnswers, &error));
+
+    for (const AgentEvent& event : repository.events_) {
+        QVERIFY(
+            !QJsonDocument(event.payload).toJson(QJsonDocument::Compact).contains("top-secret"));
+    }
+    adapter.eventReceived(inputRequest(QStringLiteral("interrupt-input"), true));
+    QCOMPARE(controller.status(), ConversationStatus::WaitingInput);
+    controller.interrupt();
+    QCOMPARE(controller.status(), ConversationStatus::Idle);
+    QCOMPARE(controller.pendingInputCount(), 0);
 }
 
 void TestSessionController::validatesStateAndNormalizesSettings() {

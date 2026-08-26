@@ -21,12 +21,15 @@ class SessionController final : public QObject {
     [[nodiscard]] const agent::CapabilitySet& capabilities() const;
     [[nodiscard]] QString connectionDetail() const;
     [[nodiscard]] qsizetype pendingApprovalCount() const;
+    [[nodiscard]] qsizetype pendingInputCount() const;
     [[nodiscard]] QList<domain::AgentEvent> restoredEvents(QString* error = nullptr);
 
     void open();
     bool sendMessage(const QString& message, QString* error = nullptr);
     bool respondToApproval(const QString& requestId, domain::ApprovalDecision decision,
                            QString* error = nullptr);
+    bool respondToUserInput(const QString& requestId, const QJsonObject& answers,
+                            QString* error = nullptr);
     void interrupt();
     void close();
     void setNextTurnSettings(const domain::TurnSettingsSnapshot& settings);
@@ -47,6 +50,7 @@ class SessionController final : public QObject {
     [[nodiscard]] domain::TurnSettingsSnapshot
     normalizeSettings(const domain::TurnSettingsSnapshot& settings) const;
     void recordEvent(domain::AgentEvent event);
+    void recomputeActiveStatus();
     void setStatus(domain::ConversationStatus status);
 
     domain::Conversation conversation_;
@@ -57,6 +61,7 @@ class SessionController final : public QObject {
     QString connectionDetail_;
     QUuid activeTurnId_;
     QHash<QString, QJsonObject> pendingApprovals_;
+    QHash<QString, QJsonObject> pendingUserInputs_;
     quint64 nextSequence_{1};
 };
 

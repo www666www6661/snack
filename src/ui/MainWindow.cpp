@@ -11,7 +11,9 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QLabel>
+#include <QLineEdit>
 #include <QListWidget>
+#include <QLocale>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -229,6 +231,9 @@ void MainWindow::buildUi() {
     titleLabel_ = new QLabel(controller_->conversation().title, header);
     statusLabel_ = new QLabel(tr("Dormant"), header);
     statusLabel_->setObjectName(QStringLiteral("statusLabel"));
+    usageLabel_ = new QLabel(header);
+    usageLabel_->setObjectName(QStringLiteral("tokenUsageLabel"));
+    usageLabel_->hide();
     modelCombo_ = new QComboBox(header);
     modelCombo_->setObjectName(QStringLiteral("modelCombo"));
     effortCombo_ = new QComboBox(header);
@@ -238,6 +243,7 @@ void MainWindow::buildUi() {
 
     headerLayout->addWidget(titleLabel_);
     headerLayout->addWidget(statusLabel_);
+    headerLayout->addWidget(usageLabel_);
     headerLayout->addStretch();
     headerLayout->addWidget(modelCombo_);
     headerLayout->addWidget(effortCombo_);
@@ -390,6 +396,15 @@ void MainWindow::appendEvent(const domain::AgentEvent& event) {
     case domain::AgentEventType::ApprovalResolved:
         resolveApprovalCard(event);
         break;
+    case domain::AgentEventType::UserInputRequested:
+        appendUserInputRequest(event);
+        break;
+    case domain::AgentEventType::UserInputResolved:
+        resolveUserInputCard(event);
+        break;
+    case domain::AgentEventType::UsageUpdated:
+        updateUsage(event.payload);
+        break;
     case domain::AgentEventType::TurnInterrupted:
         timeline_->addItem(tr("Turn interrupted"));
         activeAgentRow_ = -1;
@@ -520,6 +535,168 @@ void MainWindow::resolveApprovalCard(const domain::AgentEvent& event) {
     const QString resolution = event.payload.value(QStringLiteral("resolution")).toString();
     iterator->status->setText(decision.isEmpty() ? tr("Approval closed: %1").arg(resolution)
                                                  : tr("Decision sent: %1").arg(decision));
+}
+
+void MainWindow::appendUserInputRequest(const domain::AgentEvent& event) {
+    const QString requestId = event.payload.value(QStringLiteral("requestId")).toString();
+    const QJsonArray questions = event.payload.value(QStringLiteral("questions")).toArray();
+    if (requestId.isEmpty() || questions.isEmpty() || userInputCards_.contains(requestId)) {
+        return;
+    }
+
+    auto* item = new QListWidgetItem(timeline_);
+    auto* card = new QFrame(timeline_);
+    card->setObjectName(QStringLiteral("userInputCard"));
+    auto* layout = new QVBoxLayout(card);
+    layout->setContentsMargins(14, 12, 14, 12);
+    auto* title = new QLabel(tr("Agent needs your input"), card);
+    title->setObjectName(QStringLiteral("userInputTitle"));
+    layout->addWidget(title);
+
+    UserInputCardState state;
+    for (const QJsonValue& value : questions) {
+        const QJsonObject question = value.toObject();
+        const QString questionId = question.value(QStringLiteral("id")).toString();
+        auto* header = new QLabel(question.value(QStringLiteral("header")).toString(), card);
+        header->setObjectName(QStringLiteral("userInputQuestionHeader"));
+        auto* prompt = new QLabel(question.value(QStringLiteral("question")).toString(), card);
+        prompt->setObjectName(QStringLiteral("userInputQuestion"));
+        prompt->setWordWrap(true);
+        layout->addWidget(header);
+        layout->addWidget(prompt);
+
+        QuestionInputState input{.questionId = questionId};
+        const QJsonArray options = question.value(QStringLiteral("options")).toArray();
+        const bool allowsOther = question.value(QStringLiteral("isOther")).toBool();
+        const bool secret = question.value(QStringLiteral("isSecret")).toBool();
+        if (!options.isEmpty()) {
+            input.options = new QComboBox(card);
+            input.options->setObjectName(QStringLiteral("userInputOption_%1").arg(questionId));
+            for (const QJsonValue& optionValue : options) {
+                const QJsonObject option = optionValue.toObject();
+                input.options->addItem(option.value(QStringLiteral("label")).toString(),
+                                       option.value(QStringLiteral("label")));
+                const int optionIndex = input.options->count() - 1;
+                input.options->setItemData(optionIndex,
+                                           option.value(QStringLiteral("description")).toString(),
+                                           Qt::ToolTipRole);
+            }
+            layout->addWidget(input.options);
+            if (allowsOther) {
+                input.options->addItem(tr("Other..."), QStringLiteral("__snack_other__"));
+                input.text = new QLineEdit(card);
+                input.text->setObjectName(QStringLiteral("userInputOther_%1").arg(questionId));
+                input.text->setPlaceholderText(tr("Enter another answer"));
+                input.text->setEchoMode(secret ? QLineEdit::Password : QLineEdit::Normal);
+                input.text->hide();
+                layout->addWidget(input.text);
+                connect(input.options, &QComboBox::currentIndexChanged, input.text,
+                        [combo = input.options, text = input.text](int) {
+                            text->setVisible(combo->currentData().toString() ==
+                                             QLatin1String("__snack_other__"));
+                        });
+            }
+        } else {
+            input.text = new QLineEdit(card);
+            input.text->setObjectName(QStringLiteral("userInputText_%1").arg(questionId));
+            input.text->setEchoMode(secret ? QLineEdit::Password : QLineEdit::Normal);
+            layout->addWidget(input.text);
+        }
+        if (restoringTimeline_) {
+            if (input.options != nullptr) {
+                input.options->setEnabled(false);
+            }
+            if (input.text != nullptr) {
+                input.text->setEnabled(false);
+            }
+        }
+        state.questions.append(input);
+    }
+
+    state.status = new QLabel(
+        restoringTimeline_ ? tr("Expired question") : tr("Waiting for your answer"), card);
+    state.status->setObjectName(QStringLiteral("userInputStatus"));
+    state.submit = new QPushButton(tr("Submit answers"), card);
+    state.submit->setObjectName(QStringLiteral("userInputSubmitButton"));
+    state.submit->setEnabled(!restoringTimeline_);
+    layout->addWidget(state.status);
+    layout->addWidget(state.submit, 0, Qt::AlignLeft);
+    userInputCards_.insert(requestId, state);
+
+    connect(state.submit, &QPushButton::clicked, this, [this, requestId] {
+        const auto iterator = userInputCards_.find(requestId);
+        if (iterator == userInputCards_.end()) {
+            return;
+        }
+        QJsonObject answers;
+        for (const QuestionInputState& input : iterator->questions) {
+            QString answer;
+            if (input.options != nullptr &&
+                input.options->currentData().toString() != QLatin1String("__snack_other__")) {
+                answer = input.options->currentData().toString();
+            } else if (input.text != nullptr) {
+                answer = input.text->text();
+            }
+            answers.insert(input.questionId,
+                           QJsonObject{{QStringLiteral("answers"), QJsonArray{answer}}});
+        }
+        QString error;
+        if (!controller_->respondToUserInput(requestId, answers, &error)) {
+            statusBar()->showMessage(error, 5000);
+        }
+    });
+
+    item->setSizeHint(card->sizeHint());
+    timeline_->setItemWidget(item, card);
+}
+
+void MainWindow::resolveUserInputCard(const domain::AgentEvent& event) {
+    const auto iterator =
+        userInputCards_.find(event.payload.value(QStringLiteral("requestId")).toString());
+    if (iterator == userInputCards_.end()) {
+        return;
+    }
+    iterator->submit->setEnabled(false);
+    for (const QuestionInputState& input : iterator->questions) {
+        if (input.options != nullptr) {
+            input.options->setEnabled(false);
+        }
+        if (input.text != nullptr) {
+            input.text->clear();
+            input.text->setEnabled(false);
+        }
+    }
+    const QString resolution = event.payload.value(QStringLiteral("resolution")).toString();
+    iterator->status->setText(resolution == QLatin1String("answered")
+                                  ? tr("Answers sent")
+                                  : tr("Question closed: %1").arg(resolution));
+}
+
+void MainWindow::updateUsage(const QJsonObject& payload) {
+    const QJsonObject total = payload.value(QStringLiteral("total")).toObject();
+    if (total.isEmpty()) {
+        return;
+    }
+    const qint64 totalTokens = total.value(QStringLiteral("totalTokens")).toInteger();
+    const QJsonValue contextValue = payload.value(QStringLiteral("modelContextWindow"));
+    QString text = tr("Tokens: %1").arg(QLocale().toString(totalTokens));
+    if (!contextValue.isNull() && contextValue.toInteger() > 0) {
+        const qint64 contextWindow = contextValue.toInteger();
+        text = tr("Tokens: %1 / %2 (%3%)")
+                   .arg(QLocale().toString(totalTokens), QLocale().toString(contextWindow),
+                        QString::number(100.0 * static_cast<double>(totalTokens) /
+                                            static_cast<double>(contextWindow),
+                                        'f', 1));
+    }
+    usageLabel_->setText(text);
+    usageLabel_->setToolTip(
+        tr("Input: %1\nCached input: %2\nOutput: %3\nReasoning output: %4")
+            .arg(QLocale().toString(total.value(QStringLiteral("inputTokens")).toInteger()),
+                 QLocale().toString(total.value(QStringLiteral("cachedInputTokens")).toInteger()),
+                 QLocale().toString(total.value(QStringLiteral("outputTokens")).toInteger()),
+                 QLocale().toString(
+                     total.value(QStringLiteral("reasoningOutputTokens")).toInteger())));
+    usageLabel_->show();
 }
 
 QString MainWindow::toolTitle(const QJsonObject& payload) const {
@@ -799,6 +976,18 @@ void MainWindow::updateStatus(domain::ConversationStatus status) {
         for (auto iterator = approvalCards_.begin(); iterator != approvalCards_.end(); ++iterator) {
             for (QPushButton* button : iterator->buttons) {
                 button->setEnabled(false);
+            }
+        }
+        for (auto iterator = userInputCards_.begin(); iterator != userInputCards_.end();
+             ++iterator) {
+            iterator->submit->setEnabled(false);
+            for (const QuestionInputState& input : iterator->questions) {
+                if (input.options != nullptr) {
+                    input.options->setEnabled(false);
+                }
+                if (input.text != nullptr) {
+                    input.text->setEnabled(false);
+                }
             }
         }
     }
