@@ -24,7 +24,7 @@ M2 的连接、Thread、文本 Turn、审批、用户提问、用量与活动事
 
 新会话调用 `thread/start`；持久化记录已有 `nativeThreadId` 时调用 `thread/resume`。Snack 在 SQLite Schema v3 中分别保存响应的 `thread.id` 和 `thread.sessionId`，绝不相互推导。恢复响应返回不同 Thread ID 时安全失败。访问映射为：严格 = `untrusted` + `read-only`，工作区 = `on-request` + `workspace-write`，完全 = `never` + `danger-full-access`。
 
-app-server 进程断开时，活动 Turn 会先按失败收口，再把会话置为 `Disconnected`。标题栏随后提供显式“重新连接”，启动新的 app-server 进程并恢复已持久化的原生 Thread。重连绝不会重试被中断的 Turn，也不会发送恢复出来的排队消息；两者都需要新的用户操作。
+app-server 进程断开时，活动 Turn 会先按失败收口，再把会话置为 `Disconnected`。标题栏随后提供显式“重新连接”，启动新的 app-server 进程并恢复已持久化的原生 Thread。如果旧进程仍在异步退出，新启动会带明确诊断被拒绝，会话回到 `Disconnected` 而不会永久停在 `Connecting`；进程结束后用户可以再次重试。重连绝不会重试被中断的 Turn，也不会发送恢复出来的排队消息；两者都需要新的用户操作。
 
 主窗口把断线诊断保存在持久诊断条中，不依赖定时消失的状态栏消息。重连期间继续显示上一次失败原因，只有恢复的 app-server 连接报告成功后才清除。启动时回退 Mock 也使用同一诊断条，但只要该回退运行时仍绑定当前会话，说明就始终可见。
 
@@ -61,6 +61,7 @@ Windows 优先探测 `codex.cmd`，并通过 `cmd.exe /c call` 启动 npm 包装
 - 未知通知不会让连接失败。未支持的 server request 会收到明确的 JSON-RPC `-32601`；格式错误的审批请求收到 `-32602`。两条路径都会产生警告，避免 app-server 请求静默悬挂。
 - 未知或重复响应 ID 只产生协议警告，不错误关联到其他请求。
 - 活跃 Turn 期间进程异常退出会产生一次 `TurnFailed` 和一次 `turnFinished`，避免会话永久停留在 Running。
+- 连接启动是带确认结果的操作。已有活动连接或传输层仍在退出时，启动会被拒绝且不会重置协议状态；适配器把该拒绝转换为局部连接失败。
 
 ## 契约测试
 
@@ -70,7 +71,7 @@ Windows 优先探测 `codex.cmd`，并通过 `cmd.exe /c call` 启动 npm 包装
 codex app-server generate-json-schema --out <directory>
 ```
 
-普通 CI 只运行假传输与 fixture，不依赖已安装 CLI，也不调用模型。测试覆盖分页、Thread list/read 解析、创建/恢复身份、动态逐轮设置、文本与工具流、同 Turn steer 成功/失败/ID 不匹配、最终 Item 权威覆盖、命令非零退出、文件/MCP 结果、推理摘要隐私、计划三态、有界历史输出、审批决策、过期与重复事件、请求/通知错误与超时、计时器清理、迟到响应隔离、中断竞态、未支持 server request 与进程断开。本机可选择执行 CLI 探测、初始化、模型目录与临时 Thread 创建的烟雾测试，全程不调用模型；真实 `turn/start` 必须由开发者另行明确启用，避免测试意外产生模型调用：
+普通 CI 只运行假传输与 fixture，不依赖已安装 CLI，也不调用模型。测试覆盖分页、Thread list/read 解析、创建/恢复身份、动态逐轮设置、文本与工具流、同 Turn steer 成功/失败/ID 不匹配、最终 Item 权威覆盖、命令非零退出、文件/MCP 结果、推理摘要隐私、计划三态、有界历史输出、审批决策、过期与重复事件、请求/通知错误与超时、计时器清理、迟到响应隔离、旧进程退出期间的重连拒绝与恢复、中断竞态、未支持 server request 与进程断开。本机可选择执行 CLI 探测、初始化、模型目录与临时 Thread 创建的烟雾测试，全程不调用模型；真实 `turn/start` 必须由开发者另行明确启用，避免测试意外产生模型调用：
 
 ```powershell
 $env:SNACK_RUN_LIVE_CODEX_TEST = '1'

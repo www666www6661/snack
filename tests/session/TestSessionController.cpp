@@ -68,6 +68,27 @@ class MemoryEventRepository : public snack::storage::IEventRepository {
     QHash<QUuid, snack::domain::PromptTemplate> templates_;
 };
 
+class RejectingAgentAdapter final : public snack::agent::IAgentAdapter {
+  public:
+    using IAgentAdapter::IAgentAdapter;
+
+    [[nodiscard]] snack::domain::AgentKind kind() const override {
+        return snack::domain::AgentKind::Codex;
+    }
+    [[nodiscard]] snack::agent::CapabilitySet capabilities() const override { return {}; }
+    void connectAgent(const snack::agent::AgentConnectionRequest&) override {
+        emit connectionChanged(false, QStringLiteral("Codex app-server process is still stopping"));
+    }
+    void startTurn(const snack::agent::TurnRequest&) override {}
+    bool steerTurn(const snack::agent::SteerRequest&) override { return false; }
+    bool respondToApproval(const QString&, snack::domain::ApprovalDecision) override {
+        return false;
+    }
+    bool respondToUserInput(const QString&, const QJsonObject&) override { return false; }
+    void interruptTurn() override {}
+    void closeAgent() override {}
+};
+
 class TestSessionController final : public QObject {
     Q_OBJECT
 
@@ -78,6 +99,7 @@ class TestSessionController final : public QObject {
     void persistsEditsAndDispatchesQueuedMessages();
     void doesNotAutoDispatchRestoredOrInterruptedQueue();
     void reconnectsWithoutReplayingQueuedMessages();
+    void returnsToDisconnectedWhenConnectRejected();
     void managesPromptTemplates();
     void interruptsActiveTurn();
     void handlesApprovalLifecycle();
@@ -272,6 +294,24 @@ void TestSessionController::reconnectsWithoutReplayingQueuedMessages() {
     QCOMPARE(controller.queuedMessages().size(), 1);
     QVERIFY(repository.events_.isEmpty());
     adapter.closeAgent();
+}
+
+void TestSessionController::returnsToDisconnectedWhenConnectRejected() {
+    MemoryEventRepository repository;
+    RejectingAgentAdapter adapter;
+    snack::session::SessionController controller(conversation(), &adapter, &repository);
+    QSignalSpy statusSpy(&controller, &snack::session::SessionController::statusChanged);
+
+    controller.open();
+
+    QCOMPARE(controller.status(), snack::domain::ConversationStatus::Disconnected);
+    QCOMPARE(controller.connectionDetail(),
+             QStringLiteral("Codex app-server process is still stopping"));
+    QCOMPARE(statusSpy.count(), 2);
+    QCOMPARE(statusSpy.constFirst().constFirst().value<snack::domain::ConversationStatus>(),
+             snack::domain::ConversationStatus::Connecting);
+    QCOMPARE(statusSpy.constLast().constFirst().value<snack::domain::ConversationStatus>(),
+             snack::domain::ConversationStatus::Disconnected);
 }
 
 void TestSessionController::managesPromptTemplates() {

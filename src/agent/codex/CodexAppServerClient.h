@@ -42,7 +42,7 @@ class CodexAppServerClient final : public QObject {
     [[nodiscard]] ServerInfo serverInfo() const;
     [[nodiscard]] QByteArray diagnostics() const;
 
-    void start(const process::LaunchSpec& launchSpec, const ClientInfo& clientInfo = {},
+    bool start(const process::LaunchSpec& launchSpec, const ClientInfo& clientInfo = {},
                int handshakeTimeoutMs = 5000);
     [[nodiscard]] qint64 sendRequest(const QString& method, const QJsonObject& params = {});
     void sendNotification(const QString& method, const QJsonObject& params = {});

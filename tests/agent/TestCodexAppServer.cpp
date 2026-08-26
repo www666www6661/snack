@@ -25,6 +25,7 @@ class FakeProcessTransport final : public snack::agent::process::IProcessTranspo
     [[nodiscard]] bool isRunning() const override { return running; }
 
     void start(const snack::agent::process::LaunchSpec& value) override {
+        ++startCalls;
         launchSpec = value;
         running = true;
         emit started();
@@ -42,7 +43,7 @@ class FakeProcessTransport final : public snack::agent::process::IProcessTranspo
 
     void terminate() override {
         ++terminateCalls;
-        if (running) {
+        if (running && !deferTerminate) {
             running = false;
             emit finished(0, snack::agent::process::ExitStatus::Normal);
         }
@@ -65,6 +66,8 @@ class FakeProcessTransport final : public snack::agent::process::IProcessTranspo
     QList<QByteArray> writes;
     bool running{false};
     bool failWrites{false};
+    bool deferTerminate{false};
+    int startCalls{0};
     int closeWriteChannelCalls{0};
     int terminateCalls{0};
     int killCalls{0};
@@ -98,6 +101,7 @@ class TestCodexAppServer final : public QObject {
     void adapterHandlesApprovalRequests();
     void adapterHandlesUserInputAndTokenUsage();
     void adapterFinishesTurnWhenProcessDisconnects();
+    void adapterRejectsReconnectWhileProcessStops();
     void adapterScopesRequestTimeouts();
     void adapterHandlesCatalogFailures();
     void streamsQProcessIoAndReportsStartFailure();
@@ -1769,6 +1773,48 @@ void TestCodexAppServer::adapterFinishesTurnWhenProcessDisconnects() {
     QVERIFY(!connectionSpy.constLast().constFirst().toBool());
 }
 
+void TestCodexAppServer::adapterRejectsReconnectWhileProcessStops() {
+    using namespace snack::agent::codex;
+
+    FakeProcessTransport transport;
+    transport.deferTerminate = true;
+    CodexAdapter adapter({.status = CliStatus::Available,
+                          .executablePath = QStringLiteral("codex"),
+                          .version = QStringLiteral("0.149.0")},
+                         &transport);
+    QSignalSpy connectionSpy(&adapter, &CodexAdapter::connectionChanged);
+
+    adapter.connectAgent({.workingDirectory = QStringLiteral("C:/workspace")});
+    QTRY_COMPARE(transport.writes.size(), 1);
+    transport.feedStandardOutput(
+        R"({"id":1,"error":{"code":-32000,"message":"initialization failed"}})"
+        "\n");
+    QCOMPARE(connectionSpy.count(), 1);
+    QVERIFY(!connectionSpy.constFirst().constFirst().toBool());
+    QCOMPARE(transport.terminateCalls, 1);
+    QVERIFY(transport.isRunning());
+
+    adapter.connectAgent({.workingDirectory = QStringLiteral("C:/workspace")});
+    QTRY_COMPARE(connectionSpy.count(), 2);
+    QVERIFY(!connectionSpy.constLast().constFirst().toBool());
+    QVERIFY(connectionSpy.constLast().at(1).toString().contains(QStringLiteral("still stopping")));
+    QCOMPARE(transport.startCalls, 1);
+    QCOMPARE(transport.writes.size(), 1);
+
+    transport.finish(0, snack::agent::process::ExitStatus::Normal);
+    adapter.connectAgent({.workingDirectory = QStringLiteral("C:/workspace")});
+    QTRY_COMPARE(transport.startCalls, 2);
+    QTRY_COMPARE(transport.writes.size(), 2);
+    completeHandshake(transport);
+    QJsonObject page = loadObjectFixture(QStringLiteral("model-list-page-1.json"));
+    page.insert(QStringLiteral("nextCursor"), QJsonValue::Null);
+    feedResult(transport, lastRequest(transport).id.toInteger(), page);
+    feedResult(transport, lastRequest(transport).id.toInteger(), threadResult());
+    QCOMPARE(connectionSpy.count(), 3);
+    QVERIFY(connectionSpy.constLast().constFirst().toBool());
+    adapter.closeAgent();
+}
+
 void TestCodexAppServer::adapterScopesRequestTimeouts() {
     using namespace snack::agent::codex;
     using snack::domain::AgentEvent;
@@ -2108,15 +2154,15 @@ void TestCodexAppServer::guardsStateAndHandshakeErrors() {
     guardedClient.sendNotification(QStringLiteral("too-early"));
     guardedClient.stop();
     QCOMPARE(guardedTransport.closeWriteChannelCalls, 0);
-    guardedClient.start({.program = QStringLiteral("codex")});
-    guardedClient.start({.program = QStringLiteral("codex")});
+    QVERIFY(guardedClient.start({.program = QStringLiteral("codex")}));
+    QVERIFY(!guardedClient.start({.program = QStringLiteral("codex")}));
     QCOMPARE(warningSpy.count(), 3);
     guardedTransport.feedStandardOutput(
         R"({"id":1,"error":{"code":-32000,"message":"not initialized"}})"
         "\n");
     QCOMPARE(guardedClient.state(), ConnectionState::Failed);
     guardedTransport.running = true;
-    guardedClient.start({.program = QStringLiteral("codex")});
+    QVERIFY(!guardedClient.start({.program = QStringLiteral("codex")}));
     QCOMPARE(warningSpy.count(), 4);
     guardedTransport.running = false;
 

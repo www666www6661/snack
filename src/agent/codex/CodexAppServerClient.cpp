@@ -52,15 +52,15 @@ ServerInfo CodexAppServerClient::serverInfo() const { return serverInfo_; }
 
 QByteArray CodexAppServerClient::diagnostics() const { return diagnostics_; }
 
-void CodexAppServerClient::start(const process::LaunchSpec& launchSpec,
+bool CodexAppServerClient::start(const process::LaunchSpec& launchSpec,
                                  const ClientInfo& clientInfo, int handshakeTimeoutMs) {
     if (state_ != ConnectionState::Stopped && state_ != ConnectionState::Failed) {
         emit protocolWarning(QStringLiteral("Codex app-server connection is already active"));
-        return;
+        return false;
     }
     if (transport_->isRunning()) {
         emit protocolWarning(QStringLiteral("Codex app-server process is still stopping"));
-        return;
+        return false;
     }
     clientInfo_ = clientInfo;
     serverInfo_ = {};
@@ -72,6 +72,7 @@ void CodexAppServerClient::start(const process::LaunchSpec& launchSpec,
     setState(ConnectionState::Starting);
     handshakeTimer_.start(handshakeTimeoutMs);
     transport_->start(launchSpec);
+    return true;
 }
 
 qint64 CodexAppServerClient::sendRequest(const QString& method, const QJsonObject& params) {

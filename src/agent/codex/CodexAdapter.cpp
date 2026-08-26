@@ -111,8 +111,10 @@ void CodexAdapter::connectAgent(const AgentConnectionRequest& request) {
                                : installation_.detail);
             return;
         }
-        client_.start(CodexCliDiscovery::appServerLaunchSpec(installation_,
-                                                             connectionRequest_.workingDirectory));
+        if (!client_.start(CodexCliDiscovery::appServerLaunchSpec(
+                installation_, connectionRequest_.workingDirectory))) {
+            failConnection(QStringLiteral("Codex app-server process is still stopping"));
+        }
     });
 }
 
