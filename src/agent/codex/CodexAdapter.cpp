@@ -1175,6 +1175,7 @@ void CodexAdapter::finishActiveTurn(domain::AgentEventType type, const QString& 
     if (activeTurn_.turnId.isNull()) {
         return;
     }
+    const QList<CodexApprovalRequest> pendingApprovalRequests = pendingApprovals_.values();
     const QList<QString> pendingRequestIds = pendingApprovals_.keys();
     for (const QString& requestId : pendingRequestIds) {
         emitActiveEvent(domain::AgentEventType::ApprovalResolved,
@@ -1184,6 +1185,7 @@ void CodexAdapter::finishActiveTurn(domain::AgentEventType type, const QString& 
     }
     pendingApprovals_.clear();
     approvalTokenByNativeKey_.clear();
+    const QList<CodexUserInputRequest> pendingInputRequests = pendingUserInputs_.values();
     const QList<QString> pendingInputIds = pendingUserInputs_.keys();
     for (const QString& requestId : pendingInputIds) {
         emitActiveEvent(domain::AgentEventType::UserInputResolved,
@@ -1193,6 +1195,21 @@ void CodexAdapter::finishActiveTurn(domain::AgentEventType type, const QString& 
     }
     pendingUserInputs_.clear();
     userInputTokenByNativeKey_.clear();
+    if (client_.state() == ConnectionState::Ready) {
+        for (const CodexApprovalRequest& request : pendingApprovalRequests) {
+            if (!client_.sendResponse(request.nativeRequestId,
+                                      approvalResponse(domain::ApprovalDecision::Decline)) &&
+                activeTurn_.turnId.isNull()) {
+                return;
+            }
+        }
+        for (const CodexUserInputRequest& request : pendingInputRequests) {
+            if (!client_.sendResponse(request.nativeRequestId, userInputResponse({})) &&
+                activeTurn_.turnId.isNull()) {
+                return;
+            }
+        }
+    }
     QJsonObject payload{{QStringLiteral("nativeTurnId"), nativeTurnId_},
                         {QStringLiteral("nativeStatus"), nativeStatus}};
     if (!message.isEmpty()) {

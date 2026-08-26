@@ -101,6 +101,7 @@ class TestCodexAppServer final : public QObject {
     void adapterInterruptsAndDeclinesServerRequests();
     void adapterHandlesApprovalRequests();
     void adapterHandlesUserInputAndTokenUsage();
+    void adapterResolvesPendingServerRequestsAtTurnEnd();
     void adapterFinishesTurnWhenProcessDisconnects();
     void adapterRejectsReconnectWhileProcessStops();
     void adapterScopesRequestTimeouts();
@@ -1816,6 +1817,85 @@ void TestCodexAppServer::adapterHandlesUserInputAndTokenUsage() {
              pendingRequestId);
     QCOMPARE(eventSpy.constLast().constFirst().value<AgentEvent>().type,
              AgentEventType::TurnCompleted);
+    adapter.closeAgent();
+}
+
+void TestCodexAppServer::adapterResolvesPendingServerRequestsAtTurnEnd() {
+    using namespace snack::agent::codex;
+    using snack::domain::AgentEvent;
+    using snack::domain::AgentEventType;
+
+    FakeProcessTransport transport;
+    CodexAdapter adapter({.status = CliStatus::Available,
+                          .executablePath = QStringLiteral("codex"),
+                          .version = QStringLiteral("0.149.0")},
+                         &transport);
+    connectAdapter(adapter, transport);
+    QSignalSpy eventSpy(&adapter, &CodexAdapter::eventReceived);
+
+    adapter.startTurn(codexTurnRequest(QUuid::createUuid()));
+    const QString nativeTurnId = QStringLiteral("turn-pending-requests-1");
+    feedResult(transport, lastRequest(transport).id.toInteger(),
+               QJsonObject{{QStringLiteral("turn"),
+                            turnObject(nativeTurnId, QStringLiteral("inProgress"))}});
+
+    const QJsonObject context{{QStringLiteral("threadId"), QStringLiteral("0198-thread-snack")},
+                              {QStringLiteral("turnId"), nativeTurnId},
+                              {QStringLiteral("itemId"), QStringLiteral("command-pending")},
+                              {QStringLiteral("command"), QStringLiteral("git status")},
+                              {QStringLiteral("cwd"), QStringLiteral("C:/workspace")}};
+    feedServerRequest(transport, QStringLiteral("approval-pending"),
+                      QStringLiteral("item/commandExecution/requestApproval"), context);
+    QJsonObject inputContext = context;
+    inputContext.insert(QStringLiteral("itemId"), QStringLiteral("input-pending"));
+    inputContext.insert(QStringLiteral("isBlocking"), true);
+    inputContext.insert(
+        QStringLiteral("questions"),
+        QJsonArray{QJsonObject{{QStringLiteral("id"), QStringLiteral("choice")},
+                               {QStringLiteral("header"), QStringLiteral("Choice")},
+                               {QStringLiteral("question"), QStringLiteral("Choose")},
+                               {QStringLiteral("isSecret"), false},
+                               {QStringLiteral("options"), QJsonValue::Null}}});
+    feedServerRequest(transport, QStringLiteral("input-pending"),
+                      QStringLiteral("tool/requestUserInput"), inputContext);
+    QCOMPARE(eventSpy.count(), 2);
+    const QString approvalToken = eventSpy.at(0)
+                                      .constFirst()
+                                      .value<AgentEvent>()
+                                      .payload.value(QStringLiteral("requestId"))
+                                      .toString();
+    const QString inputToken = eventSpy.at(1)
+                                   .constFirst()
+                                   .value<AgentEvent>()
+                                   .payload.value(QStringLiteral("requestId"))
+                                   .toString();
+
+    const qsizetype writesBeforeFinish = transport.writes.size();
+    feedNotification(
+        transport, QStringLiteral("turn/completed"),
+        {{QStringLiteral("threadId"), QStringLiteral("0198-thread-snack")},
+         {QStringLiteral("turn"), turnObject(nativeTurnId, QStringLiteral("completed"))}});
+    QCOMPARE(transport.writes.size(), writesBeforeFinish + 2);
+    const ProtocolMessage approvalResponseMessage =
+        parseMessage(transport.writes.at(writesBeforeFinish).trimmed());
+    const ProtocolMessage inputResponseMessage =
+        parseMessage(transport.writes.at(writesBeforeFinish + 1).trimmed());
+    QCOMPARE(approvalResponseMessage.id.toString(), QStringLiteral("approval-pending"));
+    QCOMPARE(approvalResponseMessage.result.toObject().value(QStringLiteral("decision")).toString(),
+             QStringLiteral("decline"));
+    QCOMPARE(inputResponseMessage.id.toString(), QStringLiteral("input-pending"));
+    QVERIFY(inputResponseMessage.result.toObject()
+                .value(QStringLiteral("answers"))
+                .toObject()
+                .isEmpty());
+    QCOMPARE(eventSpy.count(), 5);
+    QCOMPARE(eventSpy.at(2).constFirst().value<AgentEvent>().type,
+             AgentEventType::ApprovalResolved);
+    QCOMPARE(eventSpy.at(3).constFirst().value<AgentEvent>().type,
+             AgentEventType::UserInputResolved);
+    QCOMPARE(eventSpy.at(4).constFirst().value<AgentEvent>().type, AgentEventType::TurnCompleted);
+    QVERIFY(!adapter.respondToApproval(approvalToken, snack::domain::ApprovalDecision::Decline));
+    QVERIFY(!adapter.respondToUserInput(inputToken, {}));
     adapter.closeAgent();
 }
 
