@@ -29,6 +29,7 @@
 #include <QScreen>
 #include <QSignalBlocker>
 #include <QStatusBar>
+#include <QStyle>
 #include <QSystemTrayIcon>
 #include <QTimer>
 #include <QVBoxLayout>
@@ -114,9 +115,10 @@ MainWindow::MainWindow(session::SessionController* controller, app::AppSettings*
 
 void MainWindow::showStartupNotice(const QString& notice) {
     if (!notice.trimmed().isEmpty()) {
-        startupNotice_ = notice;
+        startupNotice_ = notice.trimmed();
         sessionRow_->setToolTip(startupNotice_);
         statusBar()->showMessage(startupNotice_, 10000);
+        refreshConnectionNotice();
     }
 }
 
@@ -494,12 +496,31 @@ void MainWindow::buildUi() {
 
     headerLayout->addWidget(titleLabel_);
     headerLayout->addWidget(statusLabel_);
-    headerLayout->addWidget(reconnectButton_);
     headerLayout->addWidget(usageLabel_);
     headerLayout->addStretch();
     headerLayout->addWidget(modelCombo_);
     headerLayout->addWidget(effortCombo_);
     headerLayout->addWidget(accessCombo_);
+
+    connectionNoticeFrame_ = new QFrame(conversation);
+    connectionNoticeFrame_->setObjectName(QStringLiteral("connectionNoticeFrame"));
+    auto* connectionNoticeLayout = new QHBoxLayout(connectionNoticeFrame_);
+    connectionNoticeLayout->setContentsMargins(22, 10, 22, 10);
+    auto* connectionNoticeText = new QWidget(connectionNoticeFrame_);
+    auto* connectionNoticeTextLayout = new QVBoxLayout(connectionNoticeText);
+    connectionNoticeTextLayout->setContentsMargins(0, 0, 0, 0);
+    connectionNoticeTextLayout->setSpacing(2);
+    connectionNoticeTitle_ = new QLabel(connectionNoticeText);
+    connectionNoticeTitle_->setObjectName(QStringLiteral("connectionNoticeTitle"));
+    connectionNoticeDetail_ = new QLabel(connectionNoticeText);
+    connectionNoticeDetail_->setObjectName(QStringLiteral("connectionNoticeDetail"));
+    connectionNoticeDetail_->setWordWrap(true);
+    connectionNoticeDetail_->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    connectionNoticeTextLayout->addWidget(connectionNoticeTitle_);
+    connectionNoticeTextLayout->addWidget(connectionNoticeDetail_);
+    connectionNoticeLayout->addWidget(connectionNoticeText, 1);
+    connectionNoticeLayout->addWidget(reconnectButton_);
+    connectionNoticeFrame_->hide();
 
     timeline_ = new QListWidget(conversation);
     timeline_->setObjectName(QStringLiteral("timeline"));
@@ -562,6 +583,7 @@ void MainWindow::buildUi() {
     composerLayout->addWidget(composerRow);
 
     conversationLayout->addWidget(header);
+    conversationLayout->addWidget(connectionNoticeFrame_);
     conversationLayout->addWidget(timeline_, 1);
     conversationLayout->addWidget(composerFrame);
     rootLayout->addWidget(sidebar);
@@ -1289,8 +1311,7 @@ void MainWindow::applyInterfaceScale(double scale) {
 
 void MainWindow::updateStatus(domain::ConversationStatus status) {
     statusLabel_->setText(domain::enumName(status));
-    reconnectButton_->setVisible(status == domain::ConversationStatus::Disconnected ||
-                                 status == domain::ConversationStatus::Failed);
+    refreshConnectionNotice();
     const bool idle = status == domain::ConversationStatus::Idle;
     const bool active = status == domain::ConversationStatus::Running ||
                         status == domain::ConversationStatus::WaitingApproval ||
@@ -1344,11 +1365,38 @@ void MainWindow::updateStatus(domain::ConversationStatus status) {
 
 void MainWindow::updateConnectionDetail(const QString& detail) {
     statusLabel_->setToolTip(detail);
+    refreshConnectionNotice();
     if (!startupNotice_.isEmpty()) {
         statusBar()->showMessage(startupNotice_, 10000);
     } else if (!detail.isEmpty()) {
         statusBar()->showMessage(detail, 5000);
     }
+}
+
+void MainWindow::refreshConnectionNotice() {
+    const domain::ConversationStatus status = controller_->status();
+    const bool failed = status == domain::ConversationStatus::Disconnected ||
+                        status == domain::ConversationStatus::Failed;
+    const bool reconnecting = status == domain::ConversationStatus::Connecting &&
+                              !controller_->connectionDetail().isEmpty();
+    const bool fallback = !startupNotice_.isEmpty();
+    if (!failed && !reconnecting && !fallback) {
+        connectionNoticeFrame_->hide();
+        reconnectButton_->hide();
+        return;
+    }
+
+    connectionNoticeFrame_->setProperty("severity", failed ? QStringLiteral("danger")
+                                                           : QStringLiteral("warning"));
+    connectionNoticeTitle_->setText(failed         ? tr("Agent connection unavailable")
+                                    : reconnecting ? tr("Reconnecting agent")
+                                                   : tr("Agent fallback active"));
+    connectionNoticeDetail_->setText((failed || reconnecting) ? controller_->connectionDetail()
+                                                              : startupNotice_);
+    reconnectButton_->setVisible(failed);
+    connectionNoticeFrame_->style()->unpolish(connectionNoticeFrame_);
+    connectionNoticeFrame_->style()->polish(connectionNoticeFrame_);
+    connectionNoticeFrame_->show();
 }
 
 void MainWindow::persistComposerDraft() {

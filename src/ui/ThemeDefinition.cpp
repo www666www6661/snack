@@ -151,6 +151,11 @@ QString ThemeDefinition::styleSheet() const {
 QMainWindow, QWidget#centralWorkbench { background: %1; color: %2; }
 QWidget#sessionSidebar { background: %3; border-right: 1px solid %4; }
 QFrame#sessionHeader { background: %1; border-bottom: 1px solid %4; }
+QFrame#connectionNoticeFrame { border-left: 4px solid; border-bottom: 1px solid %4; }
+QFrame#connectionNoticeFrame[severity="warning"] { background: %12; border-left-color: %13; }
+QFrame#connectionNoticeFrame[severity="danger"] { background: %12; border-left-color: %14; }
+QLabel#connectionNoticeTitle { font-weight: 700; }
+QLabel#connectionNoticeDetail { color: %9; }
 QListWidget#timeline { background: %1; border: none; outline: none; }
 QListWidget#timeline::item { padding: 9px 12px; margin: 3px 18px; border-radius: 8px; }
 QListWidget#timeline::item:selected { background: %5; color: %2; }
@@ -181,7 +186,10 @@ QStatusBar { border-top: 1px solid %4; color: %9; }
              color(*this, QStringLiteral("text.disabled")).name(),
              color(*this, QStringLiteral("text.secondary")).name())
         .arg(color(*this, QStringLiteral("message.tool")).name())
-        .arg(color(*this, QStringLiteral("message.reasoning")).name());
+        .arg(color(*this, QStringLiteral("message.reasoning")).name())
+        .arg(color(*this, QStringLiteral("surface.overlay")).name())
+        .arg(color(*this, QStringLiteral("state.warning")).name())
+        .arg(color(*this, QStringLiteral("state.danger")).name());
 }
 
 } // namespace snack::ui

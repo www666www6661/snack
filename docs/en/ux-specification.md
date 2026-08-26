@@ -12,6 +12,8 @@ At the 1920×1080 design baseline, use a 280 px conversation rail, a central cha
 
 Show agent, title, directory summary, connection/write-lease state, model, effort, access level, and overflow actions. Edits during execution display “applies to the next message.” Unsupported choices remain disabled with a reason.
 
+A persistent notice directly below the header reports an Agent fallback, connection loss, or reconnect attempt. Fallback notices remain visible while the fallback Agent is active. Connection failures preserve the original diagnostic and expose Reconnect in the notice; retrying keeps the previous cause visible until the native handshake succeeds. The status bar may echo the message but is never its only location.
+
 ## 4. Timeline
 
 Use a quiet user-message surface and a broad reading column for the agent. Tool cards show one-line summary, state, and duration before expansion. Collapse completed reasoning and label whether it is detailed reasoning or a summary. Approval cards outrank tools and explain action, target, reason, and risk. Prompt cards submit one question. Plans show current step inline and full detail in the task dock. Interruption and unknown-result states persist.

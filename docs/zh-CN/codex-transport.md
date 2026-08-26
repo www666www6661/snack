@@ -26,6 +26,8 @@ M2 的连接、Thread、文本 Turn、审批、用户提问、用量与活动事
 
 app-server 进程断开时，活动 Turn 会先按失败收口，再把会话置为 `Disconnected`。标题栏随后提供显式“重新连接”，启动新的 app-server 进程并恢复已持久化的原生 Thread。重连绝不会重试被中断的 Turn，也不会发送恢复出来的排队消息；两者都需要新的用户操作。
 
+主窗口把断线诊断保存在持久诊断条中，不依赖定时消失的状态栏消息。重连期间继续显示上一次失败原因，只有恢复的 app-server 连接报告成功后才清除。启动时回退 Mock 也使用同一诊断条，但只要该回退运行时仍绑定当前会话，说明就始终可见。
+
 每轮 `turn/start` 发送文本输入和 GUI Turn UUID，并按该轮不可变快照覆盖 `model`、`effort`、`cwd`、`approvalPolicy` 与 `sandboxPolicy`。`turn/started`、`item/started`、`item/agentMessage/delta`、`item/completed`、`error` 与 `turn/completed` 被映射为统一领域事件。适配器同时校验原生 Thread/Turn ID、合并最终消息缺失的尾部文本、忽略重复终态，并保证 `turnFinished` 只发送一次。用户可以在原生 Turn ID 返回前取消；请求会延迟到 ID 可用时发送。`turn/interrupt` 的响应不代表终态，仍由 `turn/completed` 的 `interrupted` 状态收口。
 
 `turn/steer` 可以向同一活动 Turn 补充一条文本指令。零食把原生 ID 作为 `expectedTurnId`，为消息生成独立客户端 ID，并且每个会话同一时刻只允许一个 steer 请求等待响应。原生 Turn ID 返回前提交的 steer 只暂存在内存中，并在 `turn/start` 确认 Turn 仍在运行后立即发送；若启动结果已经终结则直接丢弃。拒绝或 Turn ID 不匹配只产生警告，不会结束活动 Turn，也不会重发。公共 Session API 把成功受理的 steer 持久化为用户消息，并携带原 Turn 的设置快照。Composer 在运行中分别显示“引导”和“停止”；审批或回答获得焦点时退化为只能排队。

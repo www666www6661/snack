@@ -123,6 +123,12 @@ void TestMainWindow::sendsAndRendersStreamingTurn() {
     auto* effortCombo = window.findChild<QComboBox*>(QStringLiteral("effortCombo"));
     auto* sessionRow = window.findChild<QLabel*>(QStringLiteral("sessionRow"));
     auto* statusLabel = window.findChild<QLabel*>(QStringLiteral("statusLabel"));
+    auto* connectionNoticeFrame =
+        window.findChild<QFrame*>(QStringLiteral("connectionNoticeFrame"));
+    auto* connectionNoticeTitle =
+        window.findChild<QLabel*>(QStringLiteral("connectionNoticeTitle"));
+    auto* connectionNoticeDetail =
+        window.findChild<QLabel*>(QStringLiteral("connectionNoticeDetail"));
     QVERIFY(composer != nullptr);
     QVERIFY(sendButton != nullptr);
     QVERIFY(stopButton != nullptr);
@@ -131,6 +137,9 @@ void TestMainWindow::sendsAndRendersStreamingTurn() {
     QVERIFY(effortCombo != nullptr);
     QVERIFY(sessionRow != nullptr);
     QVERIFY(statusLabel != nullptr);
+    QVERIFY(connectionNoticeFrame != nullptr);
+    QVERIFY(connectionNoticeTitle != nullptr);
+    QVERIFY(connectionNoticeDetail != nullptr);
     QTRY_VERIFY(sendButton->isEnabled());
     QCOMPARE(modelCombo->count(), 2);
     QCOMPARE(modelCombo->currentData().toString(), QStringLiteral("mock-balanced"));
@@ -138,6 +147,9 @@ void TestMainWindow::sendsAndRendersStreamingTurn() {
     QCOMPARE(statusLabel->toolTip(), QStringLiteral("mock-v1"));
     window.showStartupNotice(QStringLiteral("Fallback reason"));
     QCOMPARE(sessionRow->toolTip(), QStringLiteral("Fallback reason"));
+    QVERIFY(!connectionNoticeFrame->isHidden());
+    QCOMPARE(connectionNoticeTitle->text(), QStringLiteral("Agent fallback active"));
+    QCOMPARE(connectionNoticeDetail->text(), QStringLiteral("Fallback reason"));
 
     sendButton->click();
     QCOMPARE(controller.status(), snack::domain::ConversationStatus::Idle);
@@ -148,6 +160,8 @@ void TestMainWindow::sendsAndRendersStreamingTurn() {
     modelCombo->setCurrentIndex(0);
     QCOMPARE(controller.nextTurnSettings().modelId, QStringLiteral("mock-fast"));
     QTRY_COMPARE_WITH_TIMEOUT(controller.status(), snack::domain::ConversationStatus::Idle, 1000);
+    QVERIFY(!connectionNoticeFrame->isHidden());
+    QCOMPARE(connectionNoticeDetail->text(), QStringLiteral("Fallback reason"));
     QVERIFY(timeline->count() >= 2);
     QVERIFY(timeline->item(0)->text().contains(QStringLiteral("Build the foundation")));
     QVERIFY(timeline->item(1)->text().contains(QStringLiteral("模拟 Agent")));
@@ -704,19 +718,33 @@ void TestMainWindow::reconnectsDisconnectedSession() {
 
     auto* reconnectButton = window.findChild<QPushButton*>(QStringLiteral("reconnectButton"));
     auto* sendButton = window.findChild<QPushButton*>(QStringLiteral("sendButton"));
+    auto* reconnectNoticeFrame = window.findChild<QFrame*>(QStringLiteral("connectionNoticeFrame"));
+    auto* reconnectNoticeTitle = window.findChild<QLabel*>(QStringLiteral("connectionNoticeTitle"));
+    auto* reconnectNoticeDetail =
+        window.findChild<QLabel*>(QStringLiteral("connectionNoticeDetail"));
     QVERIFY(reconnectButton != nullptr);
     QVERIFY(sendButton != nullptr);
+    QVERIFY(reconnectNoticeFrame != nullptr);
+    QVERIFY(reconnectNoticeTitle != nullptr);
+    QVERIFY(reconnectNoticeDetail != nullptr);
     QTRY_COMPARE(controller.status(), snack::domain::ConversationStatus::Idle);
     QVERIFY(reconnectButton->isHidden());
+    QVERIFY(reconnectNoticeFrame->isHidden());
 
     adapter.closeAgent();
     QCOMPARE(controller.status(), snack::domain::ConversationStatus::Disconnected);
+    QVERIFY(!reconnectNoticeFrame->isHidden());
+    QCOMPARE(reconnectNoticeTitle->text(), QStringLiteral("Agent connection unavailable"));
+    QCOMPARE(reconnectNoticeDetail->text(), QStringLiteral("closed"));
     QVERIFY(!reconnectButton->isHidden());
     QVERIFY(!sendButton->isEnabled());
 
     reconnectButton->click();
+    QCOMPARE(reconnectNoticeTitle->text(), QStringLiteral("Reconnecting agent"));
+    QCOMPARE(reconnectNoticeDetail->text(), QStringLiteral("closed"));
     QTRY_COMPARE(controller.status(), snack::domain::ConversationStatus::Idle);
     QVERIFY(reconnectButton->isHidden());
+    QVERIFY(reconnectNoticeFrame->isHidden());
     QVERIFY(sendButton->isEnabled());
     QCOMPARE(adapter.lastConnectionRequest().nativeThreadId, QStringLiteral("native-thread-1"));
     window.close();

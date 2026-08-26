@@ -87,6 +87,7 @@ class MainWindow final : public QMainWindow {
     void applyInterfaceScale(double scale);
     void updateStatus(domain::ConversationStatus status);
     void updateConnectionDetail(const QString& detail);
+    void refreshConnectionNotice();
     void persistComposerDraft();
     void rebuildPromptTemplateMenu();
     void insertPromptTemplate(const QUuid& templateId);
@@ -122,6 +123,9 @@ class MainWindow final : public QMainWindow {
     QPushButton* queueSendNowButton_{nullptr};
     QPushButton* queueRemoveButton_{nullptr};
     QLabel* statusLabel_{nullptr};
+    QFrame* connectionNoticeFrame_{nullptr};
+    QLabel* connectionNoticeTitle_{nullptr};
+    QLabel* connectionNoticeDetail_{nullptr};
     QLabel* titleLabel_{nullptr};
     QLabel* usageLabel_{nullptr};
     QLabel* sessionRow_{nullptr};

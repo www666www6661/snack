@@ -1,6 +1,7 @@
 #include "ui/ThemeDefinition.h"
 
 #include <QJsonObject>
+#include <QRegularExpression>
 #include <QTest>
 
 class TestThemeDefinition final : public QObject {
@@ -53,8 +54,10 @@ void TestThemeDefinition::producesWidgetStyleSheet() {
     const QString styleSheet = snack::ui::ThemeDefinition::dark().styleSheet();
     QVERIFY(styleSheet.contains(QStringLiteral("QMainWindow")));
     QVERIFY(styleSheet.contains(QStringLiteral("QFrame#queueFrame")));
+    QVERIFY(styleSheet.contains(QStringLiteral("QFrame#connectionNoticeFrame")));
     QVERIFY(styleSheet.contains(QStringLiteral("#171917")));
     QVERIFY(!styleSheet.contains(QStringLiteral("#ff00ff")));
+    QVERIFY(!styleSheet.contains(QRegularExpression(QStringLiteral("%[0-9]+"))));
 }
 
 QTEST_APPLESS_MAIN(TestThemeDefinition)
