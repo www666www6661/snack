@@ -18,6 +18,11 @@ class IEventRepository {
     virtual bool appendEvent(const domain::AgentEvent& event, QString* error) = 0;
     [[nodiscard]] virtual QList<domain::AgentEvent>
     eventsForConversation(const QUuid& conversationId, QString* error) const = 0;
+    virtual bool replaceQueuedMessages(const QUuid& conversationId,
+                                       const QList<domain::QueuedMessage>& messages,
+                                       QString* error) = 0;
+    [[nodiscard]] virtual QList<domain::QueuedMessage>
+    queuedMessagesForConversation(const QUuid& conversationId, QString* error) const = 0;
 };
 
 } // namespace snack::storage

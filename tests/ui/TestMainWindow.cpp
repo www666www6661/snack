@@ -46,7 +46,20 @@ class UiMemoryEventRepository final : public snack::storage::IEventRepository {
         return result;
     }
 
+    bool replaceQueuedMessages(const QUuid& conversationId,
+                               const QList<snack::domain::QueuedMessage>& messages,
+                               QString*) override {
+        queues.insert(conversationId, messages);
+        return true;
+    }
+
+    QList<snack::domain::QueuedMessage> queuedMessagesForConversation(const QUuid& conversationId,
+                                                                      QString*) const override {
+        return queues.value(conversationId);
+    }
+
     QList<snack::domain::AgentEvent> events;
+    QHash<QUuid, QList<snack::domain::QueuedMessage>> queues;
 };
 
 class TestMainWindow final : public QObject {
@@ -59,6 +72,7 @@ class TestMainWindow final : public QObject {
     void hidesToTrayWithoutClosingSession();
     void restoresWindowLayout();
     void interruptsRunningTurnFromSendButton();
+    void editsAndControlsQueuedMessages();
     void handlesApprovalCard();
     void handlesUserInputCardAndUsage();
     void cancelsQuitWhileAgentIsRunning();
@@ -435,6 +449,66 @@ void TestMainWindow::interruptsRunningTurnFromSendButton() {
     window.close();
 }
 
+void TestMainWindow::editsAndControlsQueuedMessages() {
+    QTemporaryDir directory;
+    snack::app::AppSettings settings(directory.filePath(QStringLiteral("settings.ini")));
+    UiMemoryEventRepository repository;
+    snack::agent::FakeAgentAdapter adapter(nullptr, 1000);
+    snack::domain::Conversation conversation;
+    conversation.title = QStringLiteral("Queue UI");
+    conversation.workingDirectory = directory.path();
+    snack::session::SessionController controller(conversation, &adapter, &repository);
+    snack::ui::MainWindow window(&controller, &settings, false);
+
+    auto* composer = window.findChild<QPlainTextEdit*>(QStringLiteral("composer"));
+    auto* sendButton = window.findChild<QPushButton*>(QStringLiteral("sendButton"));
+    auto* sendMode = window.findChild<QComboBox*>(QStringLiteral("sendModeCombo"));
+    auto* queueFrame = window.findChild<QFrame*>(QStringLiteral("queueFrame"));
+    auto* queueList = window.findChild<QListWidget*>(QStringLiteral("queueList"));
+    auto* queueUp = window.findChild<QPushButton*>(QStringLiteral("queueUpButton"));
+    auto* queueSendNow = window.findChild<QPushButton*>(QStringLiteral("queueSendNowButton"));
+    auto* queueRemove = window.findChild<QPushButton*>(QStringLiteral("queueRemoveButton"));
+    QVERIFY(composer != nullptr);
+    QVERIFY(sendButton != nullptr);
+    QVERIFY(sendMode != nullptr);
+    QVERIFY(queueFrame != nullptr);
+    QVERIFY(queueList != nullptr);
+    QVERIFY(queueUp != nullptr);
+    QVERIFY(queueSendNow != nullptr);
+    QVERIFY(queueRemove != nullptr);
+
+    QTRY_COMPARE(controller.status(), snack::domain::ConversationStatus::Idle);
+    composer->setPlainText(QStringLiteral("Long first turn"));
+    sendButton->click();
+    QCOMPARE(sendMode->currentData().toString(), QStringLiteral("steer"));
+    sendMode->setCurrentIndex(sendMode->findData(QStringLiteral("queue")));
+    QCOMPARE(sendButton->text(), QStringLiteral("Queue"));
+
+    composer->setPlainText(QStringLiteral("Queued one"));
+    sendButton->click();
+    composer->setPlainText(QStringLiteral("Queued two"));
+    sendButton->click();
+    QCOMPARE(queueList->count(), 2);
+    QVERIFY(!queueFrame->isHidden());
+    QCOMPARE(controller.queuedMessages().size(), 2);
+
+    queueList->item(1)->setText(QStringLiteral("Edited two"));
+    QCOMPARE(controller.queuedMessages().at(1).content, QStringLiteral("Edited two"));
+    queueList->setCurrentRow(1);
+    queueUp->click();
+    QCOMPARE(controller.queuedMessages().constFirst().content, QStringLiteral("Edited two"));
+
+    queueRemove->click();
+    QCOMPARE(queueList->count(), 1);
+    QCOMPARE(controller.queuedMessages().constFirst().content, QStringLiteral("Queued one"));
+    queueSendNow->click();
+    QVERIFY(controller.queuedMessages().isEmpty());
+    QVERIFY(queueFrame->isHidden());
+    QCOMPARE(adapter.lastSteerRequest().message, QStringLiteral("Queued one"));
+    window.findChild<QPushButton*>(QStringLiteral("stopButton"))->click();
+    window.close();
+}
+
 void TestMainWindow::handlesApprovalCard() {
     using snack::domain::AgentEvent;
     using snack::domain::AgentEventType;
@@ -472,8 +546,8 @@ void TestMainWindow::handlesApprovalCard() {
     adapter.eventReceived(request);
 
     QCOMPARE(controller.status(), ConversationStatus::WaitingApproval);
-    QCOMPARE(sendButton->text(), QStringLiteral("Steer"));
-    QVERIFY(!sendButton->isEnabled());
+    QCOMPARE(sendButton->text(), QStringLiteral("Queue"));
+    QVERIFY(sendButton->isEnabled());
     QVERIFY(!stopButton->isHidden());
     auto* card = window.findChild<QFrame*>(QStringLiteral("approvalCard"));
     auto* allow = window.findChild<QPushButton*>(QStringLiteral("approvalAcceptButton"));

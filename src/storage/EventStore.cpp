@@ -12,7 +12,7 @@
 namespace snack::storage {
 namespace {
 
-constexpr int currentSchemaVersion = 3;
+constexpr int currentSchemaVersion = 4;
 
 struct Migration {
     int version;
@@ -61,7 +61,22 @@ QList<Migration> migrations() {
               QStringLiteral("UPDATE schema_migrations SET "
                              "applied_at = CAST(strftime('%s','now') AS INTEGER) * 1000, "
                              "completed_at = CAST(strftime('%s','now') AS INTEGER) * 1000 "
-                             "WHERE version = 3")}}};
+                             "WHERE version = 3")}},
+            {4,
+             {QStringLiteral("INSERT INTO schema_migrations "
+                             "(version, applied_at, started_at, completed_at) VALUES "
+                             "(4, 0, CAST(strftime('%s','now') AS INTEGER) * 1000, NULL)"),
+              QStringLiteral(
+                  "CREATE TABLE queued_messages ("
+                  "id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, content TEXT NOT NULL, "
+                  "attachments TEXT NOT NULL DEFAULT '[]', position INTEGER NOT NULL, "
+                  "state TEXT NOT NULL, "
+                  "FOREIGN KEY(conversation_id) REFERENCES conversations(id) ON DELETE CASCADE, "
+                  "UNIQUE(conversation_id, position))"),
+              QStringLiteral("UPDATE schema_migrations SET "
+                             "applied_at = CAST(strftime('%s','now') AS INTEGER) * 1000, "
+                             "completed_at = CAST(strftime('%s','now') AS INTEGER) * 1000 "
+                             "WHERE version = 4")}}};
 }
 
 QString compactJson(const QJsonObject& object) {
@@ -285,6 +300,90 @@ QList<domain::AgentEvent> EventStore::eventsForConversation(const QUuid& convers
     return events;
 }
 
+bool EventStore::replaceQueuedMessages(const QUuid& conversationId,
+                                       const QList<domain::QueuedMessage>& messages,
+                                       QString* error) {
+    if (!ensureWritable(error)) {
+        return false;
+    }
+    for (qsizetype index = 0; index < messages.size(); ++index) {
+        const auto& message = messages.at(index);
+        if (message.id.isNull() || message.conversationId != conversationId ||
+            message.content.trimmed().isEmpty() || message.position != index) {
+            if (error != nullptr) {
+                *error = QStringLiteral("Cannot replace queued messages: invalid queue entry");
+            }
+            return false;
+        }
+    }
+    if (!database_.transaction()) {
+        setSqlError(error, QStringLiteral("Cannot start queued message transaction"),
+                    database_.lastError());
+        return false;
+    }
+
+    QSqlQuery remove(database_);
+    remove.prepare(QStringLiteral("DELETE FROM queued_messages WHERE conversation_id = ?"));
+    remove.addBindValue(conversationId.toString(QUuid::WithoutBraces));
+    if (!remove.exec()) {
+        setSqlError(error, QStringLiteral("Cannot replace queued messages"), remove.lastError());
+        database_.rollback();
+        return false;
+    }
+
+    for (const auto& message : messages) {
+        QSqlQuery insert(database_);
+        insert.prepare(QStringLiteral("INSERT INTO queued_messages "
+                                      "(id, conversation_id, content, attachments, position, "
+                                      "state) VALUES (?, ?, ?, ?, ?, ?)"));
+        insert.addBindValue(message.id.toString(QUuid::WithoutBraces));
+        insert.addBindValue(conversationId.toString(QUuid::WithoutBraces));
+        insert.addBindValue(message.content);
+        insert.addBindValue(
+            QString::fromUtf8(QJsonDocument(message.attachments).toJson(QJsonDocument::Compact)));
+        insert.addBindValue(message.position);
+        insert.addBindValue(domain::enumName(message.state));
+        if (!insert.exec()) {
+            setSqlError(error, QStringLiteral("Cannot replace queued messages"),
+                        insert.lastError());
+            database_.rollback();
+            return false;
+        }
+    }
+    if (!database_.commit()) {
+        setSqlError(error, QStringLiteral("Cannot commit queued messages"), database_.lastError());
+        database_.rollback();
+        return false;
+    }
+    return true;
+}
+
+QList<domain::QueuedMessage> EventStore::queuedMessagesForConversation(const QUuid& conversationId,
+                                                                       QString* error) const {
+    QList<domain::QueuedMessage> messages;
+    QSqlQuery query(database_);
+    query.prepare(
+        QStringLiteral("SELECT id, content, attachments, position, state FROM queued_messages "
+                       "WHERE conversation_id = ? ORDER BY position ASC"));
+    query.addBindValue(conversationId.toString(QUuid::WithoutBraces));
+    if (!query.exec()) {
+        setSqlError(error, QStringLiteral("Cannot load queued messages"), query.lastError());
+        return messages;
+    }
+    while (query.next()) {
+        domain::QueuedMessage message;
+        message.id = QUuid(query.value(0).toString());
+        message.conversationId = conversationId;
+        message.content = query.value(1).toString();
+        const QJsonDocument attachments = QJsonDocument::fromJson(query.value(2).toByteArray());
+        message.attachments = attachments.isArray() ? attachments.array() : QJsonArray{};
+        message.position = query.value(3).toLongLong();
+        message.state = domain::queuedMessageStateFromString(query.value(4).toString());
+        messages.append(message);
+    }
+    return messages;
+}
+
 int EventStore::schemaVersion(QString* error) const {
     QSqlQuery tableQuery(database_);
     if (!tableQuery.exec(QStringLiteral(
@@ -361,10 +460,11 @@ bool EventStore::validateSchema(bool checkIntegrity, QString* error) const {
     QSqlQuery objectsQuery(database_);
     if (!objectsQuery.exec(QStringLiteral(
             "SELECT COUNT(*) FROM sqlite_master WHERE "
-            "(type = 'table' AND name IN ('schema_migrations', 'conversations', 'events')) OR "
+            "(type = 'table' AND name IN ('schema_migrations', 'conversations', 'events', "
+            "'queued_messages')) OR "
             "(type = 'index' AND name IN ('events_conversation_sequence', "
             "'conversations_working_directory'))")) ||
-        !objectsQuery.next() || objectsQuery.value(0).toInt() != 5) {
+        !objectsQuery.next() || objectsQuery.value(0).toInt() != 6) {
         if (error != nullptr) {
             *error = QStringLiteral("Database schema validation failed: required objects are "
                                     "missing");
@@ -374,9 +474,9 @@ bool EventStore::validateSchema(bool checkIntegrity, QString* error) const {
 
     QSqlQuery completionQuery(database_);
     if (!completionQuery.exec(
-            QStringLiteral("SELECT COUNT(*) FROM schema_migrations WHERE version IN (2, 3) "
+            QStringLiteral("SELECT COUNT(*) FROM schema_migrations WHERE version IN (2, 3, 4) "
                            "AND completed_at IS NOT NULL")) ||
-        !completionQuery.next() || completionQuery.value(0).toInt() != 2) {
+        !completionQuery.next() || completionQuery.value(0).toInt() != 3) {
         if (error != nullptr) {
             *error = QStringLiteral("Database schema validation failed: migrations are incomplete");
         }

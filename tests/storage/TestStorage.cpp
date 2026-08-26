@@ -170,6 +170,30 @@ void TestStorage::eventStorePersistsOrderedEvents() {
     QCOMPARE(events.size(), 2);
     QCOMPARE(events.at(0).sequence, quint64{1});
     QCOMPARE(events.at(1).payload.value(QStringLiteral("text")).toString(), QStringLiteral("2"));
+
+    snack::domain::QueuedMessage firstQueued;
+    firstQueued.conversationId = conversation.id;
+    firstQueued.content = QStringLiteral("First queued message");
+    firstQueued.attachments = {QStringLiteral("workspace://README.md")};
+    snack::domain::QueuedMessage secondQueued;
+    secondQueued.conversationId = conversation.id;
+    secondQueued.content = QStringLiteral("Second queued message");
+    secondQueued.position = 1;
+    QVERIFY2(store.replaceQueuedMessages(conversation.id, {firstQueued, secondQueued}, &error),
+             qPrintable(error));
+    auto queued = store.queuedMessagesForConversation(conversation.id, &error);
+    QCOMPARE(queued.size(), 2);
+    QCOMPARE(queued.at(0).id, firstQueued.id);
+    QCOMPARE(queued.at(0).attachments, firstQueued.attachments);
+    QCOMPARE(queued.at(1).position, qsizetype{1});
+
+    secondQueued.position = 0;
+    secondQueued.content = QStringLiteral("Edited and moved");
+    QVERIFY2(store.replaceQueuedMessages(conversation.id, {secondQueued}, &error),
+             qPrintable(error));
+    queued = store.queuedMessagesForConversation(conversation.id, &error);
+    QCOMPARE(queued.size(), 1);
+    QCOMPARE(queued.constFirst().content, QStringLiteral("Edited and moved"));
 }
 
 void TestStorage::contentStoreDeduplicatesAndVerifies() {
@@ -260,7 +284,7 @@ void TestStorage::eventStoreBacksUpAndMigratesLegacySchema() {
     QCOMPARE(queryScalar(databasePath, QStringLiteral("SELECT MAX(version) FROM schema_migrations"),
                          &error)
                  .toInt(),
-             3);
+             4);
     QCOMPARE(queryScalar(databasePath,
                          QStringLiteral("SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' "
                                         "AND name = 'conversations_working_directory'"),
@@ -293,7 +317,7 @@ void TestStorage::eventStoreMigratesV2NativeIdentity() {
     QCOMPARE(queryScalar(databasePath, QStringLiteral("SELECT MAX(version) FROM schema_migrations"),
                          &error)
                  .toInt(),
-             3);
+             4);
     const auto restored = store.conversationById(
         QUuid(QStringLiteral("11111111-1111-1111-1111-111111111111")), &error);
     QVERIFY2(restored.has_value(), qPrintable(error));
@@ -386,7 +410,7 @@ void TestStorage::eventStoreRejectsIncompleteCurrentSchema() {
     const QStringList incompleteSchema = {
         QStringLiteral("CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, "
                        "applied_at INTEGER NOT NULL, started_at INTEGER, completed_at INTEGER)"),
-        QStringLiteral("INSERT INTO schema_migrations VALUES (3, 1, 1, 1)")};
+        QStringLiteral("INSERT INTO schema_migrations VALUES (4, 1, 1, 1)")};
     QVERIFY2(executeSql(databasePath, incompleteSchema, &error), qPrintable(error));
 
     snack::storage::EventStore store;

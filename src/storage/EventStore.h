@@ -29,6 +29,11 @@ class EventStore final : public IEventRepository {
     bool appendEvent(const domain::AgentEvent& event, QString* error) override;
     [[nodiscard]] QList<domain::AgentEvent> eventsForConversation(const QUuid& conversationId,
                                                                   QString* error) const override;
+    bool replaceQueuedMessages(const QUuid& conversationId,
+                               const QList<domain::QueuedMessage>& messages,
+                               QString* error) override;
+    [[nodiscard]] QList<domain::QueuedMessage>
+    queuedMessagesForConversation(const QUuid& conversationId, QString* error) const override;
 
   private:
     [[nodiscard]] int schemaVersion(QString* error) const;

@@ -12,6 +12,7 @@ class TestDomainTypes final : public QObject {
     void unknownValuesUseSafeDefaults();
     void eventTypeNamesRoundTrip();
     void approvalDecisionNamesRoundTrip();
+    void queuedMessageStateNamesRoundTrip();
 };
 
 void TestDomainTypes::settingsSnapshotRoundTrips() {
@@ -81,6 +82,13 @@ void TestDomainTypes::approvalDecisionNamesRoundTrip() {
         QCOMPARE(snack::domain::approvalDecisionFromString(snack::domain::enumName(value)), value);
     }
     QCOMPARE(snack::domain::approvalDecisionFromString(QStringLiteral("future")), Decline);
+}
+
+void TestDomainTypes::queuedMessageStateNamesRoundTrip() {
+    const auto pending = snack::domain::QueuedMessageState::Pending;
+    QCOMPARE(snack::domain::enumName(pending), QStringLiteral("pending"));
+    QCOMPARE(snack::domain::queuedMessageStateFromString(QStringLiteral("pending")), pending);
+    QCOMPARE(snack::domain::queuedMessageStateFromString(QStringLiteral("future")), pending);
 }
 
 QTEST_APPLESS_MAIN(TestDomainTypes)

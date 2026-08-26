@@ -23,6 +23,8 @@ constexpr EnumName<ApprovalDecision> approvalDecisions[] = {
     {ApprovalDecision::AcceptForSession, "acceptForSession"},
     {ApprovalDecision::Decline, "decline"},
     {ApprovalDecision::Cancel, "cancel"}};
+constexpr EnumName<QueuedMessageState> queuedMessageStates[] = {
+    {QueuedMessageState::Pending, "pending"}};
 constexpr EnumName<AgentEventType> eventTypes[] = {
     {AgentEventType::UserMessage, "user-message"},
     {AgentEventType::AgentMessageStart, "agent-message-start"},
@@ -99,6 +101,7 @@ QString enumName(AgentKind value) { return enumToString(value, agentKinds); }
 QString enumName(ReasoningEffort value) { return enumToString(value, reasoningEfforts); }
 QString enumName(AccessLevel value) { return enumToString(value, accessLevels); }
 QString enumName(ApprovalDecision value) { return enumToString(value, approvalDecisions); }
+QString enumName(QueuedMessageState value) { return enumToString(value, queuedMessageStates); }
 
 QString enumName(ConversationStatus value) {
     switch (value) {
@@ -143,6 +146,10 @@ AccessLevel accessLevelFromString(const QString& value) {
 
 ApprovalDecision approvalDecisionFromString(const QString& value) {
     return enumFromString(value, approvalDecisions, ApprovalDecision::Decline);
+}
+
+QueuedMessageState queuedMessageStateFromString(const QString& value) {
+    return enumFromString(value, queuedMessageStates, QueuedMessageState::Pending);
 }
 
 ConversationStatus conversationStatusFromString(const QString& value) {

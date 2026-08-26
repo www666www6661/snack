@@ -88,6 +88,8 @@ MainWindow::MainWindow(session::SessionController* controller, app::AppSettings*
             });
     connect(controller_, &session::SessionController::connectionDetailChanged, this,
             &MainWindow::updateConnectionDetail);
+    connect(controller_, &session::SessionController::queuedMessagesChanged, this,
+            &MainWindow::updateQueuedMessages);
     connect(qApp, &QCoreApplication::aboutToQuit, this, &MainWindow::shutdown);
 
     restoreTimeline();
@@ -95,6 +97,7 @@ MainWindow::MainWindow(session::SessionController* controller, app::AppSettings*
                                                                    : ThemeDefinition::light());
     applyInterfaceScale(settingsSnapshot_.interfaceScale);
     rebuildCapabilityControls(controller_->nextTurnSettings());
+    updateQueuedMessages(controller_->queuedMessages());
     controller_->open();
     QTimer::singleShot(0, this, &MainWindow::ensureWindowVisible);
 }
@@ -131,14 +134,104 @@ void MainWindow::closeEvent(QCloseEvent* event) {
 
 void MainWindow::sendMessage() {
     QString error;
-    const bool running = controller_->status() == domain::ConversationStatus::Running;
-    const bool accepted = running ? controller_->steerMessage(composer_->toPlainText(), &error)
-                                  : controller_->sendMessage(composer_->toPlainText(), &error);
+    const bool active = controller_->status() == domain::ConversationStatus::Running ||
+                        controller_->status() == domain::ConversationStatus::WaitingApproval ||
+                        controller_->status() == domain::ConversationStatus::WaitingInput;
+    const bool queue = active && sendModeCombo_->currentData().toString() == QLatin1String("queue");
+    const bool accepted = queue    ? controller_->queueMessage(composer_->toPlainText(), &error)
+                          : active ? controller_->steerMessage(composer_->toPlainText(), &error)
+                                   : controller_->sendMessage(composer_->toPlainText(), &error);
     if (!accepted) {
         statusBar()->showMessage(error, 4000);
         return;
     }
     composer_->clear();
+}
+
+void MainWindow::updateQueuedMessages(const QList<domain::QueuedMessage>& messages) {
+    const QSignalBlocker blocker(queueList_);
+    const QUuid selectedId = queueList_->currentItem() != nullptr
+                                 ? queueList_->currentItem()->data(Qt::UserRole).toUuid()
+                                 : QUuid{};
+    queueList_->clear();
+    int selectedRow = -1;
+    for (const auto& message : messages) {
+        auto* item = new QListWidgetItem(message.content, queueList_);
+        item->setData(Qt::UserRole, message.id);
+        item->setFlags(item->flags() | Qt::ItemIsEditable);
+        if (message.id == selectedId) {
+            selectedRow = static_cast<int>(message.position);
+        }
+    }
+    if (selectedRow >= 0) {
+        queueList_->setCurrentRow(selectedRow);
+    } else if (!messages.isEmpty()) {
+        queueList_->setCurrentRow(0);
+    }
+    queueFrame_->setVisible(!messages.isEmpty());
+    updateQueueControls();
+}
+
+void MainWindow::updateQueueControls() {
+    const qsizetype row = queueList_->currentRow();
+    const bool selected = row >= 0;
+    queueUpButton_->setEnabled(selected && row > 0);
+    queueDownButton_->setEnabled(selected && row + 1 < queueList_->count());
+    queueRemoveButton_->setEnabled(selected);
+    const bool canSend = controller_->status() == domain::ConversationStatus::Idle ||
+                         (controller_->status() == domain::ConversationStatus::Running &&
+                          controller_->capabilities().supportsSteering);
+    queueSendNowButton_->setEnabled(selected && canSend);
+}
+
+void MainWindow::editQueuedMessage(QListWidgetItem* item) {
+    if (item == nullptr) {
+        return;
+    }
+    QString error;
+    if (!controller_->updateQueuedMessage(item->data(Qt::UserRole).toUuid(), item->text(),
+                                          &error)) {
+        statusBar()->showMessage(error, 4000);
+        updateQueuedMessages(controller_->queuedMessages());
+    }
+}
+
+void MainWindow::moveQueuedMessageUp() {
+    if (auto* item = queueList_->currentItem(); item != nullptr) {
+        QString error;
+        if (!controller_->moveQueuedMessage(item->data(Qt::UserRole).toUuid(),
+                                            queueList_->currentRow() - 1, &error)) {
+            statusBar()->showMessage(error, 4000);
+        }
+    }
+}
+
+void MainWindow::moveQueuedMessageDown() {
+    if (auto* item = queueList_->currentItem(); item != nullptr) {
+        QString error;
+        if (!controller_->moveQueuedMessage(item->data(Qt::UserRole).toUuid(),
+                                            queueList_->currentRow() + 1, &error)) {
+            statusBar()->showMessage(error, 4000);
+        }
+    }
+}
+
+void MainWindow::sendQueuedMessageNow() {
+    if (auto* item = queueList_->currentItem(); item != nullptr) {
+        QString error;
+        if (!controller_->sendQueuedMessageNow(item->data(Qt::UserRole).toUuid(), &error)) {
+            statusBar()->showMessage(error, 4000);
+        }
+    }
+}
+
+void MainWindow::cancelQueuedMessage() {
+    if (auto* item = queueList_->currentItem(); item != nullptr) {
+        QString error;
+        if (!controller_->cancelQueuedMessage(item->data(Qt::UserRole).toUuid(), &error)) {
+            statusBar()->showMessage(error, 4000);
+        }
+    }
 }
 
 void MainWindow::stopTurn() {
@@ -257,20 +350,54 @@ void MainWindow::buildUi() {
     timeline_->setSelectionMode(QAbstractItemView::NoSelection);
 
     auto* composerFrame = new QWidget(conversation);
-    auto* composerLayout = new QHBoxLayout(composerFrame);
+    auto* composerLayout = new QVBoxLayout(composerFrame);
     composerLayout->setContentsMargins(70, 10, 70, 0);
-    composer_ = new QPlainTextEdit(composerFrame);
+    queueFrame_ = new QFrame(composerFrame);
+    queueFrame_->setObjectName(QStringLiteral("queueFrame"));
+    auto* queueLayout = new QVBoxLayout(queueFrame_);
+    auto* queueHeader = new QHBoxLayout();
+    queueHeader->addWidget(new QLabel(tr("Queued messages"), queueFrame_));
+    queueHeader->addStretch();
+    queueUpButton_ = new QPushButton(tr("Up"), queueFrame_);
+    queueUpButton_->setObjectName(QStringLiteral("queueUpButton"));
+    queueDownButton_ = new QPushButton(tr("Down"), queueFrame_);
+    queueDownButton_->setObjectName(QStringLiteral("queueDownButton"));
+    queueSendNowButton_ = new QPushButton(tr("Send now"), queueFrame_);
+    queueSendNowButton_->setObjectName(QStringLiteral("queueSendNowButton"));
+    queueRemoveButton_ = new QPushButton(tr("Remove"), queueFrame_);
+    queueRemoveButton_->setObjectName(QStringLiteral("queueRemoveButton"));
+    queueHeader->addWidget(queueUpButton_);
+    queueHeader->addWidget(queueDownButton_);
+    queueHeader->addWidget(queueSendNowButton_);
+    queueHeader->addWidget(queueRemoveButton_);
+    queueList_ = new QListWidget(queueFrame_);
+    queueList_->setObjectName(QStringLiteral("queueList"));
+    queueList_->setMaximumHeight(130);
+    queueLayout->addLayout(queueHeader);
+    queueLayout->addWidget(queueList_);
+    queueFrame_->hide();
+
+    auto* composerRow = new QWidget(composerFrame);
+    auto* composerRowLayout = new QHBoxLayout(composerRow);
+    composerRowLayout->setContentsMargins(0, 0, 0, 0);
+    composer_ = new QPlainTextEdit(composerRow);
     composer_->setObjectName(QStringLiteral("composer"));
     composer_->setPlaceholderText(tr("Ask the agent about this workspace..."));
     composer_->setMaximumHeight(120);
-    sendButton_ = new QPushButton(tr("Send"), composerFrame);
+    sendModeCombo_ = new QComboBox(composerRow);
+    sendModeCombo_->setObjectName(QStringLiteral("sendModeCombo"));
+    sendModeCombo_->hide();
+    sendButton_ = new QPushButton(tr("Send"), composerRow);
     sendButton_->setObjectName(QStringLiteral("sendButton"));
-    stopButton_ = new QPushButton(tr("Stop"), composerFrame);
+    stopButton_ = new QPushButton(tr("Stop"), composerRow);
     stopButton_->setObjectName(QStringLiteral("stopButton"));
     stopButton_->hide();
-    composerLayout->addWidget(composer_, 1);
-    composerLayout->addWidget(stopButton_, 0, Qt::AlignBottom);
-    composerLayout->addWidget(sendButton_, 0, Qt::AlignBottom);
+    composerRowLayout->addWidget(composer_, 1);
+    composerRowLayout->addWidget(sendModeCombo_, 0, Qt::AlignBottom);
+    composerRowLayout->addWidget(stopButton_, 0, Qt::AlignBottom);
+    composerRowLayout->addWidget(sendButton_, 0, Qt::AlignBottom);
+    composerLayout->addWidget(queueFrame_);
+    composerLayout->addWidget(composerRow);
 
     conversationLayout->addWidget(header);
     conversationLayout->addWidget(timeline_, 1);
@@ -311,6 +438,14 @@ void MainWindow::buildUi() {
 
     connect(sendButton_, &QPushButton::clicked, this, &MainWindow::sendMessage);
     connect(stopButton_, &QPushButton::clicked, this, &MainWindow::stopTurn);
+    connect(sendModeCombo_, &QComboBox::currentIndexChanged, this,
+            [this] { updateStatus(controller_->status()); });
+    connect(queueList_, &QListWidget::itemChanged, this, &MainWindow::editQueuedMessage);
+    connect(queueList_, &QListWidget::currentRowChanged, this, &MainWindow::updateQueueControls);
+    connect(queueUpButton_, &QPushButton::clicked, this, &MainWindow::moveQueuedMessageUp);
+    connect(queueDownButton_, &QPushButton::clicked, this, &MainWindow::moveQueuedMessageDown);
+    connect(queueSendNowButton_, &QPushButton::clicked, this, &MainWindow::sendQueuedMessageNow);
+    connect(queueRemoveButton_, &QPushButton::clicked, this, &MainWindow::cancelQueuedMessage);
     connect(modelCombo_, &QComboBox::currentIndexChanged, this, &MainWindow::updateSessionSettings);
     connect(effortCombo_, &QComboBox::currentIndexChanged, this,
             &MainWindow::updateSessionSettings);
@@ -979,10 +1114,30 @@ void MainWindow::updateStatus(domain::ConversationStatus status) {
                         status == domain::ConversationStatus::WaitingInput;
     const bool canSteer = status == domain::ConversationStatus::Running &&
                           controller_->capabilities().supportsSteering;
-    sendButton_->setEnabled(idle || canSteer);
-    sendButton_->setText(active ? tr("Steer") : tr("Send"));
+    QString selectedMode = sendModeCombo_->currentData().toString();
+    {
+        const QSignalBlocker blocker(sendModeCombo_);
+        sendModeCombo_->clear();
+        if (canSteer) {
+            sendModeCombo_->addItem(tr("Steer now"), QStringLiteral("steer"));
+        }
+        if (active) {
+            sendModeCombo_->addItem(tr("Queue"), QStringLiteral("queue"));
+        }
+        const int selectedIndex = sendModeCombo_->findData(selectedMode);
+        if (selectedIndex >= 0) {
+            sendModeCombo_->setCurrentIndex(selectedIndex);
+        }
+    }
+    sendModeCombo_->setVisible(active);
+    sendButton_->setEnabled(idle || active);
+    sendButton_->setText(!active ? tr("Send")
+                         : sendModeCombo_->currentData().toString() == QLatin1String("steer")
+                             ? tr("Steer")
+                             : tr("Queue"));
     stopButton_->setVisible(active);
     stopButton_->setEnabled(active);
+    updateQueueControls();
     if (!active) {
         for (auto iterator = approvalCards_.begin(); iterator != approvalCards_.end(); ++iterator) {
             for (QPushButton* button : iterator->buttons) {

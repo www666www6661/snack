@@ -121,7 +121,7 @@ void CodexAdapter::startTurn(const TurnRequest& request) {
         event.type = domain::AgentEventType::TurnFailed;
         event.payload = {{QStringLiteral("message"), detail}};
         emit eventReceived(event);
-        emit turnFinished(request.turnId, false);
+        emit turnFinished(request.turnId, false, false);
     };
     if (!connected_ || client_.state() != ConnectionState::Ready || nativeThreadId_.isEmpty()) {
         reject(QStringLiteral("Codex is not connected to a native thread"));
@@ -1198,7 +1198,7 @@ void CodexAdapter::finishActiveTurn(domain::AgentEventType type, const QString& 
     turnStartedEmitted_ = false;
     interruptRequested_ = false;
     interruptSent_ = false;
-    emit turnFinished(turnId, interrupted);
+    emit turnFinished(turnId, interrupted, type == domain::AgentEventType::TurnCompleted);
 }
 
 void CodexAdapter::failConnection(const QString& detail) {

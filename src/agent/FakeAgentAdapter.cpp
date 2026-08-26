@@ -110,7 +110,7 @@ void FakeAgentAdapter::interruptTurn() {
     const QUuid turnId = activeRequest_.turnId;
     activeRequest_ = TurnRequest{};
     chunks_.clear();
-    emit turnFinished(turnId, true);
+    emit turnFinished(turnId, true, false);
 }
 
 void FakeAgentAdapter::closeAgent() {
@@ -138,7 +138,7 @@ void FakeAgentAdapter::emitNextChunk() {
     const QUuid turnId = activeRequest_.turnId;
     activeRequest_ = TurnRequest{};
     chunks_.clear();
-    emit turnFinished(turnId, false);
+    emit turnFinished(turnId, false, true);
 }
 
 void FakeAgentAdapter::emitEvent(domain::AgentEventType type, const QJsonObject& payload) {

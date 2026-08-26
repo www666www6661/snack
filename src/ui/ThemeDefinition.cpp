@@ -157,6 +157,10 @@ QListWidget#timeline::item:selected { background: %5; color: %2; }
 QFrame#toolCard { background: %10; border: 1px solid %4; border-radius: 10px; }
 QFrame#reasoningCard { background: %11; border: 1px solid %4; border-radius: 10px; }
 QFrame#approvalCard { background: %6; border: 1px solid %7; border-radius: 10px; }
+QFrame#queueFrame { background: %10; border: 1px solid %4; border-radius: 10px; }
+QListWidget#queueList { background: transparent; border: none; outline: none; }
+QListWidget#queueList::item { padding: 6px 8px; border-bottom: 1px solid %4; }
+QListWidget#queueList::item:selected { background: %5; color: %2; border-radius: 6px; }
 QPlainTextEdit#toolOutput { background: %1; border: 1px solid %4; border-radius: 7px; padding: 7px; }
 QListWidget#planList { background: %1; border: none; outline: none; }
 QListWidget#planList::item { padding: 6px; border-bottom: 1px solid %4; }

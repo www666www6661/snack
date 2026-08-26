@@ -26,7 +26,9 @@ M2 的连接、Thread、文本 Turn、审批、用户提问、用量与活动事
 
 每轮 `turn/start` 发送文本输入和 GUI Turn UUID，并按该轮不可变快照覆盖 `model`、`effort`、`cwd`、`approvalPolicy` 与 `sandboxPolicy`。`turn/started`、`item/started`、`item/agentMessage/delta`、`item/completed`、`error` 与 `turn/completed` 被映射为统一领域事件。适配器同时校验原生 Thread/Turn ID、合并最终消息缺失的尾部文本、忽略重复终态，并保证 `turnFinished` 只发送一次。用户可以在原生 Turn ID 返回前取消；请求会延迟到 ID 可用时发送。`turn/interrupt` 的响应不代表终态，仍由 `turn/completed` 的 `interrupted` 状态收口。
 
-`turn/steer` 可以向同一活动 Turn 补充一条文本指令。零食把原生 ID 作为 `expectedTurnId`，为消息生成独立客户端 ID，并且每个会话同一时刻只允许一个 steer 请求等待响应。原生 Turn ID 返回前提交的 steer 只暂存在内存中，并在 `turn/start` 确认 Turn 仍在运行后立即发送；若启动结果已经终结则直接丢弃。拒绝或 Turn ID 不匹配只产生警告，不会结束活动 Turn，也不会重发。公共 Session API 把成功受理的 steer 持久化为用户消息，并携带原 Turn 的设置快照。Composer 在运行中分别显示“引导”和“停止”，审批或回答获得焦点时禁用引导；可编辑持久队列留给独立的 M3 切片。
+`turn/steer` 可以向同一活动 Turn 补充一条文本指令。零食把原生 ID 作为 `expectedTurnId`，为消息生成独立客户端 ID，并且每个会话同一时刻只允许一个 steer 请求等待响应。原生 Turn ID 返回前提交的 steer 只暂存在内存中，并在 `turn/start` 确认 Turn 仍在运行后立即发送；若启动结果已经终结则直接丢弃。拒绝或 Turn ID 不匹配只产生警告，不会结束活动 Turn，也不会重发。公共 Session API 把成功受理的 steer 持久化为用户消息，并携带原 Turn 的设置快照。Composer 在运行中分别显示“引导”和“停止”；审批或回答获得焦点时退化为只能排队。
+
+M3 Composer 把有序、可编辑的消息队列持久化到 SQLite。当前进程中的 Turn 正常完成后会发送下一条；中断或应用重启会让所有排队消息继续保持待发送。恢复后的消息必须由用户“立即发送”，或等本进程中新 Turn 正常完成后才会继续，因此恢复流程不会静默重放任务。
 
 `thread/list` 限定当前工作目录与 app-server 来源，按更新时间排序并使用不透明的前向游标；`thread/read` 可为显式选择的原生 ID 请求完整 Turn。两条结果路径都会先校验 Thread、Session 与 cwd 身份，再通过类型化异步 Adapter 信号发布。非法分页或协议错误独立报告，绝不替换当前会话绑定的原生身份。
 

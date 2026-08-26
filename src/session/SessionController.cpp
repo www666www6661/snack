@@ -44,6 +44,8 @@ SessionController::SessionController(domain::Conversation conversation,
     nextTurnSettings_.workingDirectory = conversation_.workingDirectory;
     nextTurnSettings_.capabilityVersion = capabilities_.version;
     nextTurnSettings_ = normalizeSettings(nextTurnSettings_);
+    queuedMessages_ =
+        repository_->queuedMessagesForConversation(conversation_.id, &queueLoadError_);
 
     connect(adapter_, &agent::IAgentAdapter::connectionChanged, this,
             [this](bool connected, const QString& detail) {
@@ -64,15 +66,19 @@ SessionController::SessionController(domain::Conversation conversation,
             &SessionController::handleCapabilitiesChanged);
     connect(adapter_, &agent::IAgentAdapter::nativeIdentityChanged, this,
             &SessionController::handleNativeIdentityChanged);
-    connect(adapter_, &agent::IAgentAdapter::turnFinished, this, [this](const QUuid& turnId, bool) {
-        if (turnId == activeTurnId_) {
-            activeTurnId_ = QUuid{};
-            activeTurnSettings_ = {};
-            pendingApprovals_.clear();
-            pendingUserInputs_.clear();
-            setStatus(domain::ConversationStatus::Idle);
-        }
-    });
+    connect(adapter_, &agent::IAgentAdapter::turnFinished, this,
+            [this](const QUuid& turnId, bool, bool completed) {
+                if (turnId == activeTurnId_) {
+                    activeTurnId_ = QUuid{};
+                    activeTurnSettings_ = {};
+                    pendingApprovals_.clear();
+                    pendingUserInputs_.clear();
+                    setStatus(domain::ConversationStatus::Idle);
+                    if (completed) {
+                        dispatchNextQueuedMessage();
+                    }
+                }
+            });
 }
 
 void SessionController::handleNativeIdentityChanged(const QString& threadId,
@@ -157,6 +163,9 @@ const agent::CapabilitySet& SessionController::capabilities() const { return cap
 QString SessionController::connectionDetail() const { return connectionDetail_; }
 qsizetype SessionController::pendingApprovalCount() const { return pendingApprovals_.size(); }
 qsizetype SessionController::pendingInputCount() const { return pendingUserInputs_.size(); }
+const QList<domain::QueuedMessage>& SessionController::queuedMessages() const {
+    return queuedMessages_;
+}
 
 QList<domain::AgentEvent> SessionController::restoredEvents(QString* error) {
     const auto events = repository_->eventsForConversation(conversation_.id, error);
@@ -178,6 +187,10 @@ void SessionController::open() {
         emit persistenceError(error);
         setStatus(domain::ConversationStatus::Failed);
         return;
+    }
+    if (!queueLoadError_.isEmpty()) {
+        emit persistenceError(queueLoadError_);
+        queueLoadError_.clear();
     }
     setStatus(domain::ConversationStatus::Connecting);
     adapter_->connectAgent({.workingDirectory = conversation_.workingDirectory,
@@ -241,6 +254,153 @@ bool SessionController::steerMessage(const QString& message, QString* error) {
                      {QStringLiteral("steered"), true},
                      {QStringLiteral("settings"), activeTurnSettings_.toJson()}};
     recordEvent(event);
+    return true;
+}
+
+bool SessionController::queueMessage(const QString& message, QString* error) {
+    const QString trimmed = message.trimmed();
+    if (trimmed.isEmpty()) {
+        if (error != nullptr) {
+            *error = QStringLiteral("Queued message cannot be empty");
+        }
+        return false;
+    }
+    const bool active = conversation_.status == domain::ConversationStatus::Running ||
+                        conversation_.status == domain::ConversationStatus::WaitingApproval ||
+                        conversation_.status == domain::ConversationStatus::WaitingInput;
+    if (!active) {
+        if (error != nullptr) {
+            *error = QStringLiteral("Messages can only be queued while a turn is active");
+        }
+        return false;
+    }
+
+    QList<domain::QueuedMessage> messages = queuedMessages_;
+    domain::QueuedMessage queued;
+    queued.conversationId = conversation_.id;
+    queued.content = trimmed;
+    messages.append(queued);
+    if (!persistQueue(messages, error)) {
+        return false;
+    }
+    queuedMessages_ = std::move(messages);
+    emit queuedMessagesChanged(queuedMessages_);
+    return true;
+}
+
+bool SessionController::updateQueuedMessage(const QUuid& messageId, const QString& message,
+                                            QString* error) {
+    const QString trimmed = message.trimmed();
+    if (trimmed.isEmpty()) {
+        if (error != nullptr) {
+            *error = QStringLiteral("Queued message cannot be empty");
+        }
+        return false;
+    }
+    QList<domain::QueuedMessage> messages = queuedMessages_;
+    const auto iterator = std::find_if(
+        messages.begin(), messages.end(),
+        [&messageId](const domain::QueuedMessage& queued) { return queued.id == messageId; });
+    if (iterator == messages.end()) {
+        if (error != nullptr) {
+            *error = QStringLiteral("Queued message no longer exists");
+        }
+        return false;
+    }
+    iterator->content = trimmed;
+    if (!persistQueue(messages, error)) {
+        return false;
+    }
+    queuedMessages_ = std::move(messages);
+    emit queuedMessagesChanged(queuedMessages_);
+    return true;
+}
+
+bool SessionController::moveQueuedMessage(const QUuid& messageId, qsizetype position,
+                                          QString* error) {
+    QList<domain::QueuedMessage> messages = queuedMessages_;
+    const auto iterator = std::find_if(
+        messages.begin(), messages.end(),
+        [&messageId](const domain::QueuedMessage& queued) { return queued.id == messageId; });
+    if (iterator == messages.end()) {
+        if (error != nullptr) {
+            *error = QStringLiteral("Queued message no longer exists");
+        }
+        return false;
+    }
+    const qsizetype source = std::distance(messages.begin(), iterator);
+    const qsizetype target = std::clamp(position, qsizetype{0}, messages.size() - 1);
+    if (source == target) {
+        return true;
+    }
+    const domain::QueuedMessage moved = messages.takeAt(source);
+    messages.insert(target, moved);
+    if (!persistQueue(messages, error)) {
+        return false;
+    }
+    queuedMessages_ = std::move(messages);
+    emit queuedMessagesChanged(queuedMessages_);
+    return true;
+}
+
+bool SessionController::cancelQueuedMessage(const QUuid& messageId, QString* error) {
+    QList<domain::QueuedMessage> messages = queuedMessages_;
+    const auto iterator = std::find_if(
+        messages.begin(), messages.end(),
+        [&messageId](const domain::QueuedMessage& queued) { return queued.id == messageId; });
+    if (iterator == messages.end()) {
+        if (error != nullptr) {
+            *error = QStringLiteral("Queued message no longer exists");
+        }
+        return false;
+    }
+    messages.erase(iterator);
+    if (!persistQueue(messages, error)) {
+        return false;
+    }
+    queuedMessages_ = std::move(messages);
+    emit queuedMessagesChanged(queuedMessages_);
+    return true;
+}
+
+bool SessionController::sendQueuedMessageNow(const QUuid& messageId, QString* error) {
+    const auto iterator = std::find_if(
+        queuedMessages_.cbegin(), queuedMessages_.cend(),
+        [&messageId](const domain::QueuedMessage& queued) { return queued.id == messageId; });
+    if (iterator == queuedMessages_.cend()) {
+        if (error != nullptr) {
+            *error = QStringLiteral("Queued message no longer exists");
+        }
+        return false;
+    }
+    const bool idle = conversation_.status == domain::ConversationStatus::Idle;
+    const bool canSteer = conversation_.status == domain::ConversationStatus::Running &&
+                          capabilities_.supportsSteering;
+    if (!idle && !canSteer) {
+        if (error != nullptr) {
+            *error = QStringLiteral("Queued message cannot be sent now");
+        }
+        return false;
+    }
+
+    const QString content = iterator->content;
+    QList<domain::QueuedMessage> remaining = queuedMessages_;
+    remaining.removeAt(std::distance(queuedMessages_.cbegin(), iterator));
+    if (!persistQueue(remaining, error)) {
+        return false;
+    }
+    const bool sent = idle ? sendMessage(content, error) : steerMessage(content, error);
+    if (!sent) {
+        QString restoreError;
+        QList<domain::QueuedMessage> original = queuedMessages_;
+        persistQueue(original, &restoreError);
+        if (!restoreError.isEmpty()) {
+            emit persistenceError(restoreError);
+        }
+        return false;
+    }
+    queuedMessages_ = std::move(remaining);
+    emit queuedMessagesChanged(queuedMessages_);
     return true;
 }
 
@@ -414,6 +574,25 @@ void SessionController::recordEvent(domain::AgentEvent event) {
         emit persistenceError(error);
     }
     emit eventRecorded(event);
+}
+
+bool SessionController::persistQueue(QList<domain::QueuedMessage>& messages, QString* error) {
+    for (qsizetype index = 0; index < messages.size(); ++index) {
+        messages[index].conversationId = conversation_.id;
+        messages[index].position = index;
+        messages[index].state = domain::QueuedMessageState::Pending;
+    }
+    return repository_->replaceQueuedMessages(conversation_.id, messages, error);
+}
+
+void SessionController::dispatchNextQueuedMessage() {
+    if (queuedMessages_.isEmpty() || conversation_.status != domain::ConversationStatus::Idle) {
+        return;
+    }
+    QString error;
+    if (!sendQueuedMessageNow(queuedMessages_.constFirst().id, &error)) {
+        emit persistenceError(error);
+    }
 }
 
 void SessionController::setStatus(domain::ConversationStatus status) {

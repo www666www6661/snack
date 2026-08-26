@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QDateTime>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QString>
 #include <QUuid>
@@ -11,6 +12,7 @@ enum class AgentKind { Codex, Claude, Mock };
 enum class ReasoningEffort { Minimal, Low, Medium, High, ExtraHigh, Maximum, Ultra };
 enum class AccessLevel { Strict, Workspace, Full };
 enum class ApprovalDecision { Accept, AcceptForSession, Decline, Cancel };
+enum class QueuedMessageState { Pending };
 enum class ConversationStatus {
     Dormant,
     Connecting,
@@ -86,10 +88,22 @@ struct AgentEvent {
     QDateTime occurredAt{QDateTime::currentDateTimeUtc()};
 };
 
+struct QueuedMessage {
+    QUuid id{QUuid::createUuid()};
+    QUuid conversationId;
+    QString content;
+    QJsonArray attachments;
+    qsizetype position{0};
+    QueuedMessageState state{QueuedMessageState::Pending};
+
+    bool operator==(const QueuedMessage&) const = default;
+};
+
 [[nodiscard]] QString enumName(AgentKind value);
 [[nodiscard]] QString enumName(ReasoningEffort value);
 [[nodiscard]] QString enumName(AccessLevel value);
 [[nodiscard]] QString enumName(ApprovalDecision value);
+[[nodiscard]] QString enumName(QueuedMessageState value);
 [[nodiscard]] QString enumName(ConversationStatus value);
 [[nodiscard]] QString enumName(AgentEventType value);
 
@@ -97,6 +111,7 @@ struct AgentEvent {
 [[nodiscard]] ReasoningEffort reasoningEffortFromString(const QString& value);
 [[nodiscard]] AccessLevel accessLevelFromString(const QString& value);
 [[nodiscard]] ApprovalDecision approvalDecisionFromString(const QString& value);
+[[nodiscard]] QueuedMessageState queuedMessageStateFromString(const QString& value);
 [[nodiscard]] ConversationStatus conversationStatusFromString(const QString& value);
 [[nodiscard]] AgentEventType agentEventTypeFromString(const QString& value);
 
@@ -105,3 +120,4 @@ struct AgentEvent {
 Q_DECLARE_METATYPE(snack::domain::AgentEvent)
 Q_DECLARE_METATYPE(snack::domain::ConversationStatus)
 Q_DECLARE_METATYPE(snack::domain::TurnSettingsSnapshot)
+Q_DECLARE_METATYPE(snack::domain::QueuedMessage)

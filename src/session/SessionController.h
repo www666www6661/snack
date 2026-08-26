@@ -22,11 +22,18 @@ class SessionController final : public QObject {
     [[nodiscard]] QString connectionDetail() const;
     [[nodiscard]] qsizetype pendingApprovalCount() const;
     [[nodiscard]] qsizetype pendingInputCount() const;
+    [[nodiscard]] const QList<domain::QueuedMessage>& queuedMessages() const;
     [[nodiscard]] QList<domain::AgentEvent> restoredEvents(QString* error = nullptr);
 
     void open();
     bool sendMessage(const QString& message, QString* error = nullptr);
     bool steerMessage(const QString& message, QString* error = nullptr);
+    bool queueMessage(const QString& message, QString* error = nullptr);
+    bool updateQueuedMessage(const QUuid& messageId, const QString& message,
+                             QString* error = nullptr);
+    bool moveQueuedMessage(const QUuid& messageId, qsizetype position, QString* error = nullptr);
+    bool cancelQueuedMessage(const QUuid& messageId, QString* error = nullptr);
+    bool sendQueuedMessageNow(const QUuid& messageId, QString* error = nullptr);
     bool respondToApproval(const QString& requestId, domain::ApprovalDecision decision,
                            QString* error = nullptr);
     bool respondToUserInput(const QString& requestId, const QJsonObject& answers,
@@ -43,6 +50,7 @@ class SessionController final : public QObject {
     void capabilitiesChanged(const snack::agent::CapabilitySet& capabilities);
     void connectionDetailChanged(const QString& detail);
     void nativeIdentityChanged(const QString& threadId, const QString& sessionId);
+    void queuedMessagesChanged(const QList<snack::domain::QueuedMessage>& messages);
 
   private:
     void handleCapabilitiesChanged(const agent::CapabilitySet& capabilities);
@@ -51,6 +59,8 @@ class SessionController final : public QObject {
     [[nodiscard]] domain::TurnSettingsSnapshot
     normalizeSettings(const domain::TurnSettingsSnapshot& settings) const;
     void recordEvent(domain::AgentEvent event);
+    bool persistQueue(QList<domain::QueuedMessage>& messages, QString* error);
+    void dispatchNextQueuedMessage();
     void recomputeActiveStatus();
     void setStatus(domain::ConversationStatus status);
 
@@ -64,6 +74,8 @@ class SessionController final : public QObject {
     domain::TurnSettingsSnapshot activeTurnSettings_;
     QHash<QString, QJsonObject> pendingApprovals_;
     QHash<QString, QJsonObject> pendingUserInputs_;
+    QList<domain::QueuedMessage> queuedMessages_;
+    QString queueLoadError_;
     quint64 nextSequence_{1};
 };
 

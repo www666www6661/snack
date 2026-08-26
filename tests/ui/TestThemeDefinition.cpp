@@ -52,6 +52,7 @@ void TestThemeDefinition::rejectsUnknownAndTransparentColors() {
 void TestThemeDefinition::producesWidgetStyleSheet() {
     const QString styleSheet = snack::ui::ThemeDefinition::dark().styleSheet();
     QVERIFY(styleSheet.contains(QStringLiteral("QMainWindow")));
+    QVERIFY(styleSheet.contains(QStringLiteral("QFrame#queueFrame")));
     QVERIFY(styleSheet.contains(QStringLiteral("#171917")));
     QVERIFY(!styleSheet.contains(QStringLiteral("#ff00ff")));
 }

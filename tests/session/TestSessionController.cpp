@@ -36,8 +36,21 @@ class MemoryEventRepository : public snack::storage::IEventRepository {
         return result;
     }
 
+    bool replaceQueuedMessages(const QUuid& conversationId,
+                               const QList<snack::domain::QueuedMessage>& messages,
+                               QString*) override {
+        queues_.insert(conversationId, messages);
+        return true;
+    }
+
+    QList<snack::domain::QueuedMessage> queuedMessagesForConversation(const QUuid& conversationId,
+                                                                      QString*) const override {
+        return queues_.value(conversationId);
+    }
+
     snack::domain::Conversation conversation_;
     QList<snack::domain::AgentEvent> events_;
+    QHash<QUuid, QList<snack::domain::QueuedMessage>> queues_;
 };
 
 class TestSessionController final : public QObject {
@@ -47,6 +60,8 @@ class TestSessionController final : public QObject {
     void streamsAndPersistsTurn();
     void snapshotsSettingsPerTurn();
     void steersActiveTurn();
+    void persistsEditsAndDispatchesQueuedMessages();
+    void doesNotAutoDispatchRestoredOrInterruptedQueue();
     void interruptsActiveTurn();
     void handlesApprovalLifecycle();
     void handlesUserInputLifecycleAndConcurrentWaitingStates();
@@ -135,6 +150,85 @@ void TestSessionController::steersActiveTurn() {
     QVERIFY(!controller.steerMessage(QStringLiteral("blocked"), &error));
     QVERIFY(error.contains(QStringLiteral("cannot accept")));
     controller.interrupt();
+}
+
+void TestSessionController::persistsEditsAndDispatchesQueuedMessages() {
+    MemoryEventRepository repository;
+    snack::agent::FakeAgentAdapter adapter(nullptr, 10);
+    const auto value = conversation();
+    snack::session::SessionController controller(value, &adapter, &repository);
+    QSignalSpy queueSpy(&controller, &snack::session::SessionController::queuedMessagesChanged);
+    controller.open();
+    QTRY_COMPARE(controller.status(), snack::domain::ConversationStatus::Idle);
+    QVERIFY(controller.sendMessage(QStringLiteral("first")));
+    QVERIFY(controller.queueMessage(QStringLiteral(" second ")));
+    QVERIFY(controller.queueMessage(QStringLiteral("third")));
+    QCOMPARE(controller.queuedMessages().size(), 2);
+    QCOMPARE(repository.queues_.value(value.id).at(0).content, QStringLiteral("second"));
+
+    const QUuid thirdId = controller.queuedMessages().at(1).id;
+    QVERIFY(controller.updateQueuedMessage(thirdId, QStringLiteral(" edited third ")));
+    QVERIFY(controller.moveQueuedMessage(thirdId, 0));
+    QCOMPARE(controller.queuedMessages().constFirst().content, QStringLiteral("edited third"));
+    QCOMPARE(controller.queuedMessages().constFirst().position, qsizetype{0});
+
+    QTRY_COMPARE_WITH_TIMEOUT(controller.status(), snack::domain::ConversationStatus::Idle, 1500);
+    QVERIFY(controller.queuedMessages().isEmpty());
+    QVERIFY(repository.queues_.value(value.id).isEmpty());
+    QStringList sentMessages;
+    for (const auto& event : repository.events_) {
+        if (event.type == snack::domain::AgentEventType::UserMessage &&
+            !event.payload.value(QStringLiteral("steered")).toBool()) {
+            sentMessages.append(event.payload.value(QStringLiteral("text")).toString());
+        }
+    }
+    QCOMPARE(sentMessages, QStringList({QStringLiteral("first"), QStringLiteral("edited third"),
+                                        QStringLiteral("second")}));
+    QVERIFY(queueSpy.count() >= 6);
+}
+
+void TestSessionController::doesNotAutoDispatchRestoredOrInterruptedQueue() {
+    MemoryEventRepository repository;
+    snack::agent::FakeAgentAdapter adapter(nullptr, 1000);
+    const auto value = conversation();
+    snack::domain::QueuedMessage restored;
+    restored.conversationId = value.id;
+    restored.content = QStringLiteral("restored draft");
+    repository.queues_.insert(value.id, {restored});
+
+    snack::session::SessionController controller(value, &adapter, &repository);
+    QCOMPARE(controller.queuedMessages().size(), 1);
+    controller.open();
+    QTRY_COMPARE(controller.status(), snack::domain::ConversationStatus::Idle);
+    QTest::qWait(20);
+    QVERIFY(repository.events_.isEmpty());
+
+    QString error;
+    QVERIFY(controller.sendQueuedMessageNow(restored.id, &error));
+    QCOMPARE(controller.status(), snack::domain::ConversationStatus::Running);
+    QVERIFY(controller.queueMessage(QStringLiteral("keep after interrupt"), &error));
+    const QUuid pendingId = controller.queuedMessages().constFirst().id;
+    controller.interrupt();
+    QTRY_COMPARE(controller.status(), snack::domain::ConversationStatus::Idle);
+    QCOMPARE(controller.queuedMessages().size(), 1);
+    QCOMPARE(controller.queuedMessages().constFirst().content,
+             QStringLiteral("keep after interrupt"));
+    QVERIFY(controller.cancelQueuedMessage(pendingId, &error));
+    QVERIFY(repository.queues_.value(value.id).isEmpty());
+
+    QVERIFY(controller.sendMessage(QStringLiteral("failing turn"), &error));
+    QVERIFY(controller.queueMessage(QStringLiteral("keep after failure"), &error));
+    const QUuid failedTurnId = repository.events_.constLast().turnId;
+    snack::domain::AgentEvent failed;
+    failed.turnId = failedTurnId;
+    failed.type = snack::domain::AgentEventType::TurnFailed;
+    adapter.eventReceived(failed);
+    adapter.turnFinished(failedTurnId, false, false);
+    QCOMPARE(controller.status(), snack::domain::ConversationStatus::Idle);
+    QCOMPARE(controller.queuedMessages().size(), 1);
+    QCOMPARE(controller.queuedMessages().constFirst().content,
+             QStringLiteral("keep after failure"));
+    adapter.closeAgent();
 }
 
 void TestSessionController::interruptsActiveTurn() {

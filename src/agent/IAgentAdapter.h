@@ -73,7 +73,7 @@ class IAgentAdapter : public QObject {
     void capabilitiesChanged(const snack::agent::CapabilitySet& capabilities);
     void nativeIdentityChanged(const QString& threadId, const QString& sessionId);
     void eventReceived(const snack::domain::AgentEvent& event);
-    void turnFinished(const QUuid& turnId, bool interrupted);
+    void turnFinished(const QUuid& turnId, bool interrupted, bool completed);
 };
 
 } // namespace snack::agent

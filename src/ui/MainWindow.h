@@ -40,6 +40,13 @@ class MainWindow final : public QMainWindow {
   private slots:
     void sendMessage();
     void stopTurn();
+    void updateQueuedMessages(const QList<domain::QueuedMessage>& messages);
+    void updateQueueControls();
+    void editQueuedMessage(QListWidgetItem* item);
+    void moveQueuedMessageUp();
+    void moveQueuedMessageDown();
+    void sendQueuedMessageNow();
+    void cancelQueuedMessage();
     void updateSessionSettings();
     void applyLightTheme();
     void applyDarkTheme();
@@ -91,6 +98,13 @@ class MainWindow final : public QMainWindow {
     QPlainTextEdit* composer_{nullptr};
     QPushButton* sendButton_{nullptr};
     QPushButton* stopButton_{nullptr};
+    QFrame* queueFrame_{nullptr};
+    QListWidget* queueList_{nullptr};
+    QComboBox* sendModeCombo_{nullptr};
+    QPushButton* queueUpButton_{nullptr};
+    QPushButton* queueDownButton_{nullptr};
+    QPushButton* queueSendNowButton_{nullptr};
+    QPushButton* queueRemoveButton_{nullptr};
     QLabel* statusLabel_{nullptr};
     QLabel* titleLabel_{nullptr};
     QLabel* usageLabel_{nullptr};
