@@ -22,7 +22,7 @@ Use Qt Test only. Require at least 80% total first-party line coverage. CI must 
 | Write lease | acquire/release/transfer, crash cleanup, symlink aliases |
 | Storage | WAL recovery, disk full, missing blob, references, migration failure |
 | Backup | plain/encrypted, wrong password, tamper, traversal, rollback, remap |
-| Protocol | partial frame, LF/CRLF limits, invalid JSON, duplicate ID, unknown event preservation/context/privacy, request timeout, late response, shutdown reconnect, terminate/kill fallback, flood, process death |
+| Protocol | partial frame, LF/CRLF limits, invalid JSON, duplicate ID, unknown event preservation/context/privacy, pending server-request terminal response/write failure, request timeout, late response, shutdown reconnect, terminate/kill fallback, flood, process death |
 | WebEngine | hostile Markdown, blocked resources, renderer crash, URL validation |
 | Terminal | Unicode, ANSI, resize, process exit, detach, true-exit recreation |
 

@@ -102,6 +102,7 @@ class TestCodexAppServer final : public QObject {
     void adapterHandlesApprovalRequests();
     void adapterHandlesUserInputAndTokenUsage();
     void adapterResolvesPendingServerRequestsAtTurnEnd();
+    void adapterFailsTurnWhenPendingResponseWriteFails();
     void adapterFinishesTurnWhenProcessDisconnects();
     void adapterRejectsReconnectWhileProcessStops();
     void adapterScopesRequestTimeouts();
@@ -1870,6 +1871,36 @@ void TestCodexAppServer::adapterResolvesPendingServerRequestsAtTurnEnd() {
                                    .payload.value(QStringLiteral("requestId"))
                                    .toString();
 
+    QJsonObject answeredContext = context;
+    answeredContext.insert(QStringLiteral("itemId"), QStringLiteral("command-answered"));
+    feedServerRequest(transport, QStringLiteral("approval-answered"),
+                      QStringLiteral("item/commandExecution/requestApproval"), answeredContext);
+    QCOMPARE(eventSpy.count(), 3);
+    const QString answeredApprovalToken = eventSpy.at(2)
+                                              .constFirst()
+                                              .value<AgentEvent>()
+                                              .payload.value(QStringLiteral("requestId"))
+                                              .toString();
+    QVERIFY(
+        adapter.respondToApproval(answeredApprovalToken, snack::domain::ApprovalDecision::Accept));
+
+    QJsonObject resolvedInputContext = inputContext;
+    resolvedInputContext.insert(QStringLiteral("itemId"), QStringLiteral("input-resolved"));
+    feedServerRequest(transport, QStringLiteral("input-resolved"),
+                      QStringLiteral("tool/requestUserInput"), resolvedInputContext);
+    QCOMPARE(eventSpy.count(), 4);
+    const QString resolvedInputToken = eventSpy.at(3)
+                                           .constFirst()
+                                           .value<AgentEvent>()
+                                           .payload.value(QStringLiteral("requestId"))
+                                           .toString();
+    feedNotification(transport, QStringLiteral("serverRequest/resolved"),
+                     {{QStringLiteral("threadId"), QStringLiteral("0198-thread-snack")},
+                      {QStringLiteral("requestId"), QStringLiteral("input-resolved")}});
+    QCOMPARE(eventSpy.count(), 5);
+    QCOMPARE(eventSpy.constLast().constFirst().value<AgentEvent>().type,
+             AgentEventType::UserInputResolved);
+
     const qsizetype writesBeforeFinish = transport.writes.size();
     feedNotification(
         transport, QStringLiteral("turn/completed"),
@@ -1888,15 +1919,73 @@ void TestCodexAppServer::adapterResolvesPendingServerRequestsAtTurnEnd() {
                 .value(QStringLiteral("answers"))
                 .toObject()
                 .isEmpty());
-    QCOMPARE(eventSpy.count(), 5);
-    QCOMPARE(eventSpy.at(2).constFirst().value<AgentEvent>().type,
+    QCOMPARE(eventSpy.count(), 8);
+    QCOMPARE(eventSpy.at(5).constFirst().value<AgentEvent>().type,
              AgentEventType::ApprovalResolved);
-    QCOMPARE(eventSpy.at(3).constFirst().value<AgentEvent>().type,
+    QCOMPARE(eventSpy.at(6).constFirst().value<AgentEvent>().type,
              AgentEventType::UserInputResolved);
-    QCOMPARE(eventSpy.at(4).constFirst().value<AgentEvent>().type, AgentEventType::TurnCompleted);
+    QCOMPARE(eventSpy.at(7).constFirst().value<AgentEvent>().type, AgentEventType::TurnCompleted);
     QVERIFY(!adapter.respondToApproval(approvalToken, snack::domain::ApprovalDecision::Decline));
+    QVERIFY(!adapter.respondToApproval(answeredApprovalToken,
+                                       snack::domain::ApprovalDecision::Decline));
     QVERIFY(!adapter.respondToUserInput(inputToken, {}));
+    QVERIFY(!adapter.respondToUserInput(resolvedInputToken, {}));
     adapter.closeAgent();
+}
+
+void TestCodexAppServer::adapterFailsTurnWhenPendingResponseWriteFails() {
+    using namespace snack::agent::codex;
+    using snack::domain::AgentEvent;
+    using snack::domain::AgentEventType;
+
+    FakeProcessTransport transport;
+    CodexAdapter adapter({.status = CliStatus::Available,
+                          .executablePath = QStringLiteral("codex"),
+                          .version = QStringLiteral("0.149.0")},
+                         &transport);
+    connectAdapter(adapter, transport);
+    QSignalSpy eventSpy(&adapter, &CodexAdapter::eventReceived);
+    QSignalSpy finishedSpy(&adapter, &CodexAdapter::turnFinished);
+    QSignalSpy connectionSpy(&adapter, &CodexAdapter::connectionChanged);
+
+    const QUuid guiTurnId = QUuid::createUuid();
+    adapter.startTurn(codexTurnRequest(guiTurnId));
+    const QString nativeTurnId = QStringLiteral("turn-failed-pending-response-1");
+    feedResult(transport, lastRequest(transport).id.toInteger(),
+               QJsonObject{{QStringLiteral("turn"),
+                            turnObject(nativeTurnId, QStringLiteral("inProgress"))}});
+    feedServerRequest(transport, QStringLiteral("approval-write-fails"),
+                      QStringLiteral("item/commandExecution/requestApproval"),
+                      {{QStringLiteral("threadId"), QStringLiteral("0198-thread-snack")},
+                       {QStringLiteral("turnId"), nativeTurnId},
+                       {QStringLiteral("itemId"), QStringLiteral("command-write-fails")},
+                       {QStringLiteral("command"), QStringLiteral("git status")},
+                       {QStringLiteral("cwd"), QStringLiteral("C:/workspace")}});
+    QCOMPARE(eventSpy.count(), 1);
+
+    transport.failWrites = true;
+    feedNotification(
+        transport, QStringLiteral("turn/completed"),
+        {{QStringLiteral("threadId"), QStringLiteral("0198-thread-snack")},
+         {QStringLiteral("turn"), turnObject(nativeTurnId, QStringLiteral("completed"))}});
+
+    QCOMPARE(finishedSpy.count(), 1);
+    QCOMPARE(finishedSpy.constFirst().constFirst().toUuid(), guiTurnId);
+    QVERIFY(!finishedSpy.constFirst().at(2).toBool());
+    QCOMPARE(eventSpy.count(), 3);
+    QCOMPARE(eventSpy.at(1).constFirst().value<AgentEvent>().type,
+             AgentEventType::ApprovalResolved);
+    QCOMPARE(eventSpy.at(2).constFirst().value<AgentEvent>().type, AgentEventType::TurnFailed);
+    QVERIFY(eventSpy.at(2)
+                .constFirst()
+                .value<AgentEvent>()
+                .payload.value(QStringLiteral("message"))
+                .toString()
+                .contains(QStringLiteral("Failed to write")));
+    QCOMPARE(connectionSpy.count(), 1);
+    QVERIFY(!connectionSpy.constFirst().constFirst().toBool());
+    QCOMPARE(transport.terminateCalls, 1);
+    QVERIFY(!transport.isRunning());
 }
 
 void TestCodexAppServer::adapterFinishesTurnWhenProcessDisconnects() {
