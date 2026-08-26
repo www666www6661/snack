@@ -49,6 +49,9 @@ SessionController::SessionController(domain::Conversation conversation,
 
     connect(adapter_, &agent::IAgentAdapter::connectionChanged, this,
             [this](bool connected, const QString& detail) {
+                if (conversation_.status == domain::ConversationStatus::Closed) {
+                    return;
+                }
                 if (connectionDetail_ != detail) {
                     connectionDetail_ = detail;
                     emit connectionDetailChanged(connectionDetail_);
@@ -83,7 +86,8 @@ SessionController::SessionController(domain::Conversation conversation,
 
 void SessionController::handleNativeIdentityChanged(const QString& threadId,
                                                     const QString& sessionId) {
-    if (threadId.isEmpty() || sessionId.isEmpty() ||
+    if (conversation_.status == domain::ConversationStatus::Closed || threadId.isEmpty() ||
+        sessionId.isEmpty() ||
         (conversation_.nativeThreadId == threadId && conversation_.nativeSessionId == sessionId)) {
         return;
     }
@@ -98,6 +102,9 @@ void SessionController::handleNativeIdentityChanged(const QString& threadId,
 }
 
 void SessionController::handleCapabilitiesChanged(const agent::CapabilitySet& capabilities) {
+    if (conversation_.status == domain::ConversationStatus::Closed) {
+        return;
+    }
     capabilities_ = capabilities;
     emit capabilitiesChanged(capabilities_);
     const domain::TurnSettingsSnapshot normalized = normalizeSettings(nextTurnSettings_);
@@ -523,6 +530,9 @@ void SessionController::setNextTurnSettings(const domain::TurnSettingsSnapshot& 
 }
 
 void SessionController::handleAdapterEvent(domain::AgentEvent event) {
+    if (conversation_.status == domain::ConversationStatus::Closed) {
+        return;
+    }
     if (event.turnId != activeTurnId_) {
         domain::AgentEvent warning;
         warning.turnId = activeTurnId_;

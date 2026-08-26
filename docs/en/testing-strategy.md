@@ -17,6 +17,7 @@ Use Qt Test only. Require at least 80% total first-party line coverage. CI must 
 | Area | Required paths |
 |---|---|
 | Permissions | once/session/always/deny, replay, timeout, disconnect, managed override |
+| Session | close terminality, late connection/capability/identity/event signals, reconnect recovery |
 | Diff | add/delete/rename/binary, hunk rejection, external conflict, dirty baseline |
 | Write lease | acquire/release/transfer, crash cleanup, symlink aliases |
 | Storage | WAL recovery, disk full, missing blob, references, migration failure |

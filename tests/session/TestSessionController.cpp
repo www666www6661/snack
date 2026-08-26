@@ -105,6 +105,7 @@ class TestSessionController final : public QObject {
     void handlesApprovalLifecycle();
     void handlesUserInputLifecycleAndConcurrentWaitingStates();
     void validatesStateAndNormalizesSettings();
+    void ignoresLateAdapterSignalsAfterClose();
     void followsDynamicCapabilities();
     void persistsNativeIdentityForResume();
     void reportsPersistenceFailure();
@@ -516,6 +517,51 @@ void TestSessionController::validatesStateAndNormalizesSettings() {
     QVERIFY(!controller.sendMessage(QStringLiteral("second"), &error));
     controller.close();
     QCOMPARE(controller.status(), snack::domain::ConversationStatus::Closed);
+}
+
+void TestSessionController::ignoresLateAdapterSignalsAfterClose() {
+    using snack::domain::AgentEvent;
+    using snack::domain::AgentEventType;
+    using snack::domain::ConversationStatus;
+
+    MemoryEventRepository repository;
+    snack::agent::FakeAgentAdapter adapter(nullptr, 1);
+    snack::session::SessionController controller(conversation(), &adapter, &repository);
+    controller.open();
+    QTRY_COMPARE(controller.status(), ConversationStatus::Idle);
+    controller.close();
+    QCOMPARE(controller.status(), ConversationStatus::Closed);
+
+    const QString closedDetail = controller.connectionDetail();
+    const QString capabilityVersion = controller.capabilities().version;
+    QSignalSpy statusSpy(&controller, &snack::session::SessionController::statusChanged);
+    QSignalSpy detailSpy(&controller, &snack::session::SessionController::connectionDetailChanged);
+    QSignalSpy capabilitySpy(&controller, &snack::session::SessionController::capabilitiesChanged);
+    QSignalSpy identitySpy(&controller, &snack::session::SessionController::nativeIdentityChanged);
+    QSignalSpy eventSpy(&controller, &snack::session::SessionController::eventRecorded);
+
+    adapter.connectionChanged(false, QStringLiteral("late disconnect"));
+    adapter.connectionChanged(true, QStringLiteral("late ready"));
+    auto lateCapabilities = adapter.capabilities();
+    lateCapabilities.version = QStringLiteral("late-capabilities");
+    adapter.capabilitiesChanged(lateCapabilities);
+    adapter.nativeIdentityChanged(QStringLiteral("late-thread"), QStringLiteral("late-session"));
+    AgentEvent lateEvent;
+    lateEvent.turnId = QUuid::createUuid();
+    lateEvent.type = AgentEventType::ErrorRaised;
+    adapter.eventReceived(lateEvent);
+
+    QCOMPARE(controller.status(), ConversationStatus::Closed);
+    QCOMPARE(controller.connectionDetail(), closedDetail);
+    QCOMPARE(controller.capabilities().version, capabilityVersion);
+    QVERIFY(controller.conversation().nativeThreadId.isEmpty());
+    QVERIFY(controller.conversation().nativeSessionId.isEmpty());
+    QVERIFY(repository.events_.isEmpty());
+    QCOMPARE(statusSpy.count(), 0);
+    QCOMPARE(detailSpy.count(), 0);
+    QCOMPARE(capabilitySpy.count(), 0);
+    QCOMPARE(identitySpy.count(), 0);
+    QCOMPARE(eventSpy.count(), 0);
 }
 
 void TestSessionController::followsDynamicCapabilities() {

@@ -38,6 +38,7 @@ Windows ConPTY/Credential Manager/MSI，Linux PTY/Secret Service/.deb/Wayland/X1
 | 区域 | 必测路径 |
 |---|---|
 | 权限 | once/session/always/deny、重放、超时、断连、组织策略覆盖 |
+| 会话 | 关闭终态、迟到连接/能力/身份/事件信号、重连恢复 |
 | Diff | 新增/删除/重命名/二进制、hunk 拒绝、外部冲突、脏基线 |
 | 写租约 | 抢占、释放、转移、崩溃残留、符号链接别名 |
 | 存储 | WAL恢复、磁盘满、Blob 丢失、引用计数、迁移失败 |

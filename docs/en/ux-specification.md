@@ -12,7 +12,7 @@ At the 1920×1080 design baseline, use a 280 px conversation rail, a central cha
 
 Show agent, title, directory summary, connection/write-lease state, model, effort, access level, and overflow actions. Edits during execution display “applies to the next message.” Unsupported choices remain disabled with a reason.
 
-A persistent notice directly below the header reports an Agent fallback, connection loss, or reconnect attempt. Fallback notices remain visible while the fallback Agent is active. Connection failures preserve the original diagnostic and expose Reconnect in the notice; retrying keeps the previous cause visible until the native handshake succeeds. The status bar may echo the message but is never its only location.
+A persistent notice directly below the header reports an Agent fallback, connection loss, or reconnect attempt. Fallback notices remain visible while the fallback Agent is active. Connection failures preserve the original diagnostic and expose Reconnect in the notice; retrying keeps the previous cause visible until the native handshake succeeds. The status bar may echo the message but is never its only location. `Closed` is terminal: delayed connection, capability, native-identity, or event signals from an asynchronously exiting Agent cannot reopen the conversation, replace its diagnostic, or append timeline data.
 
 ## 4. Timeline
 
