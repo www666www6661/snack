@@ -45,6 +45,7 @@ class MainWindow final : public QMainWindow {
     void sendMessage();
     void queueComposerMessage();
     void stopTurn();
+    void reconnectSession();
     void updateQueuedMessages(const QList<domain::QueuedMessage>& messages);
     void updateQueueControls();
     void editQueuedMessage(QListWidgetItem* item);
@@ -110,6 +111,7 @@ class MainWindow final : public QMainWindow {
     QTimer* draftSaveTimer_{nullptr};
     QPushButton* sendButton_{nullptr};
     QPushButton* stopButton_{nullptr};
+    QPushButton* reconnectButton_{nullptr};
     QPushButton* templateButton_{nullptr};
     QMenu* templateMenu_{nullptr};
     QFrame* queueFrame_{nullptr};

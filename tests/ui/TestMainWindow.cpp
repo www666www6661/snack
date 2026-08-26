@@ -97,6 +97,7 @@ class TestMainWindow final : public QObject {
     void editsAndControlsQueuedMessages();
     void supportsComposerShortcutsGrowthAndDrafts();
     void insertsAndManagesPromptTemplates();
+    void reconnectsDisconnectedSession();
     void handlesApprovalCard();
     void handlesUserInputCardAndUsage();
     void cancelsQuitWhileAgentIsRunning();
@@ -684,6 +685,40 @@ void TestMainWindow::insertsAndManagesPromptTemplates() {
     QVERIFY(removeAction != nullptr);
     removeAction->trigger();
     QVERIFY(!repository.templates.contains(quick.id));
+    window.close();
+}
+
+void TestMainWindow::reconnectsDisconnectedSession() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::app::AppSettings settings(directory.filePath(QStringLiteral("settings.ini")));
+    UiMemoryEventRepository repository;
+    snack::agent::FakeAgentAdapter adapter;
+    snack::domain::Conversation conversation;
+    conversation.title = QStringLiteral("Reconnect test");
+    conversation.workingDirectory = directory.path();
+    conversation.nativeThreadId = QStringLiteral("native-thread-1");
+    conversation.nativeSessionId = QStringLiteral("native-session-1");
+    snack::session::SessionController controller(conversation, &adapter, &repository);
+    snack::ui::MainWindow window(&controller, &settings, false);
+
+    auto* reconnectButton = window.findChild<QPushButton*>(QStringLiteral("reconnectButton"));
+    auto* sendButton = window.findChild<QPushButton*>(QStringLiteral("sendButton"));
+    QVERIFY(reconnectButton != nullptr);
+    QVERIFY(sendButton != nullptr);
+    QTRY_COMPARE(controller.status(), snack::domain::ConversationStatus::Idle);
+    QVERIFY(reconnectButton->isHidden());
+
+    adapter.closeAgent();
+    QCOMPARE(controller.status(), snack::domain::ConversationStatus::Disconnected);
+    QVERIFY(!reconnectButton->isHidden());
+    QVERIFY(!sendButton->isEnabled());
+
+    reconnectButton->click();
+    QTRY_COMPARE(controller.status(), snack::domain::ConversationStatus::Idle);
+    QVERIFY(reconnectButton->isHidden());
+    QVERIFY(sendButton->isEnabled());
+    QCOMPARE(adapter.lastConnectionRequest().nativeThreadId, QStringLiteral("native-thread-1"));
     window.close();
 }
 

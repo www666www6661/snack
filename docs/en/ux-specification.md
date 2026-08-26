@@ -29,7 +29,7 @@ The `/` button and a leading `/` keystroke open favorite prompt templates. Templ
 - New conversation: directory → dirty-workspace warning → agent availability → model/effort/access → actual change mode/read-only capability → create. Preserve form state on failure.
 - Approval: state what, where, why, and risk before decisions. Confirm persistent-rule scope separately.
 - Diff: group files by pending/conflict/accepted/rejected, place hunk controls next to hunks, and disable rejection on external conflict.
-- Recovery: non-blocking recovery center with connecting/recovered/interrupted/failed. Interrupted turns offer open, not retry.
+- Recovery: non-blocking recovery center with connecting/recovered/interrupted/failed. A disconnected conversation exposes Reconnect in its header; it resumes native context without retrying the interrupted turn or replaying queued messages. Interrupted turns offer open, not retry.
 - Exit: window close goes to tray; true exit lists agent and shell work and explains interruption/no auto-resend.
 
 ## 7. Panels and windows

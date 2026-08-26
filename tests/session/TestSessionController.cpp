@@ -77,6 +77,7 @@ class TestSessionController final : public QObject {
     void steersActiveTurn();
     void persistsEditsAndDispatchesQueuedMessages();
     void doesNotAutoDispatchRestoredOrInterruptedQueue();
+    void reconnectsWithoutReplayingQueuedMessages();
     void managesPromptTemplates();
     void interruptsActiveTurn();
     void handlesApprovalLifecycle();
@@ -244,6 +245,32 @@ void TestSessionController::doesNotAutoDispatchRestoredOrInterruptedQueue() {
     QCOMPARE(controller.queuedMessages().size(), 1);
     QCOMPARE(controller.queuedMessages().constFirst().content,
              QStringLiteral("keep after failure"));
+    adapter.closeAgent();
+}
+
+void TestSessionController::reconnectsWithoutReplayingQueuedMessages() {
+    MemoryEventRepository repository;
+    snack::agent::FakeAgentAdapter adapter;
+    auto value = conversation();
+    value.nativeThreadId = QStringLiteral("native-thread-1");
+    value.nativeSessionId = QStringLiteral("native-session-1");
+    snack::domain::QueuedMessage queued;
+    queued.conversationId = value.id;
+    queued.content = QStringLiteral("wait for explicit send");
+    repository.queues_.insert(value.id, {queued});
+
+    snack::session::SessionController controller(value, &adapter, &repository);
+    controller.open();
+    QTRY_COMPARE(controller.status(), snack::domain::ConversationStatus::Idle);
+    adapter.closeAgent();
+    QCOMPARE(controller.status(), snack::domain::ConversationStatus::Disconnected);
+
+    controller.open();
+    QCOMPARE(controller.status(), snack::domain::ConversationStatus::Connecting);
+    QTRY_COMPARE(controller.status(), snack::domain::ConversationStatus::Idle);
+    QCOMPARE(adapter.lastConnectionRequest().nativeThreadId, QStringLiteral("native-thread-1"));
+    QCOMPARE(controller.queuedMessages().size(), 1);
+    QVERIFY(repository.events_.isEmpty());
     adapter.closeAgent();
 }
 

@@ -390,6 +390,8 @@ void MainWindow::stopTurn() {
     statusBar()->showMessage(tr("Stopping the current turn"), 3000);
 }
 
+void MainWindow::reconnectSession() { controller_->open(); }
+
 void MainWindow::updateSessionSettings() {
     auto snapshot = controller_->nextTurnSettings();
     snapshot.modelId = modelCombo_->currentData().toString();
@@ -477,6 +479,9 @@ void MainWindow::buildUi() {
     titleLabel_ = new QLabel(controller_->conversation().title, header);
     statusLabel_ = new QLabel(tr("Dormant"), header);
     statusLabel_->setObjectName(QStringLiteral("statusLabel"));
+    reconnectButton_ = new QPushButton(tr("Reconnect"), header);
+    reconnectButton_->setObjectName(QStringLiteral("reconnectButton"));
+    reconnectButton_->hide();
     usageLabel_ = new QLabel(header);
     usageLabel_->setObjectName(QStringLiteral("tokenUsageLabel"));
     usageLabel_->hide();
@@ -489,6 +494,7 @@ void MainWindow::buildUi() {
 
     headerLayout->addWidget(titleLabel_);
     headerLayout->addWidget(statusLabel_);
+    headerLayout->addWidget(reconnectButton_);
     headerLayout->addWidget(usageLabel_);
     headerLayout->addStretch();
     headerLayout->addWidget(modelCombo_);
@@ -594,6 +600,7 @@ void MainWindow::buildUi() {
 
     connect(sendButton_, &QPushButton::clicked, this, &MainWindow::sendMessage);
     connect(stopButton_, &QPushButton::clicked, this, &MainWindow::stopTurn);
+    connect(reconnectButton_, &QPushButton::clicked, this, &MainWindow::reconnectSession);
     connect(composer_, &ComposerTextEdit::sendRequested, this, &MainWindow::sendMessage);
     connect(composer_, &ComposerTextEdit::queueRequested, this, &MainWindow::queueComposerMessage);
     connect(composer_, &ComposerTextEdit::stopRequested, this, &MainWindow::stopTurn);
@@ -1282,6 +1289,8 @@ void MainWindow::applyInterfaceScale(double scale) {
 
 void MainWindow::updateStatus(domain::ConversationStatus status) {
     statusLabel_->setText(domain::enumName(status));
+    reconnectButton_->setVisible(status == domain::ConversationStatus::Disconnected ||
+                                 status == domain::ConversationStatus::Failed);
     const bool idle = status == domain::ConversationStatus::Idle;
     const bool active = status == domain::ConversationStatus::Running ||
                         status == domain::ConversationStatus::WaitingApproval ||
