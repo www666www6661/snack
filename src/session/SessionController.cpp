@@ -37,12 +37,18 @@ SessionController::SessionController(domain::Conversation conversation,
       repository_(repository) {
     Q_ASSERT(adapter_ != nullptr);
     Q_ASSERT(repository_ != nullptr);
+    capabilities_ = adapter_->capabilities();
     nextTurnSettings_.agentKind = adapter_->kind();
     nextTurnSettings_.workingDirectory = conversation_.workingDirectory;
-    nextTurnSettings_.capabilityVersion = adapter_->capabilities().version;
+    nextTurnSettings_.capabilityVersion = capabilities_.version;
+    nextTurnSettings_ = normalizeSettings(nextTurnSettings_);
 
     connect(adapter_, &agent::IAgentAdapter::connectionChanged, this,
-            [this](bool connected, const QString&) {
+            [this](bool connected, const QString& detail) {
+                if (connectionDetail_ != detail) {
+                    connectionDetail_ = detail;
+                    emit connectionDetailChanged(connectionDetail_);
+                }
                 setStatus(connected ? domain::ConversationStatus::Idle
                                     : domain::ConversationStatus::Disconnected);
             });
@@ -77,44 +83,9 @@ void SessionController::handleNativeIdentityChanged(const QString& threadId,
 }
 
 void SessionController::handleCapabilitiesChanged(const agent::CapabilitySet& capabilities) {
-    domain::TurnSettingsSnapshot normalized = nextTurnSettings_;
-    normalized.capabilityVersion = capabilities.version;
-
-    if (!capabilities.models.isEmpty() && !capabilities.models.contains(normalized.modelId)) {
-        normalized.modelId = capabilities.models.contains(capabilities.defaultModelId)
-                                 ? capabilities.defaultModelId
-                                 : capabilities.models.constFirst();
-    }
-
-    if (const auto* model = findModel(capabilities, normalized.modelId); model != nullptr) {
-        const QString currentEffort = domain::enumName(normalized.reasoningEffort);
-        const auto supportsCurrent = std::any_of(
-            model->supportedReasoningEfforts.cbegin(), model->supportedReasoningEfforts.cend(),
-            [&currentEffort](const agent::ReasoningEffortCapability& effort) {
-                return effort.id == currentEffort;
-            });
-        if (!supportsCurrent) {
-            auto replacement = knownEffort(capabilities, model->defaultReasoningEffortId);
-            for (auto iterator = model->supportedReasoningEfforts.cbegin();
-                 !replacement.has_value() && iterator != model->supportedReasoningEfforts.cend();
-                 ++iterator) {
-                replacement = knownEffort(capabilities, iterator->id);
-            }
-            if (replacement.has_value()) {
-                normalized.reasoningEffort = *replacement;
-            }
-        }
-    } else if (!capabilities.reasoningEfforts.isEmpty() &&
-               !capabilities.reasoningEfforts.contains(normalized.reasoningEffort)) {
-        normalized.reasoningEffort = capabilities.reasoningEfforts.constFirst();
-    }
-
-    if (!capabilities.accessLevels.isEmpty() &&
-        !capabilities.accessLevels.contains(normalized.accessLevel)) {
-        normalized.accessLevel = capabilities.accessLevels.contains(domain::AccessLevel::Strict)
-                                     ? domain::AccessLevel::Strict
-                                     : capabilities.accessLevels.constFirst();
-    }
+    capabilities_ = capabilities;
+    emit capabilitiesChanged(capabilities_);
+    const domain::TurnSettingsSnapshot normalized = normalizeSettings(nextTurnSettings_);
 
     if (normalized == nextTurnSettings_) {
         return;
@@ -123,11 +94,58 @@ void SessionController::handleCapabilitiesChanged(const agent::CapabilitySet& ca
     emit nextTurnSettingsChanged(nextTurnSettings_);
 }
 
+domain::TurnSettingsSnapshot
+SessionController::normalizeSettings(const domain::TurnSettingsSnapshot& settings) const {
+    domain::TurnSettingsSnapshot normalized = settings;
+    normalized.agentKind = adapter_->kind();
+    normalized.workingDirectory = conversation_.workingDirectory;
+    normalized.capabilityVersion = capabilities_.version;
+
+    if (!capabilities_.models.isEmpty() && !capabilities_.models.contains(normalized.modelId)) {
+        normalized.modelId = capabilities_.models.contains(capabilities_.defaultModelId)
+                                 ? capabilities_.defaultModelId
+                                 : capabilities_.models.constFirst();
+    }
+
+    if (const auto* model = findModel(capabilities_, normalized.modelId); model != nullptr) {
+        const QString currentEffort = domain::enumName(normalized.reasoningEffort);
+        const auto supportsCurrent = std::any_of(
+            model->supportedReasoningEfforts.cbegin(), model->supportedReasoningEfforts.cend(),
+            [&currentEffort](const agent::ReasoningEffortCapability& effort) {
+                return effort.id == currentEffort;
+            });
+        if (!supportsCurrent) {
+            auto replacement = knownEffort(capabilities_, model->defaultReasoningEffortId);
+            for (auto iterator = model->supportedReasoningEfforts.cbegin();
+                 !replacement.has_value() && iterator != model->supportedReasoningEfforts.cend();
+                 ++iterator) {
+                replacement = knownEffort(capabilities_, iterator->id);
+            }
+            if (replacement.has_value()) {
+                normalized.reasoningEffort = *replacement;
+            }
+        }
+    } else if (!capabilities_.reasoningEfforts.isEmpty() &&
+               !capabilities_.reasoningEfforts.contains(normalized.reasoningEffort)) {
+        normalized.reasoningEffort = capabilities_.reasoningEfforts.constFirst();
+    }
+
+    if (!capabilities_.accessLevels.isEmpty() &&
+        !capabilities_.accessLevels.contains(normalized.accessLevel)) {
+        normalized.accessLevel = capabilities_.accessLevels.contains(domain::AccessLevel::Strict)
+                                     ? domain::AccessLevel::Strict
+                                     : capabilities_.accessLevels.constFirst();
+    }
+    return normalized;
+}
+
 const domain::Conversation& SessionController::conversation() const { return conversation_; }
 domain::ConversationStatus SessionController::status() const { return conversation_.status; }
 domain::TurnSettingsSnapshot SessionController::nextTurnSettings() const {
     return nextTurnSettings_;
 }
+const agent::CapabilitySet& SessionController::capabilities() const { return capabilities_; }
+QString SessionController::connectionDetail() const { return connectionDetail_; }
 
 QList<domain::AgentEvent> SessionController::restoredEvents(QString* error) {
     const auto events = repository_->eventsForConversation(conversation_.id, error);
@@ -196,10 +214,7 @@ void SessionController::close() {
 }
 
 void SessionController::setNextTurnSettings(const domain::TurnSettingsSnapshot& settings) {
-    domain::TurnSettingsSnapshot normalized = settings;
-    normalized.agentKind = adapter_->kind();
-    normalized.workingDirectory = conversation_.workingDirectory;
-    normalized.capabilityVersion = adapter_->capabilities().version;
+    const domain::TurnSettingsSnapshot normalized = normalizeSettings(settings);
     if (normalized == nextTurnSettings_) {
         return;
     }

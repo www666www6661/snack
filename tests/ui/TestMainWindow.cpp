@@ -4,10 +4,12 @@
 #include "storage/EventRepository.h"
 #include "ui/MainWindow.h"
 
+#include <QAction>
 #include <QApplication>
 #include <QComboBox>
 #include <QDir>
 #include <QDockWidget>
+#include <QLabel>
 #include <QListWidget>
 #include <QMessageBox>
 #include <QPlainTextEdit>
@@ -52,6 +54,7 @@ class TestMainWindow final : public QObject {
     void restoresPersistedTimeline();
     void hidesToTrayWithoutClosingSession();
     void restoresWindowLayout();
+    void interruptsRunningTurnFromSendButton();
     void cancelsQuitWhileAgentIsRunning();
 };
 
@@ -71,11 +74,23 @@ void TestMainWindow::sendsAndRendersStreamingTurn() {
     auto* sendButton = window.findChild<QPushButton*>(QStringLiteral("sendButton"));
     auto* timeline = window.findChild<QListWidget*>(QStringLiteral("timeline"));
     auto* modelCombo = window.findChild<QComboBox*>(QStringLiteral("modelCombo"));
+    auto* effortCombo = window.findChild<QComboBox*>(QStringLiteral("effortCombo"));
+    auto* sessionRow = window.findChild<QLabel*>(QStringLiteral("sessionRow"));
+    auto* statusLabel = window.findChild<QLabel*>(QStringLiteral("statusLabel"));
     QVERIFY(composer != nullptr);
     QVERIFY(sendButton != nullptr);
     QVERIFY(timeline != nullptr);
     QVERIFY(modelCombo != nullptr);
+    QVERIFY(effortCombo != nullptr);
+    QVERIFY(sessionRow != nullptr);
+    QVERIFY(statusLabel != nullptr);
     QTRY_VERIFY(sendButton->isEnabled());
+    QCOMPARE(modelCombo->count(), 2);
+    QCOMPARE(modelCombo->currentData().toString(), QStringLiteral("mock-balanced"));
+    QVERIFY(sessionRow->text().contains(QStringLiteral("Mock Agent")));
+    QCOMPARE(statusLabel->toolTip(), QStringLiteral("mock-v1"));
+    window.showStartupNotice(QStringLiteral("Fallback reason"));
+    QCOMPARE(sessionRow->toolTip(), QStringLiteral("Fallback reason"));
 
     sendButton->click();
     QCOMPARE(controller.status(), snack::domain::ConversationStatus::Idle);
@@ -91,6 +106,28 @@ void TestMainWindow::sendsAndRendersStreamingTurn() {
     QVERIFY(timeline->item(1)->text().contains(QStringLiteral("模拟 Agent")));
     QVERIFY(repository.events.size() >= 8);
 
+    const snack::agent::CapabilitySet oneModel{
+        .version = QStringLiteral("dynamic-v2"),
+        .models = {QStringLiteral("dynamic-model")},
+        .defaultModelId = QStringLiteral("dynamic-model"),
+        .modelCapabilities = {{.id = QStringLiteral("dynamic-model"),
+                               .displayName = QStringLiteral("Dynamic Model"),
+                               .defaultReasoningEffortId = QStringLiteral("high"),
+                               .supportedReasoningEfforts = {{QStringLiteral("high"), {}}}}},
+        .reasoningEfforts = {snack::domain::ReasoningEffort::High},
+        .accessLevels = {snack::domain::AccessLevel::Workspace}};
+    adapter.capabilitiesChanged(oneModel);
+    QCOMPARE(modelCombo->count(), 1);
+    QCOMPARE(modelCombo->currentText(), QStringLiteral("Dynamic Model"));
+    QCOMPARE(effortCombo->count(), 1);
+    QCOMPARE(effortCombo->currentData().toInt(),
+             static_cast<int>(snack::domain::ReasoningEffort::High));
+
+    auto* preferMock = window.findChild<QAction*>(QStringLiteral("preferMockAction"));
+    QVERIFY(preferMock != nullptr);
+    preferMock->trigger();
+    QCOMPARE(settings.load().preferredAgentKind, snack::domain::AgentKind::Mock);
+
     QVERIFY(QMetaObject::invokeMethod(&window, "applyDarkTheme"));
     QVERIFY(QMetaObject::invokeMethod(&window, "increaseScale"));
     window.activateWindowForRequest(std::nullopt);
@@ -100,6 +137,7 @@ void TestMainWindow::sendsAndRendersStreamingTurn() {
     const auto savedSettings = settings.load();
     QCOMPARE(savedSettings.themeMode, snack::app::ThemeMode::Dark);
     QCOMPARE(savedSettings.interfaceScale, 1.1);
+    QCOMPARE(savedSettings.preferredAgentKind, snack::domain::AgentKind::Mock);
 }
 
 void TestMainWindow::restoresPersistedTimeline() {
@@ -209,6 +247,33 @@ void TestMainWindow::restoresWindowLayout() {
     QVERIFY(restoredTaskDock->isFloating());
     QCOMPARE(restored.saveState(1), saved.mainWindowState);
     restored.close();
+}
+
+void TestMainWindow::interruptsRunningTurnFromSendButton() {
+    QTemporaryDir directory;
+    snack::app::AppSettings settings(directory.filePath(QStringLiteral("settings.ini")));
+    UiMemoryEventRepository repository;
+    snack::agent::FakeAgentAdapter adapter(nullptr, 100);
+    snack::domain::Conversation conversation;
+    conversation.title = QStringLiteral("Interrupt UI");
+    conversation.workingDirectory = directory.path();
+    snack::session::SessionController controller(conversation, &adapter, &repository);
+    snack::ui::MainWindow window(&controller, &settings, false);
+
+    auto* composer = window.findChild<QPlainTextEdit*>(QStringLiteral("composer"));
+    auto* sendButton = window.findChild<QPushButton*>(QStringLiteral("sendButton"));
+    QTRY_COMPARE(controller.status(), snack::domain::ConversationStatus::Idle);
+    composer->setPlainText(QStringLiteral("Stop this turn"));
+    sendButton->click();
+    QCOMPARE(controller.status(), snack::domain::ConversationStatus::Running);
+    QCOMPARE(sendButton->text(), QStringLiteral("Stop"));
+    QVERIFY(sendButton->isEnabled());
+
+    sendButton->click();
+    QCOMPARE(controller.status(), snack::domain::ConversationStatus::Idle);
+    QCOMPARE(repository.events.constLast().type, snack::domain::AgentEventType::TurnInterrupted);
+    QCOMPARE(sendButton->text(), QStringLiteral("Send"));
+    window.close();
 }
 
 void TestMainWindow::cancelsQuitWhileAgentIsRunning() {

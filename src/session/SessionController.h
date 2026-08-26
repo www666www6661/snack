@@ -17,6 +17,8 @@ class SessionController final : public QObject {
     [[nodiscard]] const domain::Conversation& conversation() const;
     [[nodiscard]] domain::ConversationStatus status() const;
     [[nodiscard]] domain::TurnSettingsSnapshot nextTurnSettings() const;
+    [[nodiscard]] const agent::CapabilitySet& capabilities() const;
+    [[nodiscard]] QString connectionDetail() const;
     [[nodiscard]] QList<domain::AgentEvent> restoredEvents(QString* error = nullptr);
 
     void open();
@@ -30,12 +32,16 @@ class SessionController final : public QObject {
     void eventRecorded(const snack::domain::AgentEvent& event);
     void persistenceError(const QString& error);
     void nextTurnSettingsChanged(const snack::domain::TurnSettingsSnapshot& settings);
+    void capabilitiesChanged(const snack::agent::CapabilitySet& capabilities);
+    void connectionDetailChanged(const QString& detail);
     void nativeIdentityChanged(const QString& threadId, const QString& sessionId);
 
   private:
     void handleCapabilitiesChanged(const agent::CapabilitySet& capabilities);
     void handleNativeIdentityChanged(const QString& threadId, const QString& sessionId);
     void handleAdapterEvent(domain::AgentEvent event);
+    [[nodiscard]] domain::TurnSettingsSnapshot
+    normalizeSettings(const domain::TurnSettingsSnapshot& settings) const;
     void recordEvent(domain::AgentEvent event);
     void setStatus(domain::ConversationStatus status);
 
@@ -43,6 +49,8 @@ class SessionController final : public QObject {
     agent::IAgentAdapter* adapter_{nullptr};
     storage::IEventRepository* repository_{nullptr};
     domain::TurnSettingsSnapshot nextTurnSettings_;
+    agent::CapabilitySet capabilities_;
+    QString connectionDetail_;
     QUuid activeTurnId_;
     quint64 nextSequence_{1};
 };

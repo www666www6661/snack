@@ -27,6 +27,7 @@ class MainWindow final : public QMainWindow {
                bool closeToTrayEnabled, QWidget* parent = nullptr);
 
     void activateWindowForRequest(const std::optional<QString>& directory);
+    void showStartupNotice(const QString& notice);
 
   protected:
     void closeEvent(QCloseEvent* event) override;
@@ -40,6 +41,8 @@ class MainWindow final : public QMainWindow {
     void decreaseScale();
     void resetScale();
     void requestQuit();
+    void preferCodexAgent();
+    void preferMockAgent();
 
   private:
     void buildUi();
@@ -48,6 +51,10 @@ class MainWindow final : public QMainWindow {
     void applyTheme(const ThemeDefinition& theme);
     void applyInterfaceScale(double scale);
     void updateStatus(domain::ConversationStatus status);
+    void updateConnectionDetail(const QString& detail);
+    void rebuildCapabilityControls(const domain::TurnSettingsSnapshot& settings);
+    void setPreferredAgent(domain::AgentKind kind);
+    [[nodiscard]] QString agentDisplayName() const;
     void restoreTimeline();
     void buildTray();
     void persistWindowState();
@@ -65,10 +72,12 @@ class MainWindow final : public QMainWindow {
     QPushButton* sendButton_{nullptr};
     QLabel* statusLabel_{nullptr};
     QLabel* titleLabel_{nullptr};
+    QLabel* sessionRow_{nullptr};
     QComboBox* modelCombo_{nullptr};
     QComboBox* effortCombo_{nullptr};
     QComboBox* accessCombo_{nullptr};
     QSystemTrayIcon* trayIcon_{nullptr};
+    QString startupNotice_;
     int activeAgentRow_{-1};
     bool closeToTrayEnabled_{false};
     bool quitRequested_{false};

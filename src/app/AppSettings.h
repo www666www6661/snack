@@ -1,5 +1,7 @@
 #pragma once
 
+#include "domain/DomainTypes.h"
+
 #include <QByteArray>
 #include <QSettings>
 
@@ -15,6 +17,8 @@ struct AppSettingsSnapshot {
     double interfaceScale{1.0};
     QString lastWorkspace;
     QString lastConversationId;
+    domain::AgentKind preferredAgentKind{domain::AgentKind::Codex};
+    QString codexExecutable;
     QByteArray mainWindowGeometry;
     QByteArray mainWindowState;
 };
@@ -34,5 +38,6 @@ class AppSettings final {
 
 [[nodiscard]] QString themeModeName(ThemeMode mode);
 [[nodiscard]] ThemeMode themeModeFromString(const QString& value);
+[[nodiscard]] domain::AgentKind preferredAgentKindFromString(const QString& value);
 
 } // namespace snack::app

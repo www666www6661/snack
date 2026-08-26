@@ -2,7 +2,7 @@
 
 ## Current status
 
-The M2 connection, thread, and text-turn slices are fixture-validated against Codex CLI `0.149.0`. They establish CLI discovery, subprocess transport, JSONL parsing, initialization, paginated `model/list`, native `thread/start`/`thread/resume`, `turn/start`, streamed text mapping, and `turn/interrupt`. `CodexAdapter` becomes ready only after the server returns a valid thread identity. The main application still starts with the fake adapter, and approvals, tools, reasoning, and plans are not connected to product UI yet.
+The M2 connection, thread, and text-turn slices are fixture-validated against Codex CLI `0.149.0`. They establish CLI discovery, subprocess transport, JSONL parsing, initialization, paginated `model/list`, native `thread/start`/`thread/resume`, `turn/start`, streamed text mapping, and `turn/interrupt`. The main application now probes and starts Codex by default, with an explicit Mock Agent fallback when the CLI is unavailable. Approvals, tools, reasoning, and plans are not connected to product UI yet.
 
 Protocol source: [OpenAI Docs - Codex App Server](https://developers.openai.com/codex/app-server). The default transport is newline-delimited JSON over stdio, with the `jsonrpc: "2.0"` member omitted on the wire. Every connection sends one `initialize` request and waits for its successful response before sending the `initialized` notification.
 
@@ -25,6 +25,8 @@ A new conversation calls `thread/start`; a conversation with a persisted `native
 Each `turn/start` sends text input and the GUI turn UUID while overriding `model`, `effort`, `cwd`, `approvalPolicy`, and `sandboxPolicy` from its immutable settings snapshot. `turn/started`, `item/started`, `item/agentMessage/delta`, `item/completed`, `error`, and `turn/completed` map to domain events. The adapter validates native thread/turn IDs, appends any final text suffix missing from deltas, ignores duplicate terminal notifications, and emits `turnFinished` once. An interrupt requested before the native turn ID arrives is deferred until that ID is known. A successful `turn/interrupt` response is not terminal; the subsequent `turn/completed` with status `interrupted` closes the turn.
 
 Windows discovery prefers `codex.cmd` and starts npm wrappers through `cmd.exe /c call`; Linux and macOS start `codex` directly. The Windows path is verified with a live local handshake.
+
+`AgentRuntimeFactory` creates an immutable per-conversation adapter and owns its process transport. The Agent menu changes only the next-conversation preference; it never swaps the current adapter. Startup restores a stored conversation only when both its Agent kind and workspace match, preventing Codex, Claude, and Mock identities from sharing a conversation. Once the Codex catalog arrives, the main window rebuilds model and effort controls from model metadata and shows only advertised access levels. Changes made during a running turn apply to the next turn.
 
 ## Failure and resource boundaries
 

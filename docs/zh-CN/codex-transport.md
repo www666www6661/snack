@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-M2 的连接、Thread 与文本 Turn 垂直链路已在 Codex CLI `0.149.0` 上完成 fixture 验证。当前代码已经建立独立的 CLI 探测、子进程传输、JSONL 协议解析、初始化握手、分页 `model/list`、原生 `thread/start`/`thread/resume`、`turn/start`、文本流映射和 `turn/interrupt`。`CodexAdapter` 发布模型能力后，只有服务端返回有效原生 Thread 身份才进入就绪；主应用仍使用模拟适配器启动，审批、工具、推理与计划事件也尚未接入产品 UI。
+M2 的连接、Thread 与文本 Turn 垂直链路已在 Codex CLI `0.149.0` 上完成 fixture 验证。当前代码已经建立独立的 CLI 探测、子进程传输、JSONL 协议解析、初始化握手、分页 `model/list`、原生 `thread/start`/`thread/resume`、`turn/start`、文本流映射和 `turn/interrupt`。主应用默认探测并启动 Codex；CLI 不可用时明确回退到 Mock Agent。审批、工具、推理与计划事件尚未接入产品 UI。
 
 官方协议依据：[OpenAI Docs - Codex App Server](https://developers.openai.com/codex/app-server)。默认传输是 stdio 上逐行 JSON；线上消息省略 `jsonrpc: "2.0"`。每个连接必须先发送 `initialize` 请求，收到成功响应后再发送 `initialized` 通知。
 
@@ -25,6 +25,8 @@ M2 的连接、Thread 与文本 Turn 垂直链路已在 Codex CLI `0.149.0` 上�
 每轮 `turn/start` 发送文本输入和 GUI Turn UUID，并按该轮不可变快照覆盖 `model`、`effort`、`cwd`、`approvalPolicy` 与 `sandboxPolicy`。`turn/started`、`item/started`、`item/agentMessage/delta`、`item/completed`、`error` 与 `turn/completed` 被映射为统一领域事件。适配器同时校验原生 Thread/Turn ID、合并最终消息缺失的尾部文本、忽略重复终态，并保证 `turnFinished` 只发送一次。用户可以在原生 Turn ID 返回前取消；请求会延迟到 ID 可用时发送。`turn/interrupt` 的响应不代表终态，仍由 `turn/completed` 的 `interrupted` 状态收口。
 
 Windows 优先探测 `codex.cmd`，并通过 `cmd.exe /c call` 启动 npm 包装器；Linux 和 macOS 直接启动 `codex`。这条 Windows 路径已通过真实本机握手测试。
+
+`AgentRuntimeFactory` 根据应用偏好构造不可变的会话适配器及其进程传输。Agent 菜单只设置“下一会话”偏好，不替换当前适配器；启动恢复也仅接受 Agent 类型和工作目录都相同的记录，因此 Codex、Claude 与 Mock 的原生身份不会混入同一会话。Codex 能力目录返回后，主窗口按模型元数据重建模型与推理强度控件，访问层级也只显示适配器声明的选项。运行中修改这些控件只影响下一轮。
 
 ## 失效与资源边界
 

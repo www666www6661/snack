@@ -86,14 +86,14 @@ void TestSessionController::snapshotsSettingsPerTurn() {
 
     auto settings = controller.nextTurnSettings();
     settings.modelId = QStringLiteral("mock-fast");
-    settings.reasoningEffort = snack::domain::ReasoningEffort::High;
+    settings.reasoningEffort = snack::domain::ReasoningEffort::Low;
     controller.setNextTurnSettings(settings);
     QVERIFY(controller.sendMessage(QStringLiteral("snapshot")));
 
     const auto saved = snack::domain::TurnSettingsSnapshot::fromJson(
         repository.events_.constFirst().payload.value(QStringLiteral("settings")).toObject());
     QCOMPARE(saved.modelId, QStringLiteral("mock-fast"));
-    QCOMPARE(saved.reasoningEffort, snack::domain::ReasoningEffort::High);
+    QCOMPARE(saved.reasoningEffort, snack::domain::ReasoningEffort::Low);
 }
 
 void TestSessionController::interruptsActiveTurn() {
@@ -112,6 +112,7 @@ void TestSessionController::validatesStateAndNormalizesSettings() {
     MemoryEventRepository repository;
     snack::agent::FakeAgentAdapter adapter(nullptr, 50);
     snack::session::SessionController controller(conversation(), &adapter, &repository);
+    QSignalSpy detailSpy(&controller, &snack::session::SessionController::connectionDetailChanged);
     QString error;
     QVERIFY(!controller.sendMessage(QStringLiteral("too early"), &error));
     QVERIFY(error.contains(QStringLiteral("not idle")));
@@ -135,8 +136,17 @@ void TestSessionController::validatesStateAndNormalizesSettings() {
     QCOMPARE(controller.nextTurnSettings().workingDirectory,
              controller.conversation().workingDirectory);
     QCOMPARE(controller.nextTurnSettings().capabilityVersion, QStringLiteral("mock-v1"));
+    QCOMPARE(controller.connectionDetail(), QStringLiteral("mock-v1"));
+    QCOMPARE(detailSpy.count(), 1);
+
+    settings = controller.nextTurnSettings();
+    settings.modelId = QStringLiteral("missing-model");
+    settings.reasoningEffort = snack::domain::ReasoningEffort::Ultra;
+    controller.setNextTurnSettings(settings);
+    QCOMPARE(controller.nextTurnSettings().modelId, QStringLiteral("mock-balanced"));
+    QCOMPARE(controller.nextTurnSettings().reasoningEffort, snack::domain::ReasoningEffort::Medium);
     controller.setNextTurnSettings(controller.nextTurnSettings());
-    QCOMPARE(settingsSpy.count(), 1);
+    QCOMPARE(settingsSpy.count(), 2);
 
     QVERIFY(controller.sendMessage(QStringLiteral("first"), &error));
     QVERIFY(!controller.sendMessage(QStringLiteral("second"), &error));
@@ -152,6 +162,8 @@ void TestSessionController::followsDynamicCapabilities() {
     snack::session::SessionController controller(conversation(), &adapter, &repository);
     QSignalSpy settingsSpy(&controller,
                            &snack::session::SessionController::nextTurnSettingsChanged);
+    QSignalSpy capabilitiesSpy(&controller,
+                               &snack::session::SessionController::capabilitiesChanged);
 
     const snack::agent::CapabilitySet capabilities{
         .version = QStringLiteral("codex-catalog-v2"),
@@ -175,9 +187,12 @@ void TestSessionController::followsDynamicCapabilities() {
     QCOMPARE(controller.nextTurnSettings().modelId, QStringLiteral("codex-default"));
     QCOMPARE(controller.nextTurnSettings().reasoningEffort, ReasoningEffort::High);
     QCOMPARE(controller.nextTurnSettings().accessLevel, AccessLevel::Workspace);
+    QCOMPARE(controller.capabilities().defaultModelId, QStringLiteral("codex-default"));
+    QCOMPARE(capabilitiesSpy.count(), 1);
 
     adapter.capabilitiesChanged(capabilities);
     QCOMPARE(settingsSpy.count(), 1);
+    QCOMPARE(capabilitiesSpy.count(), 2);
 }
 
 void TestSessionController::persistsNativeIdentityForResume() {

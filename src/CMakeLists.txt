@@ -1,4 +1,6 @@
 set(SNACK_CORE_SOURCES
+    agent/AgentRuntime.cpp
+    agent/AgentRuntime.h
     agent/codex/CodexAdapter.cpp
     agent/codex/CodexAdapter.h
     agent/codex/CodexAppServerClient.cpp
@@ -21,6 +23,8 @@ set(SNACK_CORE_SOURCES
     agent/process/QProcessTransport.h
     app/AppSettings.cpp
     app/AppSettings.h
+    app/ConversationBootstrap.cpp
+    app/ConversationBootstrap.h
     app/Logging.cpp
     app/Logging.h
     app/SingleInstanceGuard.cpp

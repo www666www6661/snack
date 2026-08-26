@@ -21,6 +21,8 @@ void TestAppSettings::usesSafeDefaults() {
     QCOMPARE(snapshot.themeMode, snack::app::ThemeMode::System);
     QCOMPARE(snapshot.locale, QStringLiteral("system"));
     QCOMPARE(snapshot.interfaceScale, 1.0);
+    QCOMPARE(snapshot.preferredAgentKind, snack::domain::AgentKind::Codex);
+    QVERIFY(snapshot.codexExecutable.isEmpty());
     QVERIFY(snapshot.mainWindowGeometry.isEmpty());
     QVERIFY(snapshot.mainWindowState.isEmpty());
 }
@@ -36,6 +38,8 @@ void TestAppSettings::persistsValues() {
         snapshot.locale = QStringLiteral("zh_CN");
         snapshot.interfaceScale = 1.4;
         snapshot.lastWorkspace = QStringLiteral("workspace");
+        snapshot.preferredAgentKind = snack::domain::AgentKind::Mock;
+        snapshot.codexExecutable = QStringLiteral("custom-codex");
         snapshot.mainWindowGeometry = QByteArrayLiteral("geometry");
         snapshot.mainWindowState = QByteArrayLiteral("state");
         settings.save(snapshot);
@@ -47,6 +51,8 @@ void TestAppSettings::persistsValues() {
     QCOMPARE(snapshot.locale, QStringLiteral("zh_CN"));
     QCOMPARE(snapshot.interfaceScale, 1.4);
     QCOMPARE(snapshot.lastWorkspace, QStringLiteral("workspace"));
+    QCOMPARE(snapshot.preferredAgentKind, snack::domain::AgentKind::Mock);
+    QCOMPARE(snapshot.codexExecutable, QStringLiteral("custom-codex"));
     QCOMPARE(snapshot.mainWindowGeometry, QByteArrayLiteral("geometry"));
     QCOMPARE(snapshot.mainWindowState, QByteArrayLiteral("state"));
 }
@@ -59,6 +65,11 @@ void TestAppSettings::clampsInterfaceScale() {
     snapshot.interfaceScale = 8.0;
     settings.save(snapshot);
     QCOMPARE(settings.load().interfaceScale, 2.0);
+
+    QSettings raw(path, QSettings::IniFormat);
+    raw.setValue(QStringLiteral("agent/preferred"), QStringLiteral("future-agent"));
+    raw.sync();
+    QCOMPARE(settings.load().preferredAgentKind, snack::domain::AgentKind::Codex);
 }
 
 QTEST_APPLESS_MAIN(TestAppSettings)

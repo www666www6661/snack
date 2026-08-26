@@ -50,7 +50,7 @@ flowchart LR
 
 适配器必须返回 `UnsupportedCapability`，不能让 UI 猜测 Agent 类型或降级方式。
 
-M2 当前已实现 `IProcessTransport`/`QProcessTransport`、`CodexCliDiscovery`、`CodexProtocol`、`CodexAppServerClient`、`CodexModelCatalog`、`CodexThreadLifecycle`、`CodexTurnLifecycle` 和文本 Turn 状态机。适配器完成全部模型分页后发布能力，再创建或恢复服务端 Thread；每轮从不可变设置快照构造原生请求，并把文本流、错误、中断和终态映射为统一事件。`SessionController` 分别持久化两个原生身份字段并归一化下一轮设置。审批、工具、推理与计划映射属于后续垂直链路。
+M2 当前已实现 `IProcessTransport`/`QProcessTransport`、`CodexCliDiscovery`、`CodexProtocol`、`CodexAppServerClient`、`CodexModelCatalog`、`CodexThreadLifecycle`、`CodexTurnLifecycle` 和文本 Turn 状态机。`AgentRuntimeFactory` 把适配器与传输的生命周期接入主应用，默认选择 Codex并提供显式 Mock 回退。适配器完成全部模型分页后发布能力，再创建或恢复服务端 Thread；每轮从不可变设置快照构造原生请求，并把文本流、错误、中断和终态映射为统一事件。`SessionController` 分别持久化两个原生身份字段、归一化下一轮设置并向 UI发布动态能力。审批、工具、推理与计划映射属于后续垂直链路。
 
 ### 3.4 `session`
 

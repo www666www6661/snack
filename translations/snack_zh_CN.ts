@@ -8,10 +8,25 @@
     <message><source>Search conversations</source><translation>搜索会话</translation></message>
     <message><source>Send</source><translation>发送</translation></message>
     <message><source>Running</source><translation>执行中</translation></message>
+    <message><source>Stop</source><translation>停止</translation></message>
+    <message><source>Stopping the current turn</source><translation>正在停止当前任务</translation></message>
     <message><source>Strict confirmation</source><translation>严格确认</translation></message>
     <message><source>Workspace automatic</source><translation>工作区自动</translation></message>
     <message><source>Full automatic</source><translation>完全自动</translation></message>
     <message><source>Settings apply to the next message</source><translation>设置从下一条消息生效</translation></message>
+    <message><source>Agent</source><translation>智能体</translation></message>
+    <message><source>Codex</source><translation>Codex</translation></message>
+    <message><source>Claude</source><translation>Claude</translation></message>
+    <message><source>Mock Agent</source><translation>模拟智能体</translation></message>
+    <message><source>Use Codex for new conversations</source><translation>新会话使用 Codex</translation></message>
+    <message><source>Use Mock Agent for new conversations</source><translation>新会话使用模拟智能体</translation></message>
+    <message><source>Agent choice applies to the next conversation</source><translation>智能体选择从下一会话生效</translation></message>
+    <message>
+      <source>●  %1
+    %2</source>
+      <translation>●  %1
+    %2</translation>
+    </message>
     <message><source>File</source><translation>文件</translation></message>
     <message><source>Quit</source><translation>退出</translation></message>
     <message><source>Snack coding agent</source><translation>零食编码智能体</translation></message>
@@ -25,6 +40,9 @@
   </context>
   <context>
     <name>main</name>
+    <message><source>Codex conversation</source><translation>Codex 会话</translation></message>
+    <message><source>Mock conversation</source><translation>模拟会话</translation></message>
+    <message><source>Using Mock Agent because %1</source><translation>正在使用模拟智能体，原因：%1</translation></message>
     <message>
       <source>Database recovery mode</source>
       <translation>数据库恢复模式</translation>

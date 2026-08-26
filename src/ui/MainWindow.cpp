@@ -1,6 +1,7 @@
 #include "ui/MainWindow.h"
 
 #include <QAction>
+#include <QActionGroup>
 #include <QApplication>
 #include <QCloseEvent>
 #include <QComboBox>
@@ -15,6 +16,7 @@
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QScreen>
+#include <QSignalBlocker>
 #include <QStatusBar>
 #include <QSystemTrayIcon>
 #include <QTimer>
@@ -47,14 +49,31 @@ MainWindow::MainWindow(session::SessionController* controller, app::AppSettings*
             [this](const QString& error) {
                 statusBar()->showMessage(tr("Storage error: %1").arg(error), 8000);
             });
+    connect(controller_, &session::SessionController::nextTurnSettingsChanged, this,
+            &MainWindow::rebuildCapabilityControls);
+    connect(controller_, &session::SessionController::capabilitiesChanged, this,
+            [this](const agent::CapabilitySet&) {
+                rebuildCapabilityControls(controller_->nextTurnSettings());
+            });
+    connect(controller_, &session::SessionController::connectionDetailChanged, this,
+            &MainWindow::updateConnectionDetail);
     connect(qApp, &QCoreApplication::aboutToQuit, this, &MainWindow::shutdown);
 
     restoreTimeline();
     applyTheme(settingsSnapshot_.themeMode == app::ThemeMode::Dark ? ThemeDefinition::dark()
                                                                    : ThemeDefinition::light());
     applyInterfaceScale(settingsSnapshot_.interfaceScale);
+    rebuildCapabilityControls(controller_->nextTurnSettings());
     controller_->open();
     QTimer::singleShot(0, this, &MainWindow::ensureWindowVisible);
+}
+
+void MainWindow::showStartupNotice(const QString& notice) {
+    if (!notice.trimmed().isEmpty()) {
+        startupNotice_ = notice;
+        sessionRow_->setToolTip(startupNotice_);
+        statusBar()->showMessage(startupNotice_, 10000);
+    }
 }
 
 void MainWindow::activateWindowForRequest(const std::optional<QString>& directory) {
@@ -80,6 +99,11 @@ void MainWindow::closeEvent(QCloseEvent* event) {
 }
 
 void MainWindow::sendMessage() {
+    if (controller_->status() == domain::ConversationStatus::Running) {
+        controller_->interrupt();
+        statusBar()->showMessage(tr("Stopping the current turn"), 3000);
+        return;
+    }
     QString error;
     if (!controller_->sendMessage(composer_->toPlainText(), &error)) {
         statusBar()->showMessage(error, 4000);
@@ -113,6 +137,10 @@ void MainWindow::applyDarkTheme() {
 void MainWindow::increaseScale() { applyInterfaceScale(settingsSnapshot_.interfaceScale + 0.1); }
 void MainWindow::decreaseScale() { applyInterfaceScale(settingsSnapshot_.interfaceScale - 0.1); }
 void MainWindow::resetScale() { applyInterfaceScale(1.0); }
+
+void MainWindow::preferCodexAgent() { setPreferredAgent(domain::AgentKind::Codex); }
+
+void MainWindow::preferMockAgent() { setPreferredAgent(domain::AgentKind::Mock); }
 
 void MainWindow::requestQuit() {
     if (!confirmQuit()) {
@@ -148,13 +176,15 @@ void MainWindow::buildUi() {
     auto* search = new QPlainTextEdit(sidebar);
     search->setPlaceholderText(tr("Search conversations"));
     search->setMaximumHeight(42);
-    auto* sessionRow = new QLabel(tr("●  Mock Agent\n    Project foundation"), sidebar);
-    sessionRow->setContentsMargins(8, 14, 8, 14);
+    sessionRow_ = new QLabel(
+        tr("●  %1\n    %2").arg(agentDisplayName(), controller_->conversation().title), sidebar);
+    sessionRow_->setObjectName(QStringLiteral("sessionRow"));
+    sessionRow_->setContentsMargins(8, 14, 8, 14);
     sidebarLayout->addWidget(brand);
     sidebarLayout->addSpacing(10);
     sidebarLayout->addWidget(newConversation);
     sidebarLayout->addWidget(search);
-    sidebarLayout->addWidget(sessionRow);
+    sidebarLayout->addWidget(sessionRow_);
     sidebarLayout->addStretch();
 
     auto* conversation = new QWidget(central);
@@ -168,24 +198,13 @@ void MainWindow::buildUi() {
     headerLayout->setContentsMargins(22, 12, 22, 12);
     titleLabel_ = new QLabel(controller_->conversation().title, header);
     statusLabel_ = new QLabel(tr("Dormant"), header);
+    statusLabel_->setObjectName(QStringLiteral("statusLabel"));
     modelCombo_ = new QComboBox(header);
     modelCombo_->setObjectName(QStringLiteral("modelCombo"));
     effortCombo_ = new QComboBox(header);
     effortCombo_->setObjectName(QStringLiteral("effortCombo"));
     accessCombo_ = new QComboBox(header);
     accessCombo_->setObjectName(QStringLiteral("accessCombo"));
-
-    modelCombo_->addItem(tr("Mock Fast"), QStringLiteral("mock-fast"));
-    modelCombo_->addItem(tr("Mock Balanced"), QStringLiteral("mock-balanced"));
-    modelCombo_->setCurrentIndex(1);
-    effortCombo_->addItem(tr("Low"), static_cast<int>(domain::ReasoningEffort::Low));
-    effortCombo_->addItem(tr("Medium"), static_cast<int>(domain::ReasoningEffort::Medium));
-    effortCombo_->addItem(tr("High"), static_cast<int>(domain::ReasoningEffort::High));
-    effortCombo_->setCurrentIndex(1);
-    accessCombo_->addItem(tr("Strict confirmation"), static_cast<int>(domain::AccessLevel::Strict));
-    accessCombo_->addItem(tr("Workspace automatic"),
-                          static_cast<int>(domain::AccessLevel::Workspace));
-    accessCombo_->addItem(tr("Full automatic"), static_cast<int>(domain::AccessLevel::Full));
 
     headerLayout->addWidget(titleLabel_);
     headerLayout->addWidget(statusLabel_);
@@ -246,6 +265,22 @@ void MainWindow::buildMenus() {
     quitAction->setShortcut(QKeySequence::Quit);
     connect(quitAction, &QAction::triggered, this, &MainWindow::requestQuit);
 
+    auto* agentMenu = menuBar()->addMenu(tr("Agent"));
+    auto* agentGroup = new QActionGroup(agentMenu);
+    agentGroup->setExclusive(true);
+    auto* codexAction = agentMenu->addAction(tr("Use Codex for new conversations"));
+    codexAction->setObjectName(QStringLiteral("preferCodexAction"));
+    codexAction->setCheckable(true);
+    auto* mockAction = agentMenu->addAction(tr("Use Mock Agent for new conversations"));
+    mockAction->setObjectName(QStringLiteral("preferMockAction"));
+    mockAction->setCheckable(true);
+    agentGroup->addAction(codexAction);
+    agentGroup->addAction(mockAction);
+    codexAction->setChecked(settingsSnapshot_.preferredAgentKind == domain::AgentKind::Codex);
+    mockAction->setChecked(settingsSnapshot_.preferredAgentKind == domain::AgentKind::Mock);
+    connect(codexAction, &QAction::triggered, this, &MainWindow::preferCodexAgent);
+    connect(mockAction, &QAction::triggered, this, &MainWindow::preferMockAgent);
+
     auto* viewMenu = menuBar()->addMenu(tr("View"));
     auto* lightAction = viewMenu->addAction(tr("Light theme"));
     auto* darkAction = viewMenu->addAction(tr("Dark theme"));
@@ -272,7 +307,7 @@ void MainWindow::appendEvent(const domain::AgentEvent& event) {
         activeAgentRow_ = -1;
         break;
     case domain::AgentEventType::AgentMessageStart:
-        timeline_->addItem(tr("Mock Agent\n"));
+        timeline_->addItem(tr("%1\n").arg(agentDisplayName()));
         activeAgentRow_ = timeline_->count() - 1;
         break;
     case domain::AgentEventType::AgentMessageDelta:
@@ -311,9 +346,100 @@ void MainWindow::applyInterfaceScale(double scale) {
 void MainWindow::updateStatus(domain::ConversationStatus status) {
     statusLabel_->setText(domain::enumName(status));
     const bool idle = status == domain::ConversationStatus::Idle;
-    sendButton_->setEnabled(idle);
-    sendButton_->setText(status == domain::ConversationStatus::Running ? tr("Running")
-                                                                       : tr("Send"));
+    const bool running = status == domain::ConversationStatus::Running;
+    sendButton_->setEnabled(idle || running);
+    sendButton_->setText(running ? tr("Stop") : tr("Send"));
+}
+
+void MainWindow::updateConnectionDetail(const QString& detail) {
+    statusLabel_->setToolTip(detail);
+    if (!startupNotice_.isEmpty()) {
+        statusBar()->showMessage(startupNotice_, 10000);
+    } else if (!detail.isEmpty()) {
+        statusBar()->showMessage(detail, 5000);
+    }
+}
+
+void MainWindow::rebuildCapabilityControls(const domain::TurnSettingsSnapshot& settings) {
+    const QSignalBlocker modelBlocker(modelCombo_);
+    const QSignalBlocker effortBlocker(effortCombo_);
+    const QSignalBlocker accessBlocker(accessCombo_);
+    const agent::CapabilitySet& capabilities = controller_->capabilities();
+
+    modelCombo_->clear();
+    for (const agent::ModelCapability& model : capabilities.modelCapabilities) {
+        modelCombo_->addItem(model.displayName.isEmpty() ? model.id : model.displayName, model.id);
+    }
+    if (modelCombo_->count() == 0) {
+        for (const QString& modelId : capabilities.models) {
+            modelCombo_->addItem(modelId, modelId);
+        }
+    }
+    modelCombo_->setCurrentIndex(modelCombo_->findData(settings.modelId));
+    modelCombo_->setEnabled(modelCombo_->count() > 0);
+
+    const auto selectedModel = std::find_if(
+        capabilities.modelCapabilities.cbegin(), capabilities.modelCapabilities.cend(),
+        [&settings](const agent::ModelCapability& model) { return model.id == settings.modelId; });
+    effortCombo_->clear();
+    if (selectedModel != capabilities.modelCapabilities.cend()) {
+        for (const agent::ReasoningEffortCapability& effort :
+             selectedModel->supportedReasoningEfforts) {
+            const auto known = std::find_if(capabilities.reasoningEfforts.cbegin(),
+                                            capabilities.reasoningEfforts.cend(),
+                                            [&effort](domain::ReasoningEffort value) {
+                                                return domain::enumName(value) == effort.id;
+                                            });
+            if (known != capabilities.reasoningEfforts.cend()) {
+                effortCombo_->addItem(effort.id, static_cast<int>(*known));
+            }
+        }
+    }
+    if (effortCombo_->count() == 0) {
+        for (domain::ReasoningEffort effort : capabilities.reasoningEfforts) {
+            effortCombo_->addItem(domain::enumName(effort), static_cast<int>(effort));
+        }
+    }
+    effortCombo_->setCurrentIndex(
+        effortCombo_->findData(static_cast<int>(settings.reasoningEffort)));
+    effortCombo_->setEnabled(effortCombo_->count() > 0);
+
+    accessCombo_->clear();
+    for (domain::AccessLevel access : capabilities.accessLevels) {
+        QString name;
+        switch (access) {
+        case domain::AccessLevel::Strict:
+            name = tr("Strict confirmation");
+            break;
+        case domain::AccessLevel::Workspace:
+            name = tr("Workspace automatic");
+            break;
+        case domain::AccessLevel::Full:
+            name = tr("Full automatic");
+            break;
+        }
+        accessCombo_->addItem(name, static_cast<int>(access));
+    }
+    accessCombo_->setCurrentIndex(accessCombo_->findData(static_cast<int>(settings.accessLevel)));
+    accessCombo_->setEnabled(accessCombo_->count() > 0);
+}
+
+void MainWindow::setPreferredAgent(domain::AgentKind kind) {
+    settingsSnapshot_.preferredAgentKind = kind;
+    settings_->save(settingsSnapshot_);
+    statusBar()->showMessage(tr("Agent choice applies to the next conversation"), 5000);
+}
+
+QString MainWindow::agentDisplayName() const {
+    switch (controller_->conversation().agentKind) {
+    case domain::AgentKind::Codex:
+        return tr("Codex");
+    case domain::AgentKind::Claude:
+        return tr("Claude");
+    case domain::AgentKind::Mock:
+        return tr("Mock Agent");
+    }
+    return tr("Agent");
 }
 
 void MainWindow::restoreTimeline() {

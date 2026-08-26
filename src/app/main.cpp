@@ -1,5 +1,6 @@
-#include "agent/FakeAgentAdapter.h"
+#include "agent/AgentRuntime.h"
 #include "app/AppSettings.h"
+#include "app/ConversationBootstrap.h"
 #include "app/Logging.h"
 #include "app/SingleInstanceGuard.h"
 #include "session/SessionController.h"
@@ -71,6 +72,9 @@ int main(int argc, char* argv[]) {
         workspace = QDir::currentPath();
     }
 
+    snack::agent::AgentRuntime agentRuntime = snack::agent::AgentRuntimeFactory::create(
+        settingsSnapshot.preferredAgentKind, settingsSnapshot.codexExecutable);
+
     snack::storage::EventStore eventStore;
     QString storageError;
     if (!eventStore.open(QDir(dataDirectory).filePath(QStringLiteral("snack.sqlite3")),
@@ -93,34 +97,37 @@ int main(int argc, char* argv[]) {
                              recoveryMessage);
     }
 
-    snack::domain::Conversation conversation;
+    std::optional<snack::domain::Conversation> restoredConversation;
     const QUuid restoredId(settingsSnapshot.lastConversationId);
     if (!restoredId.isNull()) {
         QString restoreError;
-        const auto restoredConversation = eventStore.conversationById(restoredId, &restoreError);
-        if (restoredConversation.has_value() &&
-            QDir::cleanPath(restoredConversation->workingDirectory) == QDir::cleanPath(workspace)) {
-            conversation = *restoredConversation;
-        } else if (!restoreError.isEmpty()) {
+        restoredConversation = eventStore.conversationById(restoredId, &restoreError);
+        if (!restoreError.isEmpty()) {
             qWarning() << restoreError;
         }
     }
-    if (conversation.title.isEmpty()) {
-        conversation.title = QObject::tr("Project foundation");
-        conversation.workingDirectory = workspace;
-        conversation.agentKind = snack::domain::AgentKind::Mock;
-    }
-    conversation.status = snack::domain::ConversationStatus::Dormant;
+    const QString newConversationTitle =
+        agentRuntime.selectedKind == snack::domain::AgentKind::Codex
+            ? QCoreApplication::translate("main", "Codex conversation")
+            : QCoreApplication::translate("main", "Mock conversation");
+    snack::domain::Conversation conversation =
+        snack::app::prepareConversation(restoredConversation, workspace, agentRuntime.selectedKind,
+                                        newConversationTitle)
+            .conversation;
 
     settingsSnapshot.lastWorkspace = workspace;
     settingsSnapshot.lastConversationId = conversation.id.toString(QUuid::WithoutBraces);
     settings.save(settingsSnapshot);
 
-    snack::agent::FakeAgentAdapter adapter;
-    snack::session::SessionController controller(conversation, &adapter, &eventStore);
+    snack::session::SessionController controller(conversation, agentRuntime.adapter.get(),
+                                                 &eventStore);
     const bool closeToTrayEnabled = QSystemTrayIcon::isSystemTrayAvailable();
     application.setQuitOnLastWindowClosed(!closeToTrayEnabled);
     snack::ui::MainWindow window(&controller, &settings, closeToTrayEnabled);
+    if (agentRuntime.fellBack) {
+        window.showStartupNotice(QCoreApplication::translate("main", "Using Mock Agent because %1")
+                                     .arg(agentRuntime.detail));
+    }
     QObject::connect(&singleInstance, &snack::app::SingleInstanceGuard::activationRequested,
                      &window, &snack::ui::MainWindow::activateWindowForRequest);
 
