@@ -1,3 +1,4 @@
+#include "storage/EventStore.h"
 #include "terminal/NativeTerminalProcess.h"
 #include "terminal/TerminalOutputDecoder.h"
 #include "terminal/TerminalSession.h"
@@ -5,6 +6,7 @@
 
 #include <QDir>
 #include <QSignalSpy>
+#include <QTemporaryDir>
 #include <QTest>
 
 class FakeTerminalProcess final : public snack::terminal::ITerminalProcess {
@@ -36,6 +38,7 @@ class TestTerminalSession final : public QObject {
 
   private slots:
     void delegatesToFakeWithoutAgentEvents();
+    void neverPersistsTerminalOutputAsAgentEvents();
     void boundsScrollback();
     void decodesSplitUtf8AndAnsiSafely();
     void projectsCarriageReturnsAndBoundsText();
@@ -64,6 +67,29 @@ void TestTerminalSession::delegatesToFakeWithoutAgentEvents() {
     QCOMPARE(fake->size, qMakePair(120, 40));
     session.close();
     QVERIFY(fake->closed);
+}
+
+void TestTerminalSession::neverPersistsTerminalOutputAsAgentEvents() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::storage::EventStore repository;
+    QString error;
+    QVERIFY2(repository.open(directory.filePath(QStringLiteral("events.sqlite")), &error),
+             qPrintable(error));
+    snack::domain::Conversation conversation;
+    conversation.title = QStringLiteral("Terminal isolation");
+    conversation.workingDirectory = directory.path();
+    QVERIFY2(repository.saveConversation(conversation, &error), qPrintable(error));
+
+    auto process = std::make_unique<FakeTerminalProcess>();
+    auto* fake = process.get();
+    snack::terminal::TerminalSession session(std::move(process));
+    fake->sendOutput("secret terminal output\r\n");
+
+    const auto events = repository.eventsForConversation(conversation.id, &error);
+    QVERIFY2(error.isEmpty(), qPrintable(error));
+    QVERIFY(events.isEmpty());
+    QCOMPARE(session.screenText(), QStringLiteral("secret terminal output\n"));
 }
 
 void TestTerminalSession::boundsScrollback() {
