@@ -152,6 +152,7 @@ class TestMainWindow final : public QObject {
     void marksBackgroundConversationUnreadUntilOpened();
     void marksAllBackgroundConversationsRead();
     void opensUnreadConversationsInRepositoryOrder();
+    void activatesSelectedConversationFromRailKeyboard();
 };
 
 void TestMainWindow::opensAndSwitchesConversationFromRail() {
@@ -996,6 +997,63 @@ void TestMainWindow::opensUnreadConversationsInRepositoryOrder() {
     QCOMPARE(gammaController->status(), snack::domain::ConversationStatus::Running);
     betaController->interrupt();
     gammaController->interrupt();
+}
+
+void TestMainWindow::activatesSelectedConversationFromRailKeyboard() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::app::AppSettings settings(directory.filePath(QStringLiteral("settings.ini")));
+    UiMemoryEventRepository repository;
+    snack::domain::Conversation current;
+    current.title = QStringLiteral("Current");
+    current.workingDirectory = directory.path();
+    snack::domain::Conversation target;
+    target.title = QStringLiteral("Keyboard target");
+    target.workingDirectory = directory.path();
+    snack::domain::Conversation archived;
+    archived.title = QStringLiteral("Archived target");
+    archived.workingDirectory = directory.path();
+    archived.archived = true;
+    repository.catalog = {current, target, archived};
+
+    const auto makeRuntime = [](snack::domain::AgentKind kind) {
+        snack::agent::AgentRuntime runtime;
+        runtime.requestedKind = kind;
+        runtime.selectedKind = kind;
+        runtime.adapter = std::make_unique<snack::agent::FakeAgentAdapter>(nullptr, 1);
+        return runtime;
+    };
+    snack::app::SessionManager sessions(&repository, makeRuntime);
+    QString error;
+    auto* controller = sessions.addPrepared(current, makeRuntime(current.agentKind), &error);
+    QVERIFY2(controller != nullptr, qPrintable(error));
+    snack::ui::MainWindow window(controller, &settings, &sessions, false);
+    auto* list = window.findChild<QListWidget*>(QStringLiteral("conversationList"));
+    auto* title = window.findChild<QLabel*>(QStringLiteral("conversationTitle"));
+    QVERIFY(list != nullptr);
+    QVERIFY(title != nullptr);
+    const auto itemFor = [list](const QUuid& id) {
+        for (int row = 0; row < list->count(); ++row) {
+            if (list->item(row)->data(Qt::UserRole).toUuid() == id) {
+                return list->item(row);
+            }
+        }
+        return static_cast<QListWidgetItem*>(nullptr);
+    };
+
+    auto* targetItem = itemFor(target.id);
+    QVERIFY(targetItem != nullptr);
+    list->setCurrentItem(targetItem);
+    QCOMPARE(title->text(), QStringLiteral("Current"));
+    emit list->itemActivated(targetItem);
+    QCOMPARE(title->text(), QStringLiteral("Keyboard target"));
+
+    auto* archivedItem = itemFor(archived.id);
+    QVERIFY(archivedItem != nullptr);
+    list->setCurrentItem(archivedItem);
+    emit list->itemActivated(archivedItem);
+    QCOMPARE(title->text(), QStringLiteral("Keyboard target"));
+    QVERIFY(window.statusBar()->currentMessage().contains(QStringLiteral("Restore")));
 }
 
 void TestMainWindow::sendsAndRendersStreamingTurn() {

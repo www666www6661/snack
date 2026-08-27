@@ -16,6 +16,8 @@ A new conversation begins with a localized placeholder title. After the first ac
 
 The M3 conversation rail is backed by the repository catalog rather than placeholder rows. Selecting another entry persists the outgoing draft, opens or reuses that conversation through `SessionManager`, disconnects the previous view binding, restores the selected timeline, queue, draft, capabilities, and connection state, and persists the new active conversation. If its original Agent runtime is unavailable, the current conversation remains selected and the interface reports the failure instead of crossing Agent types.
 
+The rail follows standard Qt list navigation: arrow keys move selection without switching conversations, while `Enter` or double-click activates the selected row through the same guarded navigation path. Archived rows remain non-activatable.
+
 Conversation search filters the already-loaded catalog locally and case-insensitively across title, workspace path, and Agent type. Filtering never opens, closes, reconnects, or otherwise mutates a session; clearing the query restores the repository-defined order.
 
 `Ctrl/Cmd+K` clears the current rail filter and focuses the conversation search field without touching any session runtime.

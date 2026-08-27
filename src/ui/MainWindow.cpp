@@ -1134,6 +1134,8 @@ void MainWindow::buildUi() {
     connect(reconnectButton_, &QPushButton::clicked, this, &MainWindow::reconnectSession);
     connect(newConversation, &QPushButton::clicked, this, &MainWindow::createConversation);
     connect(conversationList_, &QListWidget::itemClicked, this, &MainWindow::activateConversation);
+    connect(conversationList_, &QListWidget::itemActivated, this,
+            &MainWindow::activateConversation);
     connect(conversationList_, &QListWidget::customContextMenuRequested, this,
             [this](const QPoint& position) {
                 auto* item = conversationList_->itemAt(position);
