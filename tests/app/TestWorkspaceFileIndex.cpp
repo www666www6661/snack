@@ -1,4 +1,5 @@
 #include "app/WorkspaceFileIndex.h"
+#include "app/WorkspaceFilePreview.h"
 #include "app/WorkspacePathPolicy.h"
 
 #include <QDir>
@@ -13,6 +14,7 @@ class TestWorkspaceFileIndex final : public QObject {
     void indexesWorkspaceWithExclusionsAndLimit();
     void resolvesOnlyExistingWorkspacePaths();
     void normalizesPathAliases();
+    void readsBoundedTextPreviews();
 };
 
 void TestWorkspaceFileIndex::indexesWorkspaceWithExclusionsAndLimit() {
@@ -82,6 +84,31 @@ void TestWorkspaceFileIndex::normalizesPathAliases() {
     QCOMPARE(snack::app::WorkspacePathPolicy::identityKey(root.filePath(QStringLiteral("SRC"))),
              snack::app::WorkspacePathPolicy::identityKey(root.filePath(QStringLiteral("src"))));
 #endif
+}
+
+void TestWorkspaceFileIndex::readsBoundedTextPreviews() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    QFile textFile(directory.filePath(QStringLiteral("notes.txt")));
+    QVERIFY(textFile.open(QIODevice::WriteOnly));
+    textFile.write("abcdef");
+    textFile.close();
+
+    QString error;
+    const auto preview = snack::app::WorkspaceFilePreviewReader::read(
+        directory.path(), QStringLiteral("notes.txt"), 4, &error);
+    QVERIFY2(error.isEmpty(), qPrintable(error));
+    QCOMPARE(preview.text, QStringLiteral("abcd"));
+    QVERIFY(preview.truncated);
+
+    QFile binaryFile(directory.filePath(QStringLiteral("binary.dat")));
+    QVERIFY(binaryFile.open(QIODevice::WriteOnly));
+    binaryFile.write(QByteArray("a\0b", 3));
+    binaryFile.close();
+    const auto binaryPreview = snack::app::WorkspaceFilePreviewReader::read(
+        directory.path(), QStringLiteral("binary.dat"), 10, &error);
+    QVERIFY(binaryPreview.text.isEmpty());
+    QVERIFY(error.contains(QStringLiteral("Binary")));
 }
 
 QTEST_GUILESS_MAIN(TestWorkspaceFileIndex)

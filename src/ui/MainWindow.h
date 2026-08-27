@@ -75,6 +75,7 @@ class MainWindow final : public QMainWindow {
     void saveComposerAsTemplate();
     void chooseAttachments();
     void removeSelectedAttachment();
+    void previewSelectedWorkspaceFile();
     void chooseWorkspaceReference();
     void updateSessionSettings();
     void applySystemTheme();
@@ -172,6 +173,7 @@ class MainWindow final : public QMainWindow {
     void setPreferredAgent(domain::AgentKind kind);
     [[nodiscard]] QString agentDisplayName() const;
     void restoreTimeline();
+    void refreshWorkspaceBrowser();
     void buildTray();
     void maybeNotify(const domain::AgentEvent& event);
     [[nodiscard]] bool snackIsForeground() const;
@@ -228,6 +230,9 @@ class MainWindow final : public QMainWindow {
     QWidget* sessionSidebar_{nullptr};
     QDockWidget* taskDock_{nullptr};
     QDockWidget* terminalDock_{nullptr};
+    QDockWidget* fileDock_{nullptr};
+    QListWidget* workspaceFileList_{nullptr};
+    QPlainTextEdit* workspaceFilePreview_{nullptr};
     QLabel* planExplanation_{nullptr};
     QLabel* planItemText_{nullptr};
     QListWidget* planList_{nullptr};

@@ -1,6 +1,7 @@
 #include "ui/MainWindow.h"
 
 #include "app/WorkspaceFileIndex.h"
+#include "app/WorkspaceFilePreview.h"
 #include "domain/PromptTemplateEngine.h"
 #include "ui/ComposerTextEdit.h"
 #include "ui/RichTextView.h"
@@ -306,6 +307,7 @@ MainWindow::MainWindow(session::SessionController* controller, app::AppSettings*
     connect(qApp, &QCoreApplication::aboutToQuit, this, &MainWindow::shutdown);
 
     restoreTimeline();
+    refreshWorkspaceBrowser();
     if (settingsSnapshot_.themeMode == app::ThemeMode::System) {
         refreshSystemTheme();
     } else {
@@ -2082,6 +2084,24 @@ void MainWindow::buildUi() {
     addDockWidget(Qt::RightDockWidgetArea, taskDock_);
     taskDock_->hide();
 
+    fileDock_ = new QDockWidget(tr("Workspace files"), this);
+    fileDock_->setObjectName(QStringLiteral("fileDock"));
+    auto* filePanel = new QWidget(fileDock_);
+    auto* fileLayout = new QVBoxLayout(filePanel);
+    workspaceFileList_ = new QListWidget(filePanel);
+    workspaceFileList_->setObjectName(QStringLiteral("workspaceFileList"));
+    workspaceFilePreview_ = new QPlainTextEdit(filePanel);
+    workspaceFilePreview_->setObjectName(QStringLiteral("workspaceFilePreview"));
+    workspaceFilePreview_->setReadOnly(true);
+    workspaceFilePreview_->setPlaceholderText(tr("Select a text file to preview it."));
+    fileLayout->addWidget(workspaceFileList_, 1);
+    fileLayout->addWidget(workspaceFilePreview_, 2);
+    fileDock_->setWidget(filePanel);
+    addDockWidget(Qt::RightDockWidgetArea, fileDock_);
+    fileDock_->hide();
+    connect(workspaceFileList_, &QListWidget::itemSelectionChanged, this,
+            &MainWindow::previewSelectedWorkspaceFile);
+
     terminalDock_ = new QDockWidget(tr("Terminal"), this);
     terminalDock_->setObjectName(QStringLiteral("terminalDock"));
     terminalDock_->setWidget(
@@ -2250,6 +2270,7 @@ void MainWindow::buildMenus() {
     connect(mockAction, &QAction::triggered, this, &MainWindow::preferMockAgent);
 
     auto* viewMenu = menuBar()->addMenu(tr("View"));
+    viewMenu->addAction(fileDock_->toggleViewAction());
     auto* layoutsMenu = viewMenu->addMenu(tr("Workbench layout"));
     auto* focusLayout = layoutsMenu->addAction(tr("Focus chat"));
     focusLayout->setObjectName(QStringLiteral("focusLayoutAction"));
@@ -3264,6 +3285,31 @@ QString MainWindow::agentDisplayName() const {
         return tr("Mock Agent");
     }
     return tr("Agent");
+}
+
+void MainWindow::refreshWorkspaceBrowser() {
+    workspaceFileList_->clear();
+    workspaceFilePreview_->clear();
+    workspaceFileList_->addItems(
+        app::WorkspaceFileIndex::files(controller_->conversation().workingDirectory));
+}
+
+void MainWindow::previewSelectedWorkspaceFile() {
+    const auto selected = workspaceFileList_->selectedItems();
+    if (selected.isEmpty()) {
+        workspaceFilePreview_->clear();
+        return;
+    }
+    QString error;
+    const auto preview =
+        app::WorkspaceFilePreviewReader::read(controller_->conversation().workingDirectory,
+                                              selected.constFirst()->text(), 512 * 1024, &error);
+    if (!error.isEmpty()) {
+        workspaceFilePreview_->setPlainText(error);
+        return;
+    }
+    workspaceFilePreview_->setPlainText(
+        preview.text + (preview.truncated ? tr("\n\n[Preview truncated]") : QString{}));
 }
 
 void MainWindow::restoreTimeline() {
