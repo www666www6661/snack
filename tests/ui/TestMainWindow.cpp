@@ -112,10 +112,31 @@ class UiMemoryEventRepository final : public snack::storage::IEventRepository {
         return result;
     }
 
+    bool saveConversationView(const snack::domain::SavedConversationView& view, QString*) override {
+        views.insert(view.id, view);
+        return true;
+    }
+
+    bool deleteConversationView(const QUuid& viewId, QString*) override {
+        return views.remove(viewId) > 0;
+    }
+
+    QList<snack::domain::SavedConversationView> conversationViews(QString*) const override {
+        QList<snack::domain::SavedConversationView> result = views.values();
+        std::sort(result.begin(), result.end(), [](const auto& left, const auto& right) {
+            if (left.position != right.position) {
+                return left.position < right.position;
+            }
+            return left.name.compare(right.name, Qt::CaseInsensitive) < 0;
+        });
+        return result;
+    }
+
     QList<snack::domain::AgentEvent> events;
     QList<snack::domain::Conversation> catalog;
     QHash<QUuid, QList<snack::domain::QueuedMessage>> queues;
     QHash<QUuid, snack::domain::PromptTemplate> templates;
+    QHash<QUuid, snack::domain::SavedConversationView> views;
 };
 
 class TestMainWindow final : public QObject {

@@ -67,10 +67,24 @@ class MemoryEventRepository : public snack::storage::IEventRepository {
         return templates_.values();
     }
 
+    bool saveConversationView(const snack::domain::SavedConversationView& view, QString*) override {
+        views_.insert(view.id, view);
+        return true;
+    }
+
+    bool deleteConversationView(const QUuid& viewId, QString*) override {
+        return views_.remove(viewId) > 0;
+    }
+
+    QList<snack::domain::SavedConversationView> conversationViews(QString*) const override {
+        return views_.values();
+    }
+
     snack::domain::Conversation conversation_;
     QList<snack::domain::AgentEvent> events_;
     QHash<QUuid, QList<snack::domain::QueuedMessage>> queues_;
     QHash<QUuid, snack::domain::PromptTemplate> templates_;
+    QHash<QUuid, snack::domain::SavedConversationView> views_;
 };
 
 class RejectingAgentAdapter final : public snack::agent::IAgentAdapter {

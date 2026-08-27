@@ -15,7 +15,7 @@
 namespace snack::storage {
 namespace {
 
-constexpr int currentSchemaVersion = 8;
+constexpr int currentSchemaVersion = 9;
 
 struct Migration {
     int version;
@@ -122,7 +122,21 @@ QList<Migration> migrations() {
               QStringLiteral("UPDATE schema_migrations SET "
                              "applied_at = CAST(strftime('%s','now') AS INTEGER) * 1000, "
                              "completed_at = CAST(strftime('%s','now') AS INTEGER) * 1000 "
-                             "WHERE version = 8")}}};
+                             "WHERE version = 8")}},
+            {9,
+             {QStringLiteral("INSERT INTO schema_migrations "
+                             "(version, applied_at, started_at, completed_at) VALUES "
+                             "(9, 0, CAST(strftime('%s','now') AS INTEGER) * 1000, NULL)"),
+              QStringLiteral("CREATE TABLE saved_views ("
+                             "id TEXT PRIMARY KEY, name TEXT NOT NULL COLLATE NOCASE UNIQUE, "
+                             "query TEXT NOT NULL, show_archived INTEGER NOT NULL DEFAULT 1, "
+                             "position INTEGER NOT NULL)"),
+              QStringLiteral("CREATE INDEX saved_views_order "
+                             "ON saved_views(position ASC, name COLLATE NOCASE ASC, id ASC)"),
+              QStringLiteral("UPDATE schema_migrations SET "
+                             "applied_at = CAST(strftime('%s','now') AS INTEGER) * 1000, "
+                             "completed_at = CAST(strftime('%s','now') AS INTEGER) * 1000 "
+                             "WHERE version = 9")}}};
 }
 
 QString compactJson(const QJsonObject& object) {
@@ -562,6 +576,84 @@ QList<domain::PromptTemplate> EventStore::promptTemplates(QString* error) const 
     return templates;
 }
 
+bool EventStore::saveConversationView(const domain::SavedConversationView& view, QString* error) {
+    if (!ensureWritable(error)) {
+        return false;
+    }
+    const QString name = view.name.simplified();
+    const QString query = view.query.isNull() ? QStringLiteral("") : view.query.trimmed();
+    if (view.id.isNull() || name.isEmpty() || name.size() > 80 || query.size() > 2048 ||
+        view.position < 0) {
+        if (error != nullptr) {
+            *error = QStringLiteral("Cannot save conversation view: invalid metadata");
+        }
+        return false;
+    }
+
+    QSqlQuery sqlQuery(database_);
+    sqlQuery.prepare(QStringLiteral(
+        "INSERT INTO saved_views (id, name, query, show_archived, position) VALUES (?, ?, ?, ?, ?) "
+        "ON CONFLICT(id) DO UPDATE SET name = excluded.name, query = excluded.query, "
+        "show_archived = excluded.show_archived, position = excluded.position"));
+    sqlQuery.addBindValue(view.id.toString(QUuid::WithoutBraces));
+    sqlQuery.addBindValue(name);
+    sqlQuery.addBindValue(query);
+    sqlQuery.addBindValue(view.showArchived);
+    sqlQuery.addBindValue(view.position);
+    if (!sqlQuery.exec()) {
+        setSqlError(error, QStringLiteral("Cannot save conversation view"), sqlQuery.lastError());
+        return false;
+    }
+    return true;
+}
+
+bool EventStore::deleteConversationView(const QUuid& viewId, QString* error) {
+    if (!ensureWritable(error)) {
+        return false;
+    }
+    if (viewId.isNull()) {
+        if (error != nullptr) {
+            *error = QStringLiteral("Cannot delete conversation view: invalid ID");
+        }
+        return false;
+    }
+    QSqlQuery query(database_);
+    query.prepare(QStringLiteral("DELETE FROM saved_views WHERE id = ?"));
+    query.addBindValue(viewId.toString(QUuid::WithoutBraces));
+    if (!query.exec()) {
+        setSqlError(error, QStringLiteral("Cannot delete conversation view"), query.lastError());
+        return false;
+    }
+    if (query.numRowsAffected() != 1) {
+        if (error != nullptr) {
+            *error = QStringLiteral("Conversation view no longer exists");
+        }
+        return false;
+    }
+    return true;
+}
+
+QList<domain::SavedConversationView> EventStore::conversationViews(QString* error) const {
+    QList<domain::SavedConversationView> views;
+    QSqlQuery query(database_);
+    if (!query.exec(QStringLiteral("SELECT id, name, query, show_archived, position "
+                                   "FROM saved_views "
+                                   "ORDER BY position ASC, name COLLATE NOCASE ASC, id ASC"))) {
+        setSqlError(error, QStringLiteral("Cannot load conversation views"), query.lastError());
+        return views;
+    }
+    while (query.next()) {
+        domain::SavedConversationView view;
+        view.id = QUuid(query.value(0).toString());
+        view.name = query.value(1).toString();
+        view.query = query.value(2).toString();
+        view.showArchived = query.value(3).toBool();
+        view.position = query.value(4).toLongLong();
+        views.append(view);
+    }
+    return views;
+}
+
 int EventStore::schemaVersion(QString* error) const {
     QSqlQuery tableQuery(database_);
     if (!tableQuery.exec(QStringLiteral(
@@ -639,10 +731,11 @@ bool EventStore::validateSchema(bool checkIntegrity, QString* error) const {
     if (!objectsQuery.exec(QStringLiteral(
             "SELECT COUNT(*) FROM sqlite_master WHERE "
             "(type = 'table' AND name IN ('schema_migrations', 'conversations', 'events', "
-            "'queued_messages', 'prompt_templates')) OR "
+            "'queued_messages', 'prompt_templates', 'saved_views')) OR "
             "(type = 'index' AND name IN ('events_conversation_sequence', "
-            "'conversations_working_directory', 'prompt_templates_order'))")) ||
-        !objectsQuery.next() || objectsQuery.value(0).toInt() != 8) {
+            "'conversations_working_directory', 'prompt_templates_order', "
+            "'saved_views_order'))")) ||
+        !objectsQuery.next() || objectsQuery.value(0).toInt() != 10) {
         if (error != nullptr) {
             *error = QStringLiteral("Database schema validation failed: required objects are "
                                     "missing");
@@ -652,9 +745,9 @@ bool EventStore::validateSchema(bool checkIntegrity, QString* error) const {
 
     QSqlQuery completionQuery(database_);
     if (!completionQuery.exec(QStringLiteral("SELECT COUNT(*) FROM schema_migrations "
-                                             "WHERE version IN (2, 3, 4, 5, 6, 7, 8) "
+                                             "WHERE version IN (2, 3, 4, 5, 6, 7, 8, 9) "
                                              "AND completed_at IS NOT NULL")) ||
-        !completionQuery.next() || completionQuery.value(0).toInt() != 7) {
+        !completionQuery.next() || completionQuery.value(0).toInt() != 8) {
         if (error != nullptr) {
             *error = QStringLiteral("Database schema validation failed: migrations are incomplete");
         }

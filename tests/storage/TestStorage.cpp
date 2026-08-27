@@ -245,6 +245,39 @@ void TestStorage::eventStorePersistsOrderedEvents() {
     invalid.name = QStringLiteral("Invalid");
     invalid.content = QStringLiteral("Broken {{bad name}}");
     QVERIFY(!store.savePromptTemplate(invalid, &error));
+
+    snack::domain::SavedConversationView activeCodex;
+    activeCodex.name = QStringLiteral("  Active Codex  ");
+    activeCodex.query = QStringLiteral(" agent:codex status:running ");
+    activeCodex.showArchived = false;
+    activeCodex.position = 1;
+    QVERIFY2(store.saveConversationView(activeCodex, &error), qPrintable(error));
+    snack::domain::SavedConversationView backend;
+    backend.name = QStringLiteral("Backend");
+    backend.query = QStringLiteral("tag:backend");
+    backend.position = 0;
+    QVERIFY2(store.saveConversationView(backend, &error), qPrintable(error));
+    auto views = store.conversationViews(&error);
+    QCOMPARE(views.size(), 2);
+    QCOMPARE(views.at(0).id, backend.id);
+    QCOMPARE(views.at(1).name, QStringLiteral("Active Codex"));
+    QCOMPARE(views.at(1).query, QStringLiteral("agent:codex status:running"));
+    QVERIFY(!views.at(1).showArchived);
+
+    activeCodex.name = QStringLiteral("Agent work");
+    activeCodex.position = 0;
+    QVERIFY2(store.saveConversationView(activeCodex, &error), qPrintable(error));
+    views = store.conversationViews(&error);
+    QCOMPARE(views.constFirst().id, activeCodex.id);
+    snack::domain::SavedConversationView duplicateName;
+    duplicateName.name = QStringLiteral("agent WORK");
+    QVERIFY(!store.saveConversationView(duplicateName, &error));
+    snack::domain::SavedConversationView invalidView;
+    invalidView.id = QUuid{};
+    QVERIFY(!store.saveConversationView(invalidView, &error));
+    QVERIFY(store.deleteConversationView(backend.id, &error));
+    QCOMPARE(store.conversationViews(&error).size(), 1);
+    QVERIFY(!store.deleteConversationView(backend.id, &error));
 }
 
 void TestStorage::contentStoreDeduplicatesAndVerifies() {
@@ -335,7 +368,7 @@ void TestStorage::eventStoreBacksUpAndMigratesLegacySchema() {
     QCOMPARE(queryScalar(databasePath, QStringLiteral("SELECT MAX(version) FROM schema_migrations"),
                          &error)
                  .toInt(),
-             8);
+             9);
     QCOMPARE(queryScalar(databasePath,
                          QStringLiteral("SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' "
                                         "AND name = 'conversations_working_directory'"),
@@ -358,6 +391,9 @@ void TestStorage::eventStoreBacksUpAndMigratesLegacySchema() {
                         &error)
                 .toString()
                 .isEmpty());
+    QCOMPARE(queryScalar(databasePath, QStringLiteral("SELECT COUNT(*) FROM saved_views"), &error)
+                 .toInt(),
+             0);
     QCOMPARE(queryScalar(databasePath,
                          QStringLiteral("SELECT COUNT(*) FROM pragma_table_info("
                                         "'conversations') WHERE name = 'native_thread_id'"),
@@ -384,7 +420,7 @@ void TestStorage::eventStoreMigratesV2NativeIdentity() {
     QCOMPARE(queryScalar(databasePath, QStringLiteral("SELECT MAX(version) FROM schema_migrations"),
                          &error)
                  .toInt(),
-             8);
+             9);
     const auto restored = store.conversationById(
         QUuid(QStringLiteral("11111111-1111-1111-1111-111111111111")), &error);
     QVERIFY2(restored.has_value(), qPrintable(error));
@@ -446,6 +482,9 @@ void TestStorage::eventStoreRollsBackIntoReadOnlyRecovery() {
     snack::domain::Conversation conversation;
     QVERIFY(!store.saveConversation(conversation, &error));
     QVERIFY(error.contains(QStringLiteral("read-only recovery")));
+    snack::domain::SavedConversationView view;
+    view.name = QStringLiteral("Unavailable");
+    QVERIFY(!store.saveConversationView(view, &error));
 }
 
 void TestStorage::eventStoreOpensFutureSchemaReadOnly() {
@@ -480,7 +519,7 @@ void TestStorage::eventStoreRejectsIncompleteCurrentSchema() {
     const QStringList incompleteSchema = {
         QStringLiteral("CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, "
                        "applied_at INTEGER NOT NULL, started_at INTEGER, completed_at INTEGER)"),
-        QStringLiteral("INSERT INTO schema_migrations VALUES (8, 1, 1, 1)")};
+        QStringLiteral("INSERT INTO schema_migrations VALUES (9, 1, 1, 1)")};
     QVERIFY2(executeSql(databasePath, incompleteSchema, &error), qPrintable(error));
 
     snack::storage::EventStore store;

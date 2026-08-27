@@ -115,6 +115,16 @@ struct PromptTemplate {
     bool operator==(const PromptTemplate&) const = default;
 };
 
+struct SavedConversationView {
+    QUuid id{QUuid::createUuid()};
+    QString name;
+    QString query;
+    bool showArchived{true};
+    qsizetype position{0};
+
+    bool operator==(const SavedConversationView&) const = default;
+};
+
 [[nodiscard]] QString enumName(AgentKind value);
 [[nodiscard]] QString enumName(ReasoningEffort value);
 [[nodiscard]] QString enumName(AccessLevel value);
@@ -141,3 +151,4 @@ Q_DECLARE_METATYPE(snack::domain::ConversationStatus)
 Q_DECLARE_METATYPE(snack::domain::TurnSettingsSnapshot)
 Q_DECLARE_METATYPE(snack::domain::QueuedMessage)
 Q_DECLARE_METATYPE(snack::domain::PromptTemplate)
+Q_DECLARE_METATYPE(snack::domain::SavedConversationView)
