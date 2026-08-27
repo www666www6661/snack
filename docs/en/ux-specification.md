@@ -30,6 +30,8 @@ Archiving the current idle conversation closes its runtime and selects the next 
 
 Pinning is a metadata-only toggle available for the current conversation. It does not reconnect or recreate the runtime; the repository order is immediately reapplied so pinned rows lead their active or archived section.
 
+Conversation tags are edited as a comma-separated metadata list from the File menu. Tags are trimmed, control characters are removed, duplicates collapse case-insensitively, and the result sorts deterministically; each conversation accepts at most eight tags of at most 32 Unicode code points each. Invalid edits preserve the previous list. Tags appear on rail rows and participate in local case-insensitive search without reconnecting a runtime.
+
 Each rail row exposes a context menu for opening, pinning, archiving, or restoring that selected conversation. Actions operate on the row rather than silently switching first; archiving a background conversation leaves the current chat bound and uses the same active-work guard as the File menu.
 
 Active rows include a text status such as Connecting, Idle, Running, Waiting for approval/input, Disconnected, or Failed. Status changes from every open runtime refresh the rail in place, so background work remains visible without switching conversations.

@@ -15,6 +15,7 @@ class TestDomainTypes final : public QObject {
     void approvalDecisionNamesRoundTrip();
     void queuedMessageStateNamesRoundTrip();
     void createsSafeFallbackConversationTitles();
+    void normalizesConversationTags();
     void validatesAndRendersPromptTemplates();
     void rejectsInvalidPromptTemplates();
 };
@@ -108,6 +109,27 @@ void TestDomainTypes::createsSafeFallbackConversationTitles() {
     const QString emojiTitle = snack::domain::fallbackConversationTitle(
         QStringLiteral("Keep emoji ") + whale + QStringLiteral(" in the title"));
     QVERIFY(emojiTitle.contains(whale));
+}
+
+void TestDomainTypes::normalizesConversationTags() {
+    QString error;
+    const auto normalized = snack::domain::normalizeConversationTags(
+        {QStringLiteral(" backend "), QStringLiteral("Needs   Review"), QStringLiteral("BACKEND"),
+         QStringLiteral(""), QStringLiteral("ui") + QChar(0x202E)},
+        &error);
+    QVERIFY2(normalized.has_value(), qPrintable(error));
+    QCOMPARE(*normalized, QStringList({QStringLiteral("backend"), QStringLiteral("Needs Review"),
+                                       QStringLiteral("ui")}));
+
+    QVERIFY(!snack::domain::normalizeConversationTags({QString(33, QLatin1Char('x'))}, &error)
+                 .has_value());
+    QVERIFY(error.contains(QStringLiteral("32")));
+    QStringList tooMany;
+    for (int index = 0; index < 9; ++index) {
+        tooMany.append(QStringLiteral("tag-%1").arg(index));
+    }
+    QVERIFY(!snack::domain::normalizeConversationTags(tooMany, &error).has_value());
+    QVERIFY(error.contains(QStringLiteral("8")));
 }
 
 void TestDomainTypes::validatesAndRendersPromptTemplates() {

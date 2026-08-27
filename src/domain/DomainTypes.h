@@ -7,6 +7,8 @@
 #include <QStringList>
 #include <QUuid>
 
+#include <optional>
+
 namespace snack::domain {
 
 enum class AgentKind { Codex, Claude, Mock };
@@ -128,6 +130,8 @@ struct PromptTemplate {
 [[nodiscard]] ConversationStatus conversationStatusFromString(const QString& value);
 [[nodiscard]] AgentEventType agentEventTypeFromString(const QString& value);
 [[nodiscard]] QString fallbackConversationTitle(const QString& prompt);
+[[nodiscard]] std::optional<QStringList> normalizeConversationTags(const QStringList& tags,
+                                                                   QString* error = nullptr);
 
 } // namespace snack::domain
 

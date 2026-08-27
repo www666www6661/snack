@@ -188,20 +188,25 @@ void MainWindow::refreshConversationList() {
         }
         if (!query.isEmpty() && !conversation.title.contains(query, Qt::CaseInsensitive) &&
             !conversation.workingDirectory.contains(query, Qt::CaseInsensitive) &&
-            !agentName.contains(query, Qt::CaseInsensitive)) {
+            !agentName.contains(query, Qt::CaseInsensitive) &&
+            !conversation.tags.join(QLatin1Char(' ')).contains(query, Qt::CaseInsensitive)) {
             continue;
         }
         const QString title =
             conversation.pinned ? tr("Pinned · %1").arg(conversation.title) : conversation.title;
         const QString displayTitle =
             unreadConversationIds_.contains(conversation.id) ? tr("Unread · %1").arg(title) : title;
+        const QString taggedTitle =
+            conversation.tags.isEmpty()
+                ? displayTitle
+                : QStringLiteral("%1  [%2]").arg(displayTitle, conversation.tags.join(" · "));
         const QString status = conversationStatusText(conversation.status);
         auto* item = new QListWidgetItem(
             conversation.archived
                 ? tr("Archived · %1 · %2\n%3")
-                      .arg(displayTitle, agentName, conversation.workingDirectory)
+                      .arg(taggedTitle, agentName, conversation.workingDirectory)
                 : tr("%1 · %2 · %3\n%4")
-                      .arg(displayTitle, agentName, status, conversation.workingDirectory),
+                      .arg(taggedTitle, agentName, status, conversation.workingDirectory),
             conversationList_);
         item->setData(Qt::UserRole, conversation.id);
         item->setData(Qt::UserRole + 1, conversation.archived);
@@ -793,6 +798,22 @@ void MainWindow::renameConversation() {
     }
 }
 
+void MainWindow::editConversationTags() {
+    bool accepted = false;
+    const QString value = QInputDialog::getText(
+        this, tr("Edit conversation tags"), tr("Comma-separated tags (up to 8)"), QLineEdit::Normal,
+        controller_->conversation().tags.join(QStringLiteral(", ")), &accepted);
+    if (!accepted) {
+        return;
+    }
+    QString error;
+    if (!controller_->setTags(value.split(QLatin1Char(',')), &error)) {
+        statusBar()->showMessage(tr("Cannot update conversation tags: %1").arg(error), 8000);
+        return;
+    }
+    refreshConversationList();
+}
+
 void MainWindow::reconnectSession() { controller_->open(); }
 
 void MainWindow::updateSessionSettings() {
@@ -1196,6 +1217,9 @@ void MainWindow::buildMenus() {
     renameAction->setObjectName(QStringLiteral("renameConversationAction"));
     renameAction->setShortcut(QKeySequence(Qt::Key_F2));
     connect(renameAction, &QAction::triggered, this, &MainWindow::renameConversation);
+    auto* editTagsAction = fileMenu->addAction(tr("Edit conversation tags..."));
+    editTagsAction->setObjectName(QStringLiteral("editConversationTagsAction"));
+    connect(editTagsAction, &QAction::triggered, this, &MainWindow::editConversationTags);
     auto* archiveAction = fileMenu->addAction(tr("Archive conversation"));
     archiveAction->setObjectName(QStringLiteral("archiveConversationAction"));
     archiveAction->setEnabled(sessions_ != nullptr);

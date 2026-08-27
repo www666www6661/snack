@@ -297,6 +297,23 @@ bool SessionController::setPinned(bool pinned, QString* error) {
     return true;
 }
 
+bool SessionController::setTags(const QStringList& tags, QString* error) {
+    const auto normalized = domain::normalizeConversationTags(tags, error);
+    if (!normalized.has_value()) {
+        return false;
+    }
+    if (conversation_.tags == *normalized) {
+        return true;
+    }
+    const QStringList previous = conversation_.tags;
+    conversation_.tags = *normalized;
+    if (!repository_->saveConversation(conversation_, error)) {
+        conversation_.tags = previous;
+        return false;
+    }
+    return true;
+}
+
 bool SessionController::steerMessage(const QString& message, QString* error) {
     const QString trimmed = message.trimmed();
     if (trimmed.isEmpty()) {

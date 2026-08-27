@@ -1,11 +1,16 @@
 #include "domain/DomainTypes.h"
 
 #include <QRegularExpression>
+#include <QSet>
+
+#include <algorithm>
 
 namespace snack::domain {
 namespace {
 
 constexpr qsizetype maximumConversationTitleLength = 72;
+constexpr qsizetype maximumConversationTagLength = 32;
+constexpr qsizetype maximumConversationTags = 8;
 
 template <typename Enum> struct EnumName {
     Enum value;
@@ -207,6 +212,44 @@ QString fallbackConversationTitle(const QString& prompt) {
     const qsizetype prefixLength = maximumConversationTitleLength - suffixLength;
     return QString::fromUcs4(codePoints.constData(), prefixLength).trimmed() +
            QStringLiteral("...");
+}
+
+std::optional<QStringList> normalizeConversationTags(const QStringList& tags, QString* error) {
+    static const QRegularExpression unsafeCharacters(QStringLiteral("[\\p{Cc}\\p{Cf}]"));
+    QStringList normalized;
+    QSet<QString> foldedTags;
+    for (QString tag : tags) {
+        tag.replace(unsafeCharacters, QStringLiteral(" "));
+        tag = tag.simplified();
+        if (tag.isEmpty()) {
+            continue;
+        }
+        if (tag.toUcs4().size() > maximumConversationTagLength) {
+            if (error != nullptr) {
+                *error = QStringLiteral("Conversation tags cannot exceed %1 characters")
+                             .arg(maximumConversationTagLength);
+            }
+            return std::nullopt;
+        }
+        const QString folded = tag.toCaseFolded();
+        if (foldedTags.contains(folded)) {
+            continue;
+        }
+        foldedTags.insert(folded);
+        normalized.append(tag);
+        if (normalized.size() > maximumConversationTags) {
+            if (error != nullptr) {
+                *error = QStringLiteral("A conversation cannot have more than %1 tags")
+                             .arg(maximumConversationTags);
+            }
+            return std::nullopt;
+        }
+    }
+    std::sort(normalized.begin(), normalized.end(), [](const QString& left, const QString& right) {
+        const int insensitive = left.compare(right, Qt::CaseInsensitive);
+        return insensitive != 0 ? insensitive < 0 : left < right;
+    });
+    return normalized;
 }
 
 } // namespace snack::domain

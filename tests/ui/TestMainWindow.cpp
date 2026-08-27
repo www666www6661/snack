@@ -125,6 +125,7 @@ class TestMainWindow final : public QObject {
     void sendsAndRendersStreamingTurn();
     void updatesPlaceholderTitleAfterFirstSend();
     void renamesCurrentConversation();
+    void editsDisplaysAndSearchesConversationTags();
     void restoresPersistedTimeline();
     void restoresToolReasoningAndPlanViews();
     void hidesToTrayWithoutClosingSession();
@@ -1228,6 +1229,55 @@ void TestMainWindow::renamesCurrentConversation() {
     QCOMPARE(controller.conversation().title, QStringLiteral("After rename"));
     QCOMPARE(title->text(), QStringLiteral("After rename"));
     QVERIFY(sessionRow->text().contains(QStringLiteral("After rename")));
+}
+
+void TestMainWindow::editsDisplaysAndSearchesConversationTags() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::app::AppSettings settings(directory.filePath(QStringLiteral("settings.ini")));
+    UiMemoryEventRepository repository;
+    snack::agent::FakeAgentAdapter adapter(nullptr, 1);
+    snack::domain::Conversation conversation;
+    conversation.title = QStringLiteral("Tagged conversation");
+    conversation.workingDirectory = directory.path();
+    repository.catalog = {conversation};
+    snack::session::SessionController controller(conversation, &adapter, &repository);
+    snack::ui::MainWindow window(&controller, &settings, false);
+
+    auto* editTags = window.findChild<QAction*>(QStringLiteral("editConversationTagsAction"));
+    auto* list = window.findChild<QListWidget*>(QStringLiteral("conversationList"));
+    auto* search = window.findChild<QLineEdit*>(QStringLiteral("conversationSearch"));
+    QVERIFY(editTags != nullptr);
+    QVERIFY(list != nullptr);
+    QVERIFY(search != nullptr);
+
+    QTimer::singleShot(0, [] {
+        auto* dialog = qobject_cast<QInputDialog*>(QApplication::activeModalWidget());
+        QVERIFY(dialog != nullptr);
+        QVERIFY(dialog->textValue().isEmpty());
+        dialog->setTextValue(QStringLiteral(" urgent, Backend, URGENT "));
+        dialog->accept();
+    });
+    editTags->trigger();
+    QCOMPARE(controller.conversation().tags,
+             QStringList({QStringLiteral("Backend"), QStringLiteral("urgent")}));
+    QVERIFY(list->item(0)->text().contains(QStringLiteral("Backend · urgent")));
+    search->setText(QStringLiteral("BACKEND"));
+    QCOMPARE(list->count(), 1);
+    search->setText(QStringLiteral("missing-tag"));
+    QCOMPARE(list->count(), 0);
+    search->clear();
+
+    QTimer::singleShot(0, [] {
+        auto* dialog = qobject_cast<QInputDialog*>(QApplication::activeModalWidget());
+        QVERIFY(dialog != nullptr);
+        dialog->setTextValue(QStringLiteral("one,two,three,four,five,six,seven,eight,nine"));
+        dialog->accept();
+    });
+    editTags->trigger();
+    QCOMPARE(controller.conversation().tags,
+             QStringList({QStringLiteral("Backend"), QStringLiteral("urgent")}));
+    QVERIFY(window.statusBar()->currentMessage().contains(QStringLiteral("Cannot update")));
 }
 
 void TestMainWindow::restoresPersistedTimeline() {

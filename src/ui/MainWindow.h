@@ -52,6 +52,7 @@ class MainWindow final : public QMainWindow {
     void queueComposerMessage();
     void stopTurn();
     void renameConversation();
+    void editConversationTags();
     void reconnectSession();
     void updateQueuedMessages(const QList<domain::QueuedMessage>& messages);
     void updateQueueControls();

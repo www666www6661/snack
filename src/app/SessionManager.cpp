@@ -134,6 +134,29 @@ bool SessionManager::setPinned(const QUuid& conversationId, bool pinned, QString
     return repository_->saveConversation(*stored, error);
 }
 
+bool SessionManager::setTags(const QUuid& conversationId, const QStringList& tags, QString* error) {
+    if (conversationId.isNull()) {
+        setError(error, QStringLiteral("Cannot update an invalid conversation ID"));
+        return false;
+    }
+    if (auto* openController = registry_.controller(conversationId); openController != nullptr) {
+        return openController->setTags(tags, error);
+    }
+    const auto normalized = domain::normalizeConversationTags(tags, error);
+    if (!normalized.has_value()) {
+        return false;
+    }
+    auto stored = repository_->conversationById(conversationId, error);
+    if (!stored.has_value()) {
+        if (error == nullptr || error->isEmpty()) {
+            setError(error, QStringLiteral("Conversation does not exist"));
+        }
+        return false;
+    }
+    stored->tags = *normalized;
+    return repository_->saveConversation(*stored, error);
+}
+
 session::SessionController* SessionManager::restore(const QUuid& conversationId, QString* error) {
     if (conversationId.isNull()) {
         setError(error, QStringLiteral("Cannot restore an invalid conversation ID"));

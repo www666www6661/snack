@@ -103,6 +103,7 @@ class TestSessionController final : public QObject {
     void renamesCurrentConversation();
     void archivesConversationMetadata();
     void pinsConversationMetadata();
+    void updatesConversationTags();
     void exposesConversationCatalog();
     void snapshotsSettingsPerTurn();
     void steersActiveTurn();
@@ -222,6 +223,22 @@ void TestSessionController::pinsConversationMetadata() {
     QVERIFY(controller.setPinned(false, &error));
     QVERIFY(!controller.conversation().pinned);
     QVERIFY(!repository.conversation_.pinned);
+}
+
+void TestSessionController::updatesConversationTags() {
+    MemoryEventRepository repository;
+    snack::agent::FakeAgentAdapter adapter(nullptr, 1);
+    snack::session::SessionController controller(conversation(), &adapter, &repository);
+    QString error;
+
+    QVERIFY(controller.setTags(
+        {QStringLiteral(" UI "), QStringLiteral("backend"), QStringLiteral("ui")}, &error));
+    QCOMPARE(controller.conversation().tags,
+             QStringList({QStringLiteral("backend"), QStringLiteral("UI")}));
+    QCOMPARE(repository.conversation_.tags, controller.conversation().tags);
+    const QStringList previous = controller.conversation().tags;
+    QVERIFY(!controller.setTags({QString(33, QLatin1Char('x'))}, &error));
+    QCOMPARE(controller.conversation().tags, previous);
 }
 
 void TestSessionController::exposesConversationCatalog() {
