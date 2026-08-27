@@ -63,3 +63,5 @@ Windows ConPTY/Credential Manager/MSI，Linux PTY/Secret Service/.deb/Wayland/X1
 4. 没有新增格式错误或基础警告。
 5. 能力缺失时的禁用/降级文案已测试。
 6. 相关协议 fixture 和迁移已版本化。
+
+M3 响应性测试使用高输出 Fake Agent，分批发送数千个文本、工具、推理和计划增量。Turn 执行期间独立 GUI 定时器必须持续推进，每种渲染流都必须保持在文档规定的展示上限内。该门禁绝不启动 Codex 或 Claude，也不调用模型。

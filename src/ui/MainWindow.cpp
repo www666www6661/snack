@@ -51,12 +51,24 @@ namespace {
 
 constexpr qsizetype maximumToolOutput = 64 * 1024;
 constexpr qsizetype maximumSummaryText = 32 * 1024;
+constexpr qsizetype maximumAgentMessage = 256 * 1024;
+constexpr int timelineFlushIntervalMs = 16;
 
 QString boundedText(const QString& text, qsizetype maximumSize) {
     if (text.size() <= maximumSize) {
         return text;
     }
     return QStringLiteral("[earlier output hidden]\n") + text.sliced(text.size() - maximumSize);
+}
+
+void appendBoundedText(QString& target, const QString& text, qsizetype maximumSize) {
+    if (text.isEmpty()) {
+        return;
+    }
+    target.append(text);
+    if (target.size() > maximumSize) {
+        target = boundedText(target, maximumSize);
+    }
 }
 
 QString compactJson(const QJsonValue& value) {
@@ -266,6 +278,10 @@ MainWindow::MainWindow(session::SessionController* controller, app::AppSettings*
     Q_ASSERT(controller_ != nullptr);
     Q_ASSERT(settings_ != nullptr);
     buildUi();
+    timelineFlushTimer_ = new QTimer(this);
+    timelineFlushTimer_->setSingleShot(true);
+    timelineFlushTimer_->setInterval(timelineFlushIntervalMs);
+    connect(timelineFlushTimer_, &QTimer::timeout, this, &MainWindow::flushPendingTimelineUpdates);
     if (detachedWindow_) {
         setObjectName(QStringLiteral("detachedChatWindow-%1")
                           .arg(controller_->conversation().id.toString(QUuid::WithoutBraces)));
@@ -923,6 +939,12 @@ void MainWindow::bindConversation(session::SessionController* controller) {
 }
 
 void MainWindow::resetConversationView() {
+    timelineFlushTimer_->stop();
+    pendingAgentText_.clear();
+    pendingAgentRow_ = -1;
+    pendingToolOutput_.clear();
+    pendingReasoningText_.clear();
+    planUpdatePending_ = false;
     timeline_->clear();
     approvalCards_.clear();
     userInputCards_.clear();
@@ -2300,6 +2322,17 @@ void MainWindow::buildMenus() {
 }
 
 void MainWindow::appendEvent(const domain::AgentEvent& event) {
+    const bool streamedDelta = event.type == domain::AgentEventType::AgentMessageDelta ||
+                               event.type == domain::AgentEventType::ToolOutputDelta ||
+                               event.type == domain::AgentEventType::ReasoningSummaryDelta ||
+                               (event.type == domain::AgentEventType::PlanUpdated &&
+                                event.payload.contains(QStringLiteral("textDelta")) &&
+                                !event.payload.contains(QStringLiteral("text")) &&
+                                !event.payload.contains(QStringLiteral("plan")));
+    if (!streamedDelta) {
+        flushPendingTimelineUpdates();
+    }
+
     switch (event.type) {
     case domain::AgentEventType::UserMessage:
         timeline_->addItem(
@@ -2312,8 +2345,11 @@ void MainWindow::appendEvent(const domain::AgentEvent& event) {
         break;
     case domain::AgentEventType::AgentMessageDelta:
         if (activeAgentRow_ >= 0) {
-            auto* item = timeline_->item(activeAgentRow_);
-            item->setText(item->text() + event.payload.value(QStringLiteral("text")).toString());
+            pendingAgentRow_ = activeAgentRow_;
+            appendBoundedText(pendingAgentText_,
+                              event.payload.value(QStringLiteral("text")).toString(),
+                              maximumAgentMessage);
+            scheduleTimelineFlush();
         }
         break;
     case domain::AgentEventType::ToolStarted:
@@ -2364,7 +2400,68 @@ void MainWindow::appendEvent(const domain::AgentEvent& event) {
         break;
     }
     maybeNotify(event);
-    timeline_->scrollToBottom();
+    if (!streamedDelta) {
+        timeline_->scrollToBottom();
+    }
+}
+
+void MainWindow::scheduleTimelineFlush() {
+    if (!timelineFlushTimer_->isActive()) {
+        timelineFlushTimer_->start();
+    }
+}
+
+void MainWindow::flushPendingTimelineUpdates() {
+    timelineFlushTimer_->stop();
+    bool changed = false;
+
+    if (pendingAgentRow_ >= 0 && pendingAgentRow_ < timeline_->count() &&
+        !pendingAgentText_.isEmpty()) {
+        auto* item = timeline_->item(pendingAgentRow_);
+        item->setText(boundedText(item->text() + pendingAgentText_, maximumAgentMessage));
+        changed = true;
+    }
+    pendingAgentText_.clear();
+    pendingAgentRow_ = -1;
+
+    for (auto iterator = pendingToolOutput_.cbegin(); iterator != pendingToolOutput_.cend();
+         ++iterator) {
+        const auto card = toolCards_.find(iterator.key());
+        if (card == toolCards_.end()) {
+            continue;
+        }
+        card->output->setPlainText(
+            boundedText(card->output->toPlainText() + iterator.value(), maximumToolOutput));
+        card->output->show();
+        card->item->setSizeHint(card->card->sizeHint());
+        changed = true;
+    }
+    pendingToolOutput_.clear();
+
+    for (auto iterator = pendingReasoningText_.cbegin(); iterator != pendingReasoningText_.cend();
+         ++iterator) {
+        const auto card = reasoningCards_.find(iterator.key());
+        if (card == reasoningCards_.end()) {
+            continue;
+        }
+        card->summary->setText(
+            boundedText(card->summary->text() + iterator.value(), maximumSummaryText));
+        card->item->setSizeHint(card->card->sizeHint());
+        changed = true;
+    }
+    pendingReasoningText_.clear();
+
+    if (planUpdatePending_) {
+        planItemText_->setText(streamedPlanText_);
+        planItemText_->setVisible(!streamedPlanText_.isEmpty());
+        taskDock_->setVisible(!streamedPlanText_.isEmpty() || planList_->count() > 0);
+        planUpdatePending_ = false;
+        changed = true;
+    }
+
+    if (changed) {
+        timeline_->scrollToBottom();
+    }
 }
 
 void MainWindow::appendApprovalRequest(const domain::AgentEvent& event) {
@@ -2793,14 +2890,13 @@ void MainWindow::appendToolProgress(const domain::AgentEvent& event) {
         QJsonObject details = event.payload;
         details.insert(QStringLiteral("kind"), QStringLiteral("fileChange"));
         iterator->detail->setText(toolDetails(details));
+        iterator->item->setSizeHint(iterator->card->sizeHint());
     }
     const QString text = event.payload.value(QStringLiteral("text")).toString();
     if (!text.isEmpty()) {
-        iterator->output->setPlainText(
-            boundedText(iterator->output->toPlainText() + text, maximumToolOutput));
-        iterator->output->show();
+        appendBoundedText(pendingToolOutput_[itemId], text, maximumToolOutput);
+        scheduleTimelineFlush();
     }
-    iterator->item->setSizeHint(iterator->card->sizeHint());
 }
 
 void MainWindow::completeTool(const domain::AgentEvent& event) {
@@ -2865,10 +2961,9 @@ void MainWindow::appendReasoningDelta(const domain::AgentEvent& event) {
     if (iterator == reasoningCards_.end()) {
         return;
     }
-    iterator->summary->setText(boundedText(
-        iterator->summary->text() + event.payload.value(QStringLiteral("text")).toString(),
-        maximumSummaryText));
-    iterator->item->setSizeHint(iterator->card->sizeHint());
+    appendBoundedText(pendingReasoningText_[itemId],
+                      event.payload.value(QStringLiteral("text")).toString(), maximumSummaryText);
+    scheduleTimelineFlush();
 }
 
 void MainWindow::completeReasoning(const domain::AgentEvent& event) {
@@ -2911,10 +3006,16 @@ void MainWindow::updatePlan(const domain::AgentEvent& event) {
     if (event.payload.contains(QStringLiteral("text"))) {
         streamedPlanText_ = event.payload.value(QStringLiteral("text")).toString();
     } else {
-        streamedPlanText_.append(event.payload.value(QStringLiteral("textDelta")).toString());
+        appendBoundedText(streamedPlanText_,
+                          event.payload.value(QStringLiteral("textDelta")).toString(),
+                          maximumSummaryText);
     }
-    if (!streamedPlanText_.isEmpty()) {
-        streamedPlanText_ = boundedText(streamedPlanText_, maximumSummaryText);
+    streamedPlanText_ = boundedText(streamedPlanText_, maximumSummaryText);
+    if (event.payload.contains(QStringLiteral("textDelta")) &&
+        !event.payload.contains(QStringLiteral("text")) && !planValue.isArray()) {
+        planUpdatePending_ = true;
+        scheduleTimelineFlush();
+    } else if (!streamedPlanText_.isEmpty()) {
         planItemText_->setText(streamedPlanText_);
         planItemText_->show();
     }
@@ -3256,6 +3357,7 @@ void MainWindow::shutdown() {
         return;
     }
     shutdownComplete_ = true;
+    flushPendingTimelineUpdates();
     persistWindowState();
     if (!detachedWindow_) {
         controller_->close();

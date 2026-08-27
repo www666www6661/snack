@@ -37,3 +37,5 @@ Sanitize paths, repository names, tokens, and source before committing fixtures.
 ## 6. Definition of done
 
 A requirement is complete only when implementation matches both language documents, success/failure/cancel/recovery paths have tests, coverage remains at least 80%, formatting and warnings pass, degradation UI is tested, and protocol fixtures/migrations are versioned.
+
+M3 responsiveness tests use a high-output fake Agent that emits thousands of text, tool, reasoning, and plan deltas in short batches. A separate GUI timer must continue advancing while the turn runs, and every rendered stream must remain within its documented presentation bound. This gate never starts Codex or Claude and never invokes a model.

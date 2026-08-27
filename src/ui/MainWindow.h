@@ -138,6 +138,8 @@ class MainWindow final : public QMainWindow {
     void resetConversationView();
     void bindConversation(session::SessionController* controller);
     void appendEvent(const domain::AgentEvent& event);
+    void scheduleTimelineFlush();
+    void flushPendingTimelineUpdates();
     void appendApprovalRequest(const domain::AgentEvent& event);
     void resolveApprovalCard(const domain::AgentEvent& event);
     void appendUserInputRequest(const domain::AgentEvent& event);
@@ -185,6 +187,7 @@ class MainWindow final : public QMainWindow {
     QListWidget* timeline_{nullptr};
     ComposerTextEdit* composer_{nullptr};
     QTimer* draftSaveTimer_{nullptr};
+    QTimer* timelineFlushTimer_{nullptr};
     QPushButton* sendButton_{nullptr};
     QPushButton* stopButton_{nullptr};
     QPushButton* reconnectButton_{nullptr};
@@ -277,10 +280,15 @@ class MainWindow final : public QMainWindow {
     QHash<QString, UserInputCardState> userInputCards_;
     QHash<QString, ToolCardState> toolCards_;
     QHash<QString, ReasoningCardState> reasoningCards_;
+    QHash<QString, QString> pendingToolOutput_;
+    QHash<QString, QString> pendingReasoningText_;
     QHash<QUuid, QPointer<MainWindow>> detachedWindows_;
+    QString pendingAgentText_;
     QString streamedPlanText_;
     QJsonArray composerAttachments_;
     int activeAgentRow_{-1};
+    int pendingAgentRow_{-1};
+    bool planUpdatePending_{false};
     bool restoringTimeline_{false};
     bool closeToTrayEnabled_{false};
     bool quitRequested_{false};

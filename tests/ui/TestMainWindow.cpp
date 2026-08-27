@@ -174,6 +174,130 @@ class FakeDesktopNotifier final : public snack::ui::IDesktopNotifier {
     QList<snack::ui::DesktopNotificationKind> notifications;
 };
 
+class HighOutputFakeAgentAdapter final : public snack::agent::IAgentAdapter {
+  public:
+    using IAgentAdapter::IAgentAdapter;
+
+    [[nodiscard]] snack::domain::AgentKind kind() const override {
+        return snack::domain::AgentKind::Mock;
+    }
+
+    [[nodiscard]] snack::agent::CapabilitySet capabilities() const override {
+        return {.version = QStringLiteral("high-output-fake-v1"),
+                .models = {QStringLiteral("mock")},
+                .defaultModelId = QStringLiteral("mock"),
+                .reasoningEfforts = {snack::domain::ReasoningEffort::Medium},
+                .accessLevels = {snack::domain::AccessLevel::Workspace}};
+    }
+
+    void connectAgent(const snack::agent::AgentConnectionRequest&) override {
+        QTimer::singleShot(0, this,
+                           [this] { emit connectionChanged(true, QStringLiteral("fake-ready")); });
+    }
+
+    void startTurn(const snack::agent::TurnRequest& request) override {
+        if (!activeTurnId_.isNull()) {
+            return;
+        }
+        activeTurnId_ = request.turnId;
+        chunksRemaining_ = 3000;
+        emitEvent(snack::domain::AgentEventType::TurnStarted);
+        emitEvent(snack::domain::AgentEventType::AgentMessageStart);
+        emitEvent(snack::domain::AgentEventType::ToolStarted,
+                  {{QStringLiteral("itemId"), QStringLiteral("tool-burst")},
+                   {QStringLiteral("kind"), QStringLiteral("commandExecution")},
+                   {QStringLiteral("status"), QStringLiteral("inProgress")}});
+        emitEvent(snack::domain::AgentEventType::ReasoningStarted,
+                  {{QStringLiteral("itemId"), QStringLiteral("reasoning-burst")}});
+        scheduleBatch();
+    }
+
+    bool steerTurn(const snack::agent::SteerRequest&) override { return false; }
+
+    bool respondToApproval(const QString&, snack::domain::ApprovalDecision) override {
+        return false;
+    }
+
+    bool respondToUserInput(const QString&, const QJsonObject&) override { return false; }
+
+    void interruptTurn() override {
+        if (activeTurnId_.isNull()) {
+            return;
+        }
+        emitEvent(snack::domain::AgentEventType::TurnInterrupted);
+        finish(false, true);
+    }
+
+    void closeAgent() override {
+        interruptTurn();
+        emit connectionChanged(false, QStringLiteral("closed"));
+    }
+
+  private:
+    void scheduleBatch() {
+        QTimer::singleShot(1, this, [this] { emitBatch(); });
+    }
+
+    void emitBatch() {
+        if (activeTurnId_.isNull()) {
+            return;
+        }
+        const int count = std::min(chunksRemaining_, 50);
+        for (int index = 0; index < count; ++index) {
+            emitEvent(snack::domain::AgentEventType::AgentMessageDelta,
+                      {{QStringLiteral("text"), QString(96, QLatin1Char('a'))}});
+            emitEvent(snack::domain::AgentEventType::ToolOutputDelta,
+                      {{QStringLiteral("itemId"), QStringLiteral("tool-burst")},
+                       {QStringLiteral("text"), QString(96, QLatin1Char('b'))}});
+            emitEvent(snack::domain::AgentEventType::ReasoningSummaryDelta,
+                      {{QStringLiteral("itemId"), QStringLiteral("reasoning-burst")},
+                       {QStringLiteral("text"), QString(24, QLatin1Char('r'))}});
+            emitEvent(snack::domain::AgentEventType::PlanUpdated,
+                      {{QStringLiteral("itemId"), QStringLiteral("plan-burst")},
+                       {QStringLiteral("textDelta"), QString(24, QLatin1Char('p'))}});
+        }
+        chunksRemaining_ -= count;
+        if (chunksRemaining_ > 0) {
+            scheduleBatch();
+            return;
+        }
+
+        emitEvent(snack::domain::AgentEventType::ToolCompleted,
+                  {{QStringLiteral("itemId"), QStringLiteral("tool-burst")},
+                   {QStringLiteral("kind"), QStringLiteral("commandExecution")},
+                   {QStringLiteral("status"), QStringLiteral("completed")}});
+        emitEvent(snack::domain::AgentEventType::ReasoningCompleted,
+                  {{QStringLiteral("itemId"), QStringLiteral("reasoning-burst")},
+                   {QStringLiteral("summary"),
+                    QJsonArray{QString(70000, QLatin1Char('R')) + QStringLiteral("reason-tail")}}});
+        emitEvent(snack::domain::AgentEventType::PlanUpdated,
+                  {{QStringLiteral("itemId"), QStringLiteral("plan-burst")},
+                   {QStringLiteral("text"),
+                    QString(70000, QLatin1Char('P')) + QStringLiteral("plan-tail")},
+                   {QStringLiteral("final"), true}});
+        emitEvent(snack::domain::AgentEventType::AgentMessageComplete);
+        emitEvent(snack::domain::AgentEventType::TurnCompleted);
+        finish(true, false);
+    }
+
+    void emitEvent(snack::domain::AgentEventType type, const QJsonObject& payload = {}) {
+        snack::domain::AgentEvent event;
+        event.turnId = activeTurnId_;
+        event.type = type;
+        event.payload = payload;
+        emit eventReceived(event);
+    }
+
+    void finish(bool completed, bool interrupted) {
+        const QUuid turnId = activeTurnId_;
+        activeTurnId_ = QUuid{};
+        emit turnFinished(turnId, interrupted, completed);
+    }
+
+    QUuid activeTurnId_;
+    int chunksRemaining_{0};
+};
+
 class TestMainWindow final : public QObject {
     Q_OBJECT
 
@@ -190,6 +314,7 @@ class TestMainWindow final : public QObject {
     void editsArchivedConversationTagsFromContextMenu();
     void restoresPersistedTimeline();
     void restoresToolReasoningAndPlanViews();
+    void keepsGuiResponsiveDuringHighOutput();
     void hidesToTrayWithoutClosingSession();
     void sendsOnlyPrivateBackgroundNotifications();
     void restoresWindowLayout();
@@ -2087,6 +2212,57 @@ void TestMainWindow::restoresToolReasoningAndPlanViews() {
     QCOMPARE(planList->item(1)->data(Qt::UserRole).toString(), QStringLiteral("inProgress"));
     QVERIFY(!taskDock->isHidden());
     window.close();
+}
+
+void TestMainWindow::keepsGuiResponsiveDuringHighOutput() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::app::AppSettings settings(directory.filePath(QStringLiteral("settings.ini")));
+    UiMemoryEventRepository repository;
+    HighOutputFakeAgentAdapter adapter;
+    snack::domain::Conversation conversation;
+    conversation.title = QStringLiteral("High output");
+    conversation.workingDirectory = directory.path();
+    snack::session::SessionController controller(conversation, &adapter, &repository);
+    snack::ui::MainWindow window(&controller, &settings, false);
+    auto* timeline = window.findChild<QListWidget*>(QStringLiteral("timeline"));
+    QVERIFY(timeline != nullptr);
+    QTRY_COMPARE(controller.status(), snack::domain::ConversationStatus::Idle);
+
+    int heartbeatTicks = 0;
+    QTimer heartbeat;
+    heartbeat.setInterval(1);
+    connect(&heartbeat, &QTimer::timeout, &window, [&heartbeatTicks] { ++heartbeatTicks; });
+    heartbeat.start();
+
+    QString error;
+    QVERIFY2(controller.sendMessage(QStringLiteral("Generate sustained fake output"), &error),
+             qPrintable(error));
+    QTRY_COMPARE_WITH_TIMEOUT(controller.status(), snack::domain::ConversationStatus::Idle, 10000);
+    heartbeat.stop();
+
+    QVERIFY2(
+        heartbeatTicks >= 10,
+        qPrintable(QStringLiteral("GUI heartbeat advanced only %1 times").arg(heartbeatTicks)));
+    QVERIFY(timeline->count() >= 4);
+    const QString agentText = timeline->item(1)->text();
+    QVERIFY(agentText.startsWith(QStringLiteral("[earlier output hidden]")));
+    QVERIFY(agentText.size() < 263000);
+
+    auto* toolOutput = window.findChild<QPlainTextEdit*>(QStringLiteral("toolOutput"));
+    auto* reasoning = window.findChild<QLabel*>(QStringLiteral("reasoningSummary"));
+    auto* plan = window.findChild<QLabel*>(QStringLiteral("planItemText"));
+    QVERIFY(toolOutput != nullptr);
+    QVERIFY(reasoning != nullptr);
+    QVERIFY(plan != nullptr);
+    QVERIFY(toolOutput->toPlainText().startsWith(QStringLiteral("[earlier output hidden]")));
+    QVERIFY(toolOutput->toPlainText().size() < 66000);
+    QVERIFY(reasoning->text().startsWith(QStringLiteral("[earlier output hidden]")));
+    QVERIFY(reasoning->text().endsWith(QStringLiteral("reason-tail")));
+    QVERIFY(reasoning->text().size() < 33000);
+    QVERIFY(plan->text().startsWith(QStringLiteral("[earlier output hidden]")));
+    QVERIFY(plan->text().endsWith(QStringLiteral("plan-tail")));
+    QVERIFY(plan->text().size() < 33000);
 }
 
 void TestMainWindow::hidesToTrayWithoutClosingSession() {
