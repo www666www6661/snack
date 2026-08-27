@@ -149,6 +149,7 @@ class TestMainWindow final : public QObject {
     void persistsArchivedConversationVisibility();
     void cyclesActiveConversationsInRepositoryOrder();
     void activatesSearchResultsFromKeyboard();
+    void marksBackgroundConversationUnreadUntilOpened();
 };
 
 void TestMainWindow::opensAndSwitchesConversationFromRail() {
@@ -782,6 +783,84 @@ void TestMainWindow::activatesSearchResultsFromKeyboard() {
     QTest::keyClick(search, Qt::Key_Escape);
     QVERIFY(search->text().isEmpty());
     QCOMPARE(window.focusWidget(), composer);
+}
+
+void TestMainWindow::marksBackgroundConversationUnreadUntilOpened() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::app::AppSettings settings(directory.filePath(QStringLiteral("settings.ini")));
+    UiMemoryEventRepository repository;
+    snack::domain::Conversation current;
+    current.title = QStringLiteral("Current");
+    current.workingDirectory = directory.path();
+    snack::domain::Conversation background;
+    background.title = QStringLiteral("Background");
+    background.workingDirectory = directory.path();
+    repository.catalog = {current, background};
+
+    const auto makeRuntime = [](snack::domain::AgentKind kind) {
+        snack::agent::AgentRuntime runtime;
+        runtime.requestedKind = kind;
+        runtime.selectedKind = kind;
+        runtime.adapter = std::make_unique<snack::agent::FakeAgentAdapter>(nullptr, 30);
+        return runtime;
+    };
+    snack::app::SessionManager sessions(&repository, makeRuntime);
+    QString error;
+    auto* currentController = sessions.addPrepared(current, makeRuntime(current.agentKind), &error);
+    auto* backgroundController =
+        sessions.addPrepared(background, makeRuntime(background.agentKind), &error);
+    QVERIFY2(currentController != nullptr, qPrintable(error));
+    QVERIFY2(backgroundController != nullptr, qPrintable(error));
+    snack::ui::MainWindow window(currentController, &settings, &sessions, false);
+    auto* list = window.findChild<QListWidget*>(QStringLiteral("conversationList"));
+    auto* title = window.findChild<QLabel*>(QStringLiteral("conversationTitle"));
+    QVERIFY(list != nullptr);
+    QVERIFY(title != nullptr);
+    backgroundController->open();
+    QTRY_COMPARE(backgroundController->status(), snack::domain::ConversationStatus::Idle);
+
+    QString sendError;
+    QVERIFY2(backgroundController->sendMessage(QStringLiteral("Background work"), &sendError),
+             qPrintable(sendError));
+    const auto itemText = [list, id = background.id] {
+        for (int row = 0; row < list->count(); ++row) {
+            if (list->item(row)->data(Qt::UserRole).toUuid() == id) {
+                return list->item(row)->text();
+            }
+        }
+        return QString{};
+    };
+    QTRY_VERIFY(itemText().contains(QStringLiteral("Unread")));
+    QCOMPARE(title->text(), QStringLiteral("Current"));
+
+    QListWidgetItem* backgroundItem = nullptr;
+    for (int row = 0; row < list->count(); ++row) {
+        if (list->item(row)->data(Qt::UserRole).toUuid() == background.id) {
+            backgroundItem = list->item(row);
+        }
+    }
+    QVERIFY(backgroundItem != nullptr);
+    emit list->itemClicked(backgroundItem);
+    QCOMPARE(title->text(), QStringLiteral("Background"));
+    QVERIFY(!itemText().contains(QStringLiteral("Unread")));
+    QTRY_COMPARE_WITH_TIMEOUT(backgroundController->status(),
+                              snack::domain::ConversationStatus::Idle, 1000);
+    QVERIFY(!itemText().contains(QStringLiteral("Unread")));
+
+    QListWidgetItem* currentItem = nullptr;
+    for (int row = 0; row < list->count(); ++row) {
+        if (list->item(row)->data(Qt::UserRole).toUuid() == current.id) {
+            currentItem = list->item(row);
+        }
+    }
+    QVERIFY(currentItem != nullptr);
+    emit list->itemClicked(currentItem);
+    QCOMPARE(title->text(), QStringLiteral("Current"));
+    QVERIFY2(backgroundController->sendMessage(QStringLiteral("More background work"), &sendError),
+             qPrintable(sendError));
+    QTRY_VERIFY(itemText().contains(QStringLiteral("Unread")));
+    backgroundController->interrupt();
 }
 
 void TestMainWindow::sendsAndRendersStreamingTurn() {

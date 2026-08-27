@@ -64,6 +64,21 @@ QString compactJson(const QJsonValue& value) {
     return value.toVariant().toString();
 }
 
+bool createsUnreadAttention(domain::AgentEventType type) {
+    switch (type) {
+    case domain::AgentEventType::AgentMessageStart:
+    case domain::AgentEventType::ToolStarted:
+    case domain::AgentEventType::ApprovalRequested:
+    case domain::AgentEventType::UserInputRequested:
+    case domain::AgentEventType::WarningRaised:
+    case domain::AgentEventType::ErrorRaised:
+    case domain::AgentEventType::TurnFailed:
+        return true;
+    default:
+        return false;
+    }
+}
+
 } // namespace
 
 MainWindow::MainWindow(session::SessionController* controller, app::AppSettings* settings,
@@ -178,12 +193,15 @@ void MainWindow::refreshConversationList() {
         }
         const QString title =
             conversation.pinned ? tr("Pinned · %1").arg(conversation.title) : conversation.title;
+        const QString displayTitle =
+            unreadConversationIds_.contains(conversation.id) ? tr("Unread · %1").arg(title) : title;
         const QString status = conversationStatusText(conversation.status);
         auto* item = new QListWidgetItem(
             conversation.archived
-                ? tr("Archived · %1 · %2\n%3").arg(title, agentName, conversation.workingDirectory)
+                ? tr("Archived · %1 · %2\n%3")
+                      .arg(displayTitle, agentName, conversation.workingDirectory)
                 : tr("%1 · %2 · %3\n%4")
-                      .arg(title, agentName, status, conversation.workingDirectory),
+                      .arg(displayTitle, agentName, status, conversation.workingDirectory),
             conversationList_);
         item->setData(Qt::UserRole, conversation.id);
         item->setData(Qt::UserRole + 1, conversation.archived);
@@ -198,6 +216,21 @@ void MainWindow::refreshConversationList() {
             auto* openController = sessions_->controller(conversationId);
             connect(openController, &session::SessionController::statusChanged, this,
                     &MainWindow::refreshConversationList, Qt::UniqueConnection);
+            if (observedControllers_.value(conversationId) != openController) {
+                observedControllers_.insert(conversationId, openController);
+                const QPointer<MainWindow> window(this);
+                connect(openController, &session::SessionController::eventRecorded, openController,
+                        [window, conversationId](const domain::AgentEvent& event) {
+                            if (window.isNull() ||
+                                conversationId == window->controller_->conversation().id ||
+                                window->unreadConversationIds_.contains(conversationId) ||
+                                !createsUnreadAttention(event.type)) {
+                                return;
+                            }
+                            window->unreadConversationIds_.insert(conversationId);
+                            window->refreshConversationList();
+                        });
+            }
         }
     }
     if (pinConversationAction_ != nullptr) {
@@ -421,6 +454,7 @@ void MainWindow::bindConversation(session::SessionController* controller) {
         disconnect(controller_, nullptr, this, nullptr);
     }
     controller_ = controller;
+    unreadConversationIds_.remove(controller_->conversation().id);
     resetConversationView();
     connectControllerSignals();
 

@@ -7,6 +7,8 @@
 
 #include <QHash>
 #include <QMainWindow>
+#include <QPointer>
+#include <QSet>
 
 #include <optional>
 
@@ -172,6 +174,8 @@ class MainWindow final : public QMainWindow {
     QListWidget* planList_{nullptr};
     QString startupNotice_;
     QList<domain::Conversation> conversationCatalog_;
+    QSet<QUuid> unreadConversationIds_;
+    QHash<QUuid, QPointer<session::SessionController>> observedControllers_;
     QAction* pinConversationAction_{nullptr};
     QAction* showArchivedConversationsAction_{nullptr};
     QMenu* conversationContextMenu_{nullptr};
