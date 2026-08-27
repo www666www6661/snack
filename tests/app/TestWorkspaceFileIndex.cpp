@@ -1,3 +1,4 @@
+#include "app/WorkspaceExternalOpener.h"
 #include "app/WorkspaceFileIndex.h"
 #include "app/WorkspaceFilePreview.h"
 #include "app/WorkspacePathPolicy.h"
@@ -15,6 +16,7 @@ class TestWorkspaceFileIndex final : public QObject {
     void resolvesOnlyExistingWorkspacePaths();
     void normalizesPathAliases();
     void readsBoundedTextPreviews();
+    void opensOnlyValidatedFilesThroughInjectedBoundary();
 };
 
 void TestWorkspaceFileIndex::indexesWorkspaceWithExclusionsAndLimit() {
@@ -109,6 +111,34 @@ void TestWorkspaceFileIndex::readsBoundedTextPreviews() {
         directory.path(), QStringLiteral("binary.dat"), 10, &error);
     QVERIFY(binaryPreview.text.isEmpty());
     QVERIFY(error.contains(QStringLiteral("Binary")));
+}
+
+void TestWorkspaceFileIndex::opensOnlyValidatedFilesThroughInjectedBoundary() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    QFile file(directory.filePath(QStringLiteral("open-me.txt")));
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write("open");
+    file.close();
+
+    QList<QUrl> opened;
+    QString error;
+    QVERIFY(snack::app::WorkspaceExternalOpener::open(
+        directory.path(), QStringLiteral("open-me.txt"),
+        [&opened](const QUrl& url) {
+            opened.append(url);
+            return true;
+        },
+        &error));
+    QCOMPARE(opened, QList<QUrl>{QUrl::fromLocalFile(file.fileName())});
+    QVERIFY(!snack::app::WorkspaceExternalOpener::open(
+        directory.path(), QStringLiteral("missing.txt"),
+        [&opened](const QUrl& url) {
+            opened.append(url);
+            return true;
+        },
+        &error));
+    QCOMPARE(opened.size(), 1);
 }
 
 QTEST_GUILESS_MAIN(TestWorkspaceFileIndex)

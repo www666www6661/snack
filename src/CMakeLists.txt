@@ -45,6 +45,8 @@ set(SNACK_CORE_SOURCES
     app/WorkspacePathPolicy.h
     app/WorkspaceFilePreview.cpp
     app/WorkspaceFilePreview.h
+    app/WorkspaceExternalOpener.cpp
+    app/WorkspaceExternalOpener.h
     domain/DomainTypes.cpp
     domain/DomainTypes.h
     domain/PromptTemplateEngine.cpp

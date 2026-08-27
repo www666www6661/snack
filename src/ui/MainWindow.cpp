@@ -1,5 +1,6 @@
 #include "ui/MainWindow.h"
 
+#include "app/WorkspaceExternalOpener.h"
 #include "app/WorkspaceFileIndex.h"
 #include "app/WorkspaceFilePreview.h"
 #include "domain/PromptTemplateEngine.h"
@@ -2094,13 +2095,19 @@ void MainWindow::buildUi() {
     workspaceFilePreview_->setObjectName(QStringLiteral("workspaceFilePreview"));
     workspaceFilePreview_->setReadOnly(true);
     workspaceFilePreview_->setPlaceholderText(tr("Select a text file to preview it."));
+    openWorkspaceFileButton_ = new QPushButton(tr("Open in external editor"), filePanel);
+    openWorkspaceFileButton_->setObjectName(QStringLiteral("openWorkspaceFileButton"));
+    openWorkspaceFileButton_->setEnabled(false);
     fileLayout->addWidget(workspaceFileList_, 1);
     fileLayout->addWidget(workspaceFilePreview_, 2);
+    fileLayout->addWidget(openWorkspaceFileButton_);
     fileDock_->setWidget(filePanel);
     addDockWidget(Qt::RightDockWidgetArea, fileDock_);
     fileDock_->hide();
     connect(workspaceFileList_, &QListWidget::itemSelectionChanged, this,
             &MainWindow::previewSelectedWorkspaceFile);
+    connect(openWorkspaceFileButton_, &QPushButton::clicked, this,
+            &MainWindow::openSelectedWorkspaceFileExternally);
 
     terminalDock_ = new QDockWidget(tr("Terminal"), this);
     terminalDock_->setObjectName(QStringLiteral("terminalDock"));
@@ -3296,6 +3303,7 @@ void MainWindow::refreshWorkspaceBrowser() {
 
 void MainWindow::previewSelectedWorkspaceFile() {
     const auto selected = workspaceFileList_->selectedItems();
+    openWorkspaceFileButton_->setEnabled(!selected.isEmpty());
     if (selected.isEmpty()) {
         workspaceFilePreview_->clear();
         return;
@@ -3310,6 +3318,20 @@ void MainWindow::previewSelectedWorkspaceFile() {
     }
     workspaceFilePreview_->setPlainText(
         preview.text + (preview.truncated ? tr("\n\n[Preview truncated]") : QString{}));
+}
+
+void MainWindow::openSelectedWorkspaceFileExternally() {
+    const auto selected = workspaceFileList_->selectedItems();
+    if (selected.isEmpty()) {
+        return;
+    }
+    QString error;
+    const bool opened = app::WorkspaceExternalOpener::open(
+        controller_->conversation().workingDirectory, selected.constFirst()->text(),
+        [](const QUrl& url) { return QDesktopServices::openUrl(url); }, &error);
+    if (!opened) {
+        statusBar()->showMessage(error, 8000);
+    }
 }
 
 void MainWindow::restoreTimeline() {

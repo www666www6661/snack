@@ -76,6 +76,7 @@ class MainWindow final : public QMainWindow {
     void chooseAttachments();
     void removeSelectedAttachment();
     void previewSelectedWorkspaceFile();
+    void openSelectedWorkspaceFileExternally();
     void chooseWorkspaceReference();
     void updateSessionSettings();
     void applySystemTheme();
@@ -233,6 +234,7 @@ class MainWindow final : public QMainWindow {
     QDockWidget* fileDock_{nullptr};
     QListWidget* workspaceFileList_{nullptr};
     QPlainTextEdit* workspaceFilePreview_{nullptr};
+    QPushButton* openWorkspaceFileButton_{nullptr};
     QLabel* planExplanation_{nullptr};
     QLabel* planItemText_{nullptr};
     QListWidget* planList_{nullptr};
