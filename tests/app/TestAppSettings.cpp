@@ -11,6 +11,7 @@ class TestAppSettings final : public QObject {
     void persistsValues();
     void clampsInterfaceScale();
     void persistsConversationDrafts();
+    void persistsDetachedWindowGeometry();
 };
 
 void TestAppSettings::usesSafeDefaults() {
@@ -96,6 +97,23 @@ void TestAppSettings::persistsConversationDrafts() {
     reloaded.saveComposerDraft(first, {});
     QVERIFY(reloaded.composerDraft(first).isEmpty());
     QCOMPARE(reloaded.composerDraft(second), QStringLiteral("second draft"));
+}
+
+void TestAppSettings::persistsDetachedWindowGeometry() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("settings.ini"));
+    const QUuid conversationId = QUuid::createUuid();
+    {
+        snack::app::AppSettings settings(path);
+        QVERIFY(settings.detachedWindowGeometry(QUuid{}).isEmpty());
+        settings.saveDetachedWindowGeometry(QUuid{}, QByteArrayLiteral("ignored"));
+        settings.saveDetachedWindowGeometry(conversationId, QByteArrayLiteral("geometry"));
+    }
+    snack::app::AppSettings reloaded(path);
+    QCOMPARE(reloaded.detachedWindowGeometry(conversationId), QByteArrayLiteral("geometry"));
+    reloaded.saveDetachedWindowGeometry(conversationId, {});
+    QVERIFY(reloaded.detachedWindowGeometry(conversationId).isEmpty());
 }
 
 QTEST_APPLESS_MAIN(TestAppSettings)

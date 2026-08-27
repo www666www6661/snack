@@ -102,6 +102,8 @@ class MainWindow final : public QMainWindow {
     void restoreSelectedConversation();
     void togglePinnedConversation();
     void openSelectedConversation();
+    void openConversationInNewWindow();
+    void openSelectedConversationInNewWindow();
     void archiveSelectedConversation();
     void deleteSelectedConversation();
     void exportConversationMarkdown();
@@ -121,6 +123,8 @@ class MainWindow final : public QMainWindow {
     void editConversationGroupFor(const QUuid& conversationId, const QString& groupName);
     void deleteConversationFor(const QUuid& conversationId, const QString& title);
     void exportConversation(app::ConversationExportFormat format);
+    void openConversationInNewWindow(const QUuid& conversationId);
+    void closeDetachedConversation(const QUuid& conversationId);
     void activateRelativeConversation(int offset);
     void activateConversationById(const QUuid& conversationId);
     void resetConversationView();
@@ -219,6 +223,7 @@ class MainWindow final : public QMainWindow {
     QAction* moveConversationViewDownAction_{nullptr};
     QMenu* conversationContextMenu_{nullptr};
     QAction* contextOpenAction_{nullptr};
+    QAction* contextOpenDetachedAction_{nullptr};
     QAction* contextPinAction_{nullptr};
     QAction* contextEditTagsAction_{nullptr};
     QAction* contextEditGroupAction_{nullptr};
@@ -256,12 +261,18 @@ class MainWindow final : public QMainWindow {
     QHash<QString, UserInputCardState> userInputCards_;
     QHash<QString, ToolCardState> toolCards_;
     QHash<QString, ReasoningCardState> reasoningCards_;
+    QHash<QUuid, QPointer<MainWindow>> detachedWindows_;
     QString streamedPlanText_;
     int activeAgentRow_{-1};
     bool restoringTimeline_{false};
     bool closeToTrayEnabled_{false};
     bool quitRequested_{false};
     bool shutdownComplete_{false};
+    bool detachedWindow_{false};
+
+    MainWindow(session::SessionController* controller, app::AppSettings* settings,
+               app::SessionManager* sessions, bool closeToTrayEnabled, bool detachedWindow,
+               QWidget* parent);
 };
 
 } // namespace snack::ui

@@ -75,6 +75,31 @@ void AppSettings::saveComposerDraft(const QUuid& conversationId, const QString& 
     settings_->sync();
 }
 
+QByteArray AppSettings::detachedWindowGeometry(const QUuid& conversationId) const {
+    if (conversationId.isNull()) {
+        return {};
+    }
+    return settings_
+        ->value(QStringLiteral("detachedWindows/%1/geometry")
+                    .arg(conversationId.toString(QUuid::WithoutBraces)))
+        .toByteArray();
+}
+
+void AppSettings::saveDetachedWindowGeometry(const QUuid& conversationId,
+                                             const QByteArray& geometry) {
+    if (conversationId.isNull()) {
+        return;
+    }
+    const QString key = QStringLiteral("detachedWindows/%1/geometry")
+                            .arg(conversationId.toString(QUuid::WithoutBraces));
+    if (geometry.isEmpty()) {
+        settings_->remove(key);
+    } else {
+        settings_->setValue(key, geometry);
+    }
+    settings_->sync();
+}
+
 QString themeModeName(ThemeMode mode) {
     switch (mode) {
     case ThemeMode::System:

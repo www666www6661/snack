@@ -247,11 +247,27 @@ MainWindow::MainWindow(session::SessionController* controller, app::AppSettings*
 
 MainWindow::MainWindow(session::SessionController* controller, app::AppSettings* settings,
                        app::SessionManager* sessions, bool closeToTrayEnabled, QWidget* parent)
+    : MainWindow(controller, settings, sessions, closeToTrayEnabled, false, parent) {}
+
+MainWindow::MainWindow(session::SessionController* controller, app::AppSettings* settings,
+                       app::SessionManager* sessions, bool closeToTrayEnabled, bool detachedWindow,
+                       QWidget* parent)
     : QMainWindow(parent), controller_(controller), sessions_(sessions), settings_(settings),
-      settingsSnapshot_(settings_->load()), closeToTrayEnabled_(closeToTrayEnabled) {
+      settingsSnapshot_(settings_->load()), closeToTrayEnabled_(closeToTrayEnabled),
+      detachedWindow_(detachedWindow) {
     Q_ASSERT(controller_ != nullptr);
     Q_ASSERT(settings_ != nullptr);
     buildUi();
+    if (detachedWindow_) {
+        setObjectName(QStringLiteral("detachedChatWindow-%1")
+                          .arg(controller_->conversation().id.toString(QUuid::WithoutBraces)));
+        setWindowTitle(tr("%1 — Snack").arg(controller_->conversation().title));
+        setWindowFlag(Qt::Window, true);
+        setAttribute(Qt::WA_DeleteOnClose);
+        sessionSidebar_->hide();
+        setMinimumSize(760, 560);
+        resize(980, 760);
+    }
     composer_->setPlainText(settings_->composerDraft(controller_->conversation().id));
     buildMenus();
     restoreWindowState();
@@ -578,6 +594,7 @@ void MainWindow::archiveConversation() {
                                  8000);
         return;
     }
+    closeDetachedConversation(archivedId);
     disconnect(controller_, nullptr, this, nullptr);
     if (!sessions_->setArchived(archivedId, true, &error)) {
         connectControllerSignals();
@@ -657,6 +674,7 @@ void MainWindow::deleteConversationFor(const QUuid& conversationId, const QStrin
         controller_ = nullptr;
     }
 
+    closeDetachedConversation(conversationId);
     if (!sessions_->deleteConversation(conversationId, &error)) {
         if (deletingCurrent) {
             auto* restored = sessions_->controller(conversationId);
@@ -754,6 +772,52 @@ void MainWindow::openSelectedConversation() {
     activateConversation(conversationList_->currentItem());
 }
 
+void MainWindow::openConversationInNewWindow() {
+    openConversationInNewWindow(controller_->conversation().id);
+}
+
+void MainWindow::openSelectedConversationInNewWindow() {
+    if (conversationList_->currentItem() == nullptr) {
+        return;
+    }
+    openConversationInNewWindow(conversationList_->currentItem()->data(Qt::UserRole).toUuid());
+}
+
+void MainWindow::openConversationInNewWindow(const QUuid& conversationId) {
+    if (sessions_ == nullptr || conversationId.isNull()) {
+        return;
+    }
+    if (auto existing = detachedWindows_.value(conversationId); !existing.isNull()) {
+        existing->activateWindowForRequest(std::nullopt);
+        return;
+    }
+    const auto selected =
+        std::find_if(conversationCatalog_.cbegin(), conversationCatalog_.cend(),
+                     [&conversationId](const auto& value) { return value.id == conversationId; });
+    if (selected == conversationCatalog_.cend() || selected->archived) {
+        statusBar()->showMessage(tr("Restore the archived conversation before detaching it"), 5000);
+        return;
+    }
+    QString error;
+    auto* detachedController = sessions_->open(*selected, &error);
+    if (detachedController == nullptr) {
+        statusBar()->showMessage(tr("Cannot open conversation: %1").arg(error), 8000);
+        return;
+    }
+    auto* detached = new MainWindow(detachedController, settings_, nullptr, false, true, this);
+    detachedWindows_.insert(conversationId, detached);
+    detached->show();
+    detached->raise();
+    detached->activateWindow();
+}
+
+void MainWindow::closeDetachedConversation(const QUuid& conversationId) {
+    if (auto detached = detachedWindows_.value(conversationId); !detached.isNull()) {
+        detached->close();
+    }
+    detachedWindows_.remove(conversationId);
+}
+
 void MainWindow::archiveSelectedConversation() {
     if (sessions_ == nullptr || conversationList_->currentItem() == nullptr) {
         return;
@@ -764,6 +828,7 @@ void MainWindow::archiveSelectedConversation() {
         return;
     }
     QString error;
+    closeDetachedConversation(conversationId);
     if (!sessions_->setArchived(conversationId, true, &error)) {
         statusBar()->showMessage(tr("Cannot archive conversation: %1").arg(error), 8000);
         return;
@@ -803,6 +868,7 @@ void MainWindow::prepareConversationContextMenu() {
     const bool isCurrent = hasSelection && conversationId == controller_->conversation().id;
 
     contextOpenAction_->setEnabled(hasSelection && !archived && !isCurrent);
+    contextOpenDetachedAction_->setEnabled(hasSelection && !archived && sessions_ != nullptr);
     contextPinAction_->setEnabled(hasSelection);
     contextPinAction_->setText(pinned ? tr("Unpin conversation") : tr("Pin conversation"));
     contextEditTagsAction_->setEnabled(hasSelection && (isCurrent || sessions_ != nullptr));
@@ -1706,6 +1772,9 @@ void MainWindow::buildUi() {
     conversationContextMenu_->setObjectName(QStringLiteral("conversationContextMenu"));
     contextOpenAction_ = conversationContextMenu_->addAction(tr("Open conversation"));
     contextOpenAction_->setObjectName(QStringLiteral("contextOpenConversationAction"));
+    contextOpenDetachedAction_ = conversationContextMenu_->addAction(tr("Open in new window"));
+    contextOpenDetachedAction_->setObjectName(
+        QStringLiteral("contextOpenConversationInNewWindowAction"));
     contextPinAction_ = conversationContextMenu_->addAction(tr("Pin conversation"));
     contextPinAction_->setObjectName(QStringLiteral("contextPinConversationAction"));
     contextEditTagsAction_ = conversationContextMenu_->addAction(tr("Edit conversation tags..."));
@@ -1916,6 +1985,8 @@ void MainWindow::buildUi() {
                     conversationList_->viewport()->mapToGlobal(position));
             });
     connect(contextOpenAction_, &QAction::triggered, this, &MainWindow::openSelectedConversation);
+    connect(contextOpenDetachedAction_, &QAction::triggered, this,
+            &MainWindow::openSelectedConversationInNewWindow);
     connect(contextPinAction_, &QAction::triggered, this,
             &MainWindow::toggleSelectedPinnedConversation);
     connect(contextEditTagsAction_, &QAction::triggered, this,
@@ -1969,6 +2040,11 @@ void MainWindow::buildMenus() {
     newConversationAction->setEnabled(sessions_ != nullptr);
     connect(newConversationAction, &QAction::triggered, this, &MainWindow::createConversation);
     fileMenu->addSeparator();
+    auto* detachAction = fileMenu->addAction(tr("Open conversation in new window"));
+    detachAction->setObjectName(QStringLiteral("openConversationInNewWindowAction"));
+    detachAction->setEnabled(sessions_ != nullptr);
+    connect(detachAction, &QAction::triggered, this,
+            qOverload<>(&MainWindow::openConversationInNewWindow));
     auto* renameAction = fileMenu->addAction(tr("Rename conversation..."));
     renameAction->setObjectName(QStringLiteral("renameConversationAction"));
     renameAction->setShortcut(QKeySequence(Qt::Key_F2));
@@ -2846,6 +2922,9 @@ void MainWindow::refreshConnectionNotice() {
 
 void MainWindow::updateConversationTitle(const QString& title) {
     titleLabel_->setText(title);
+    if (detachedWindow_) {
+        setWindowTitle(tr("%1 — Snack").arg(title));
+    }
     sessionRow_->setText(tr("●  %1\n    %2").arg(agentDisplayName(), title));
     if (conversationList_ != nullptr) {
         refreshConversationList();
@@ -2978,12 +3057,24 @@ void MainWindow::buildTray() {
 
 void MainWindow::persistWindowState() {
     persistComposerDraft();
+    if (detachedWindow_) {
+        settings_->saveDetachedWindowGeometry(controller_->conversation().id, saveGeometry());
+        return;
+    }
     settingsSnapshot_.mainWindowGeometry = saveGeometry();
     settingsSnapshot_.mainWindowState = saveState(1);
     settings_->save(settingsSnapshot_);
 }
 
 void MainWindow::restoreWindowState() {
+    if (detachedWindow_) {
+        const QByteArray geometry =
+            settings_->detachedWindowGeometry(controller_->conversation().id);
+        if (!geometry.isEmpty()) {
+            restoreGeometry(geometry);
+        }
+        return;
+    }
     if (!settingsSnapshot_.mainWindowGeometry.isEmpty()) {
         restoreGeometry(settingsSnapshot_.mainWindowGeometry);
     }
@@ -3017,7 +3108,9 @@ void MainWindow::shutdown() {
     }
     shutdownComplete_ = true;
     persistWindowState();
-    controller_->close();
+    if (!detachedWindow_) {
+        controller_->close();
+    }
 }
 
 bool MainWindow::confirmQuit() {

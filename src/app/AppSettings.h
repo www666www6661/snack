@@ -33,6 +33,8 @@ class AppSettings final {
     void save(const AppSettingsSnapshot& snapshot);
     [[nodiscard]] QString composerDraft(const QUuid& conversationId) const;
     void saveComposerDraft(const QUuid& conversationId, const QString& draft);
+    [[nodiscard]] QByteArray detachedWindowGeometry(const QUuid& conversationId) const;
+    void saveDetachedWindowGeometry(const QUuid& conversationId, const QByteArray& geometry);
 
   private:
     explicit AppSettings(std::unique_ptr<QSettings> settings);

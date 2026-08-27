@@ -186,6 +186,7 @@ class TestMainWindow final : public QObject {
     void hidesToTrayWithoutClosingSession();
     void restoresWindowLayout();
     void appliesBuiltInWorkbenchLayouts();
+    void opensOneDetachedWindowPerConversation();
     void interruptsRunningTurnFromSendButton();
     void editsAndControlsQueuedMessages();
     void supportsComposerShortcutsGrowthAndDrafts();
@@ -2201,6 +2202,74 @@ void TestMainWindow::appliesBuiltInWorkbenchLayouts() {
     QVERIFY(!taskDock->isHidden());
     QVERIFY(terminalDock->isHidden());
     QVERIFY(!settings.load().mainWindowState.isEmpty());
+}
+
+void TestMainWindow::opensOneDetachedWindowPerConversation() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::app::AppSettings settings(directory.filePath(QStringLiteral("settings.ini")));
+    UiMemoryEventRepository repository;
+    snack::domain::Conversation conversation;
+    conversation.title = QStringLiteral("Detached chat");
+    conversation.workingDirectory = directory.path();
+    repository.catalog = {conversation};
+    const auto makeRuntime = [](snack::domain::AgentKind kind) {
+        snack::agent::AgentRuntime runtime;
+        runtime.requestedKind = kind;
+        runtime.selectedKind = kind;
+        runtime.adapter = std::make_unique<snack::agent::FakeAgentAdapter>(nullptr, 1);
+        return runtime;
+    };
+    snack::app::SessionManager sessions(&repository, makeRuntime);
+    QString error;
+    auto* controller =
+        sessions.addPrepared(conversation, makeRuntime(conversation.agentKind), &error);
+    QVERIFY2(controller != nullptr, qPrintable(error));
+    snack::ui::MainWindow window(controller, &settings, &sessions, false);
+    auto* detach = window.findChild<QAction*>(QStringLiteral("openConversationInNewWindowAction"));
+    QVERIFY(detach != nullptr);
+    QTRY_COMPARE(controller->status(), snack::domain::ConversationStatus::Idle);
+
+    detach->trigger();
+    const QString detachedName =
+        QStringLiteral("detachedChatWindow-%1").arg(conversation.id.toString(QUuid::WithoutBraces));
+    QPointer<snack::ui::MainWindow> detached =
+        window.findChild<snack::ui::MainWindow*>(detachedName);
+    QVERIFY(!detached.isNull());
+    QTRY_VERIFY(detached->isVisible());
+    QVERIFY(detached->findChild<QWidget*>(QStringLiteral("sessionSidebar"))->isHidden());
+    QCOMPARE(detached->windowTitle(), QStringLiteral("Detached chat — Snack"));
+
+    auto* mainAccess = window.findChild<QComboBox*>(QStringLiteral("accessCombo"));
+    auto* detachedAccess = detached->findChild<QComboBox*>(QStringLiteral("accessCombo"));
+    QVERIFY(mainAccess != nullptr);
+    QVERIFY(detachedAccess != nullptr);
+    detachedAccess->setCurrentIndex(
+        detachedAccess->findData(static_cast<int>(snack::domain::AccessLevel::Full)));
+    QCOMPARE(controller->nextTurnSettings().accessLevel, snack::domain::AccessLevel::Full);
+    QCOMPARE(mainAccess->currentData().toInt(), static_cast<int>(snack::domain::AccessLevel::Full));
+
+    auto* mainComposer = window.findChild<QPlainTextEdit*>(QStringLiteral("composer"));
+    auto* mainSend = window.findChild<QPushButton*>(QStringLiteral("sendButton"));
+    auto* mainTimeline = window.findChild<QListWidget*>(QStringLiteral("timeline"));
+    auto* detachedTimeline = detached->findChild<QListWidget*>(QStringLiteral("timeline"));
+    QVERIFY(mainComposer != nullptr);
+    QVERIFY(mainSend != nullptr);
+    QVERIFY(mainTimeline != nullptr);
+    QVERIFY(detachedTimeline != nullptr);
+    mainComposer->setPlainText(QStringLiteral("Shared event stream"));
+    mainSend->click();
+    QTRY_VERIFY(mainTimeline->count() >= 2);
+    QTRY_COMPARE(detachedTimeline->count(), mainTimeline->count());
+    QTRY_COMPARE(controller->status(), snack::domain::ConversationStatus::Idle);
+
+    detach->trigger();
+    QCOMPARE(window.findChildren<snack::ui::MainWindow*>(detachedName).size(), 1);
+    detached->resize(900, 650);
+    detached->close();
+    QTRY_VERIFY(detached.isNull() || !detached->isVisible());
+    QCOMPARE(controller->status(), snack::domain::ConversationStatus::Idle);
+    QVERIFY(!settings.detachedWindowGeometry(conversation.id).isEmpty());
 }
 
 void TestMainWindow::interruptsRunningTurnFromSendButton() {
