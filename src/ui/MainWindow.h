@@ -89,6 +89,10 @@ class MainWindow final : public QMainWindow {
     void increaseScale();
     void decreaseScale();
     void resetScale();
+    void applyFocusLayout();
+    void applyReviewLayout();
+    void applyTerminalDebugLayout();
+    void applyMultiSessionLayout();
     void requestQuit();
     void preferCodexAgent();
     void preferMockAgent();
@@ -195,7 +199,9 @@ class MainWindow final : public QMainWindow {
     QComboBox* effortCombo_{nullptr};
     QComboBox* accessCombo_{nullptr};
     QSystemTrayIcon* trayIcon_{nullptr};
+    QWidget* sessionSidebar_{nullptr};
     QDockWidget* taskDock_{nullptr};
+    QDockWidget* terminalDock_{nullptr};
     QLabel* planExplanation_{nullptr};
     QLabel* planItemText_{nullptr};
     QListWidget* planList_{nullptr};

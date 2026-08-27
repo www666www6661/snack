@@ -1558,6 +1558,46 @@ void MainWindow::increaseScale() { applyInterfaceScale(settingsSnapshot_.interfa
 void MainWindow::decreaseScale() { applyInterfaceScale(settingsSnapshot_.interfaceScale - 0.1); }
 void MainWindow::resetScale() { applyInterfaceScale(1.0); }
 
+void MainWindow::applyFocusLayout() {
+    sessionSidebar_->hide();
+    taskDock_->hide();
+    terminalDock_->hide();
+    persistWindowState();
+}
+
+void MainWindow::applyReviewLayout() {
+    sessionSidebar_->hide();
+    terminalDock_->hide();
+    taskDock_->setFloating(false);
+    addDockWidget(Qt::RightDockWidgetArea, taskDock_);
+    taskDock_->show();
+    resizeDocks({taskDock_}, {360}, Qt::Horizontal);
+    persistWindowState();
+}
+
+void MainWindow::applyTerminalDebugLayout() {
+    sessionSidebar_->hide();
+    taskDock_->setFloating(false);
+    terminalDock_->setFloating(false);
+    addDockWidget(Qt::RightDockWidgetArea, taskDock_);
+    addDockWidget(Qt::BottomDockWidgetArea, terminalDock_);
+    taskDock_->show();
+    terminalDock_->show();
+    resizeDocks({taskDock_}, {340}, Qt::Horizontal);
+    resizeDocks({terminalDock_}, {240}, Qt::Vertical);
+    persistWindowState();
+}
+
+void MainWindow::applyMultiSessionLayout() {
+    sessionSidebar_->show();
+    terminalDock_->hide();
+    taskDock_->setFloating(false);
+    addDockWidget(Qt::RightDockWidgetArea, taskDock_);
+    taskDock_->show();
+    resizeDocks({taskDock_}, {320}, Qt::Horizontal);
+    persistWindowState();
+}
+
 void MainWindow::preferCodexAgent() { setPreferredAgent(domain::AgentKind::Codex); }
 
 void MainWindow::preferMockAgent() { setPreferredAgent(domain::AgentKind::Mock); }
@@ -1600,16 +1640,16 @@ void MainWindow::buildUi() {
     rootLayout->setContentsMargins(0, 0, 0, 0);
     rootLayout->setSpacing(0);
 
-    auto* sidebar = new QWidget(central);
-    sidebar->setObjectName(QStringLiteral("sessionSidebar"));
-    sidebar->setFixedWidth(280);
-    auto* sidebarLayout = new QVBoxLayout(sidebar);
+    sessionSidebar_ = new QWidget(central);
+    sessionSidebar_->setObjectName(QStringLiteral("sessionSidebar"));
+    sessionSidebar_->setFixedWidth(280);
+    auto* sidebarLayout = new QVBoxLayout(sessionSidebar_);
     sidebarLayout->setContentsMargins(16, 18, 16, 18);
-    auto* brand = new QLabel(tr("SNACK  /  零食"), sidebar);
-    auto* newConversation = new QPushButton(tr("New conversation"), sidebar);
+    auto* brand = new QLabel(tr("SNACK  /  零食"), sessionSidebar_);
+    auto* newConversation = new QPushButton(tr("New conversation"), sessionSidebar_);
     newConversation->setObjectName(QStringLiteral("newConversationButton"));
     newConversation->setEnabled(sessions_ != nullptr);
-    auto* viewRow = new QWidget(sidebar);
+    auto* viewRow = new QWidget(sessionSidebar_);
     auto* viewRowLayout = new QHBoxLayout(viewRow);
     viewRowLayout->setContentsMargins(0, 0, 0, 0);
     conversationViewCombo_ = new QComboBox(viewRow);
@@ -1646,7 +1686,7 @@ void MainWindow::buildUi() {
     viewRowLayout->addWidget(saveConversationViewButton_);
     viewRowLayout->addWidget(manageConversationViewButton);
     viewRowLayout->addWidget(deleteConversationViewButton_);
-    conversationSearch_ = new QLineEdit(sidebar);
+    conversationSearch_ = new QLineEdit(sessionSidebar_);
     conversationSearch_->setObjectName(QStringLiteral("conversationSearch"));
     conversationSearch_->setPlaceholderText(tr("Search conversations or tag:name"));
     conversationSearch_->setToolTip(
@@ -1654,11 +1694,12 @@ void MainWindow::buildUi() {
            "after:YYYY-MM-DD, before:YYYY-MM-DD, time:today|7d|30d"));
     conversationSearch_->setClearButtonEnabled(true);
     conversationSearch_->installEventFilter(this);
-    sessionRow_ = new QLabel(
-        tr("●  %1\n    %2").arg(agentDisplayName(), controller_->conversation().title), sidebar);
+    sessionRow_ =
+        new QLabel(tr("●  %1\n    %2").arg(agentDisplayName(), controller_->conversation().title),
+                   sessionSidebar_);
     sessionRow_->setObjectName(QStringLiteral("sessionRow"));
     sessionRow_->setContentsMargins(8, 14, 8, 14);
-    conversationList_ = new QListWidget(sidebar);
+    conversationList_ = new QListWidget(sessionSidebar_);
     conversationList_->setObjectName(QStringLiteral("conversationList"));
     conversationList_->setContextMenuPolicy(Qt::CustomContextMenu);
     conversationContextMenu_ = new QMenu(conversationList_);
@@ -1805,7 +1846,7 @@ void MainWindow::buildUi() {
     conversationLayout->addWidget(connectionNoticeFrame_);
     conversationLayout->addWidget(timeline_, 1);
     conversationLayout->addWidget(composerFrame);
-    rootLayout->addWidget(sidebar);
+    rootLayout->addWidget(sessionSidebar_);
     rootLayout->addWidget(conversation, 1);
     setCentralWidget(central);
 
@@ -1832,12 +1873,12 @@ void MainWindow::buildUi() {
     addDockWidget(Qt::RightDockWidgetArea, taskDock_);
     taskDock_->hide();
 
-    auto* terminalDock = new QDockWidget(tr("Terminal"), this);
-    terminalDock->setObjectName(QStringLiteral("terminalDock"));
-    terminalDock->setWidget(
-        new QLabel(tr("Terminal integration is scheduled for M4."), terminalDock));
-    addDockWidget(Qt::BottomDockWidgetArea, terminalDock);
-    terminalDock->hide();
+    terminalDock_ = new QDockWidget(tr("Terminal"), this);
+    terminalDock_->setObjectName(QStringLiteral("terminalDock"));
+    terminalDock_->setWidget(
+        new QLabel(tr("Terminal integration is scheduled for M4."), terminalDock_));
+    addDockWidget(Qt::BottomDockWidgetArea, terminalDock_);
+    terminalDock_->hide();
 
     connect(sendButton_, &QPushButton::clicked, this, &MainWindow::sendMessage);
     connect(stopButton_, &QPushButton::clicked, this, &MainWindow::stopTurn);
@@ -1986,6 +2027,20 @@ void MainWindow::buildMenus() {
     connect(mockAction, &QAction::triggered, this, &MainWindow::preferMockAgent);
 
     auto* viewMenu = menuBar()->addMenu(tr("View"));
+    auto* layoutsMenu = viewMenu->addMenu(tr("Workbench layout"));
+    auto* focusLayout = layoutsMenu->addAction(tr("Focus chat"));
+    focusLayout->setObjectName(QStringLiteral("focusLayoutAction"));
+    auto* reviewLayout = layoutsMenu->addAction(tr("Code review"));
+    reviewLayout->setObjectName(QStringLiteral("reviewLayoutAction"));
+    auto* terminalDebugLayout = layoutsMenu->addAction(tr("Terminal debug"));
+    terminalDebugLayout->setObjectName(QStringLiteral("terminalDebugLayoutAction"));
+    auto* multiSessionLayout = layoutsMenu->addAction(tr("Multi-session monitor"));
+    multiSessionLayout->setObjectName(QStringLiteral("multiSessionLayoutAction"));
+    connect(focusLayout, &QAction::triggered, this, &MainWindow::applyFocusLayout);
+    connect(reviewLayout, &QAction::triggered, this, &MainWindow::applyReviewLayout);
+    connect(terminalDebugLayout, &QAction::triggered, this, &MainWindow::applyTerminalDebugLayout);
+    connect(multiSessionLayout, &QAction::triggered, this, &MainWindow::applyMultiSessionLayout);
+    viewMenu->addSeparator();
     auto* themeGroup = new QActionGroup(viewMenu);
     themeGroup->setExclusive(true);
     auto* systemAction = viewMenu->addAction(tr("System theme"));

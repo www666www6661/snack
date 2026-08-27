@@ -185,6 +185,7 @@ class TestMainWindow final : public QObject {
     void restoresToolReasoningAndPlanViews();
     void hidesToTrayWithoutClosingSession();
     void restoresWindowLayout();
+    void appliesBuiltInWorkbenchLayouts();
     void interruptsRunningTurnFromSendButton();
     void editsAndControlsQueuedMessages();
     void supportsComposerShortcutsGrowthAndDrafts();
@@ -2149,6 +2150,57 @@ void TestMainWindow::restoresWindowLayout() {
     QVERIFY(restoredTaskDock->isFloating());
     QCOMPARE(restored.saveState(1), saved.mainWindowState);
     restored.close();
+}
+
+void TestMainWindow::appliesBuiltInWorkbenchLayouts() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::app::AppSettings settings(directory.filePath(QStringLiteral("settings.ini")));
+    UiMemoryEventRepository repository;
+    snack::agent::FakeAgentAdapter adapter(nullptr, 1);
+    snack::domain::Conversation conversation;
+    conversation.title = QStringLiteral("Layout presets");
+    conversation.workingDirectory = directory.path();
+    snack::session::SessionController controller(conversation, &adapter, &repository);
+    snack::ui::MainWindow window(&controller, &settings, false);
+    auto* sidebar = window.findChild<QWidget*>(QStringLiteral("sessionSidebar"));
+    auto* taskDock = window.findChild<QDockWidget*>(QStringLiteral("taskDock"));
+    auto* terminalDock = window.findChild<QDockWidget*>(QStringLiteral("terminalDock"));
+    auto* focus = window.findChild<QAction*>(QStringLiteral("focusLayoutAction"));
+    auto* review = window.findChild<QAction*>(QStringLiteral("reviewLayoutAction"));
+    auto* terminal = window.findChild<QAction*>(QStringLiteral("terminalDebugLayoutAction"));
+    auto* monitor = window.findChild<QAction*>(QStringLiteral("multiSessionLayoutAction"));
+    QVERIFY(sidebar != nullptr);
+    QVERIFY(taskDock != nullptr);
+    QVERIFY(terminalDock != nullptr);
+    QVERIFY(focus != nullptr);
+    QVERIFY(review != nullptr);
+    QVERIFY(terminal != nullptr);
+    QVERIFY(monitor != nullptr);
+    window.show();
+
+    terminal->trigger();
+    QVERIFY(sidebar->isHidden());
+    QVERIFY(!taskDock->isHidden());
+    QVERIFY(!terminalDock->isHidden());
+    QCOMPARE(window.dockWidgetArea(taskDock), Qt::RightDockWidgetArea);
+    QCOMPARE(window.dockWidgetArea(terminalDock), Qt::BottomDockWidgetArea);
+
+    focus->trigger();
+    QVERIFY(sidebar->isHidden());
+    QVERIFY(taskDock->isHidden());
+    QVERIFY(terminalDock->isHidden());
+
+    review->trigger();
+    QVERIFY(sidebar->isHidden());
+    QVERIFY(!taskDock->isHidden());
+    QVERIFY(terminalDock->isHidden());
+
+    monitor->trigger();
+    QVERIFY(!sidebar->isHidden());
+    QVERIFY(!taskDock->isHidden());
+    QVERIFY(terminalDock->isHidden());
+    QVERIFY(!settings.load().mainWindowState.isEmpty());
 }
 
 void TestMainWindow::interruptsRunningTurnFromSendButton() {

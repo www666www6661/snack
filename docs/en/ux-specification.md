@@ -88,6 +88,8 @@ The `/` button and a leading `/` keystroke open favorite prompt templates. Templ
 
 Dockable surfaces: conversations, files, diff, tasks, permissions, raw protocol, terminal, and details. Built-in layouts: Focus, Review, Terminal Debug, and Multi-session Monitor. Detached chat and terminal windows restore safely to visible screens.
 
+M3 exposes the four built-in workbench layouts as deterministic View-menu actions. Focus hides the rail and docks; Review shows the task dock on the right; Terminal Debug shows the task and M4 terminal placeholder docks; Multi-session Monitor restores the rail with the task dock. Applying a preset immediately persists the normal Qt dock state, while missing future M4 panels remain placeholders rather than simulated functionality.
+
 ## 8. Navigation
 
 Support groups, pinning, tags, archive, and saved views. State uses shape/text as well as color. Search covers messages, responses, tool summaries, and paths; raw logs are optional.
