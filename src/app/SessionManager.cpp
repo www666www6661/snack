@@ -157,6 +157,30 @@ bool SessionManager::setTags(const QUuid& conversationId, const QStringList& tag
     return repository_->saveConversation(*stored, error);
 }
 
+bool SessionManager::setGroup(const QUuid& conversationId, const QString& groupName,
+                              QString* error) {
+    if (conversationId.isNull()) {
+        setError(error, QStringLiteral("Cannot update an invalid conversation ID"));
+        return false;
+    }
+    if (auto* openController = registry_.controller(conversationId); openController != nullptr) {
+        return openController->setGroup(groupName, error);
+    }
+    const auto normalized = domain::normalizeConversationGroup(groupName, error);
+    if (!normalized.has_value()) {
+        return false;
+    }
+    auto stored = repository_->conversationById(conversationId, error);
+    if (!stored.has_value()) {
+        if (error == nullptr || error->isEmpty()) {
+            setError(error, QStringLiteral("Conversation does not exist"));
+        }
+        return false;
+    }
+    stored->groupName = *normalized;
+    return repository_->saveConversation(*stored, error);
+}
+
 session::SessionController* SessionManager::restore(const QUuid& conversationId, QString* error) {
     if (conversationId.isNull()) {
         setError(error, QStringLiteral("Cannot restore an invalid conversation ID"));

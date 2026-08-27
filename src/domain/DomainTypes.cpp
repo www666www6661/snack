@@ -11,6 +11,7 @@ namespace {
 constexpr qsizetype maximumConversationTitleLength = 72;
 constexpr qsizetype maximumConversationTagLength = 32;
 constexpr qsizetype maximumConversationTags = 8;
+constexpr qsizetype maximumConversationGroupLength = 64;
 
 template <typename Enum> struct EnumName {
     Enum value;
@@ -249,6 +250,21 @@ std::optional<QStringList> normalizeConversationTags(const QStringList& tags, QS
         const int insensitive = left.compare(right, Qt::CaseInsensitive);
         return insensitive != 0 ? insensitive < 0 : left < right;
     });
+    return normalized;
+}
+
+std::optional<QString> normalizeConversationGroup(const QString& groupName, QString* error) {
+    static const QRegularExpression unsafeCharacters(QStringLiteral("[\\p{Cc}\\p{Cf}]"));
+    QString normalized = groupName;
+    normalized.replace(unsafeCharacters, QStringLiteral(" "));
+    normalized = normalized.simplified();
+    if (normalized.toUcs4().size() > maximumConversationGroupLength) {
+        if (error != nullptr) {
+            *error = QStringLiteral("Conversation groups cannot exceed %1 characters")
+                         .arg(maximumConversationGroupLength);
+        }
+        return std::nullopt;
+    }
     return normalized;
 }
 

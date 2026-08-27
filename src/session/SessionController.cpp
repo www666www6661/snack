@@ -324,6 +324,23 @@ bool SessionController::setTags(const QStringList& tags, QString* error) {
     return true;
 }
 
+bool SessionController::setGroup(const QString& groupName, QString* error) {
+    const auto normalized = domain::normalizeConversationGroup(groupName, error);
+    if (!normalized.has_value()) {
+        return false;
+    }
+    if (conversation_.groupName == *normalized) {
+        return true;
+    }
+    const QString previous = conversation_.groupName;
+    conversation_.groupName = *normalized;
+    if (!repository_->saveConversation(conversation_, error)) {
+        conversation_.groupName = previous;
+        return false;
+    }
+    return true;
+}
+
 bool SessionController::steerMessage(const QString& message, QString* error) {
     const QString trimmed = message.trimmed();
     if (trimmed.isEmpty()) {

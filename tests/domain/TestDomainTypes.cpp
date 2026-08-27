@@ -16,6 +16,7 @@ class TestDomainTypes final : public QObject {
     void queuedMessageStateNamesRoundTrip();
     void createsSafeFallbackConversationTitles();
     void normalizesConversationTags();
+    void normalizesConversationGroups();
     void validatesAndRendersPromptTemplates();
     void rejectsInvalidPromptTemplates();
 };
@@ -130,6 +131,19 @@ void TestDomainTypes::normalizesConversationTags() {
     }
     QVERIFY(!snack::domain::normalizeConversationTags(tooMany, &error).has_value());
     QVERIFY(error.contains(QStringLiteral("8")));
+}
+
+void TestDomainTypes::normalizesConversationGroups() {
+    QString error;
+    const auto normalized =
+        snack::domain::normalizeConversationGroup(QStringLiteral("  Backend\n Work  "), &error);
+    QVERIFY(normalized.has_value());
+    QCOMPARE(*normalized, QStringLiteral("Backend Work"));
+    QVERIFY(
+        snack::domain::normalizeConversationGroup(QStringLiteral("   "), &error).value().isEmpty());
+    QVERIFY(!snack::domain::normalizeConversationGroup(QString(65, QLatin1Char('g')), &error)
+                 .has_value());
+    QVERIFY(error.contains(QStringLiteral("64")));
 }
 
 void TestDomainTypes::validatesAndRendersPromptTemplates() {

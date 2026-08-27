@@ -63,6 +63,7 @@ class TestSessionManager final : public QObject {
     void keepsConversationArchivedWhenRestoreRuntimeIsUnavailable();
     void pinsOpenAndClosedConversations();
     void updatesTagsForOpenAndClosedConversations();
+    void updatesGroupsForOpenAndClosedConversations();
 };
 
 void TestSessionManager::adoptsPreparedRuntimeAndReusesOpenSession() {
@@ -329,6 +330,27 @@ void TestSessionManager::updatesTagsForOpenAndClosedConversations() {
     QCOMPARE(repository.conversationById(closed.id, &error)->tags,
              QStringList({QStringLiteral("docs")}));
     QVERIFY(!manager.setTags(QUuid{}, {QStringLiteral("invalid")}, &error));
+}
+
+void TestSessionManager::updatesGroupsForOpenAndClosedConversations() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::storage::EventStore repository;
+    QString error;
+    QVERIFY(repository.open(directory.filePath(QStringLiteral("events.sqlite3")), &error));
+    snack::app::SessionManager manager(&repository,
+                                       [](snack::domain::AgentKind kind) { return runtime(kind); });
+    const auto open = conversation(snack::domain::AgentKind::Mock);
+    auto closed = conversation(snack::domain::AgentKind::Mock);
+    closed.id = QUuid::createUuid();
+    QVERIFY(repository.saveConversation(closed, &error));
+    QVERIFY(manager.open(open, &error) != nullptr);
+
+    QVERIFY(manager.setGroup(open.id, QStringLiteral("Active"), &error));
+    QVERIFY(manager.setGroup(closed.id, QStringLiteral("Backlog"), &error));
+    QCOMPARE(manager.controller(open.id)->conversation().groupName, QStringLiteral("Active"));
+    QCOMPARE(repository.conversationById(closed.id, &error)->groupName, QStringLiteral("Backlog"));
+    QVERIFY(!manager.setGroup(QUuid{}, QStringLiteral("invalid"), &error));
 }
 
 QTEST_GUILESS_MAIN(TestSessionManager)

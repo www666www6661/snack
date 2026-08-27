@@ -81,6 +81,7 @@ struct Conversation {
     bool archived{false};
     bool pinned{false};
     QStringList tags;
+    QString groupName;
     QDateTime createdAt{QDateTime::currentDateTimeUtc()};
     QDateTime lastActivityAt{createdAt};
 };
@@ -145,6 +146,8 @@ struct SavedConversationView {
 [[nodiscard]] QString fallbackConversationTitle(const QString& prompt);
 [[nodiscard]] std::optional<QStringList> normalizeConversationTags(const QStringList& tags,
                                                                    QString* error = nullptr);
+[[nodiscard]] std::optional<QString> normalizeConversationGroup(const QString& groupName,
+                                                                QString* error = nullptr);
 
 } // namespace snack::domain
 

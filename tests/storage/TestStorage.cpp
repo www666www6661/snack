@@ -153,6 +153,7 @@ void TestStorage::eventStorePersistsOrderedEvents() {
     conversation.nativeSessionId = QStringLiteral("session-root-123");
     conversation.modelId = QStringLiteral("mock-fast");
     conversation.tags = {QStringLiteral("backend"), QStringLiteral("urgent")};
+    conversation.groupName = QStringLiteral("Engineering");
     conversation.createdAt = QDateTime::fromMSecsSinceEpoch(1000, QTimeZone::UTC);
     conversation.lastActivityAt = conversation.createdAt;
     QVERIFY2(store.saveConversation(conversation, &error), qPrintable(error));
@@ -167,6 +168,7 @@ void TestStorage::eventStorePersistsOrderedEvents() {
              QStringList({QStringLiteral("backend"), QStringLiteral("urgent")}));
     QCOMPARE(restoredConversation->createdAt, conversation.createdAt);
     QCOMPARE(restoredConversation->lastActivityAt, conversation.lastActivityAt);
+    QCOMPARE(restoredConversation->groupName, QStringLiteral("Engineering"));
     QVERIFY(!store.conversationById(QUuid::createUuid(), &error).has_value());
 
     snack::domain::Conversation pinned = conversation;
@@ -387,7 +389,7 @@ void TestStorage::eventStoreBacksUpAndMigratesLegacySchema() {
     QCOMPARE(queryScalar(databasePath, QStringLiteral("SELECT MAX(version) FROM schema_migrations"),
                          &error)
                  .toInt(),
-             10);
+             11);
     QCOMPARE(queryScalar(databasePath,
                          QStringLiteral("SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' "
                                         "AND name = 'conversations_working_directory'"),
@@ -413,6 +415,11 @@ void TestStorage::eventStoreBacksUpAndMigratesLegacySchema() {
     QCOMPARE(queryScalar(databasePath, QStringLiteral("SELECT COUNT(*) FROM saved_views"), &error)
                  .toInt(),
              0);
+    QVERIFY(queryScalar(databasePath,
+                        QStringLiteral("SELECT group_name FROM conversations WHERE id = 'legacy'"),
+                        &error)
+                .toString()
+                .isEmpty());
     QVERIFY(queryScalar(databasePath,
                         QStringLiteral("SELECT created_at FROM conversations WHERE id = 'legacy'"),
                         &error)
@@ -448,7 +455,7 @@ void TestStorage::eventStoreMigratesV2NativeIdentity() {
     QCOMPARE(queryScalar(databasePath, QStringLiteral("SELECT MAX(version) FROM schema_migrations"),
                          &error)
                  .toInt(),
-             10);
+             11);
     const auto restored = store.conversationById(
         QUuid(QStringLiteral("11111111-1111-1111-1111-111111111111")), &error);
     QVERIFY2(restored.has_value(), qPrintable(error));
@@ -547,7 +554,7 @@ void TestStorage::eventStoreRejectsIncompleteCurrentSchema() {
     const QStringList incompleteSchema = {
         QStringLiteral("CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, "
                        "applied_at INTEGER NOT NULL, started_at INTEGER, completed_at INTEGER)"),
-        QStringLiteral("INSERT INTO schema_migrations VALUES (10, 1, 1, 1)")};
+        QStringLiteral("INSERT INTO schema_migrations VALUES (11, 1, 1, 1)")};
     QVERIFY2(executeSql(databasePath, incompleteSchema, &error), qPrintable(error));
 
     snack::storage::EventStore store;

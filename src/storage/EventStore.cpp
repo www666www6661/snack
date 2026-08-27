@@ -16,7 +16,7 @@
 namespace snack::storage {
 namespace {
 
-constexpr int currentSchemaVersion = 10;
+constexpr int currentSchemaVersion = 11;
 
 struct Migration {
     int version;
@@ -156,7 +156,17 @@ QList<Migration> migrations() {
               QStringLiteral("UPDATE schema_migrations SET "
                              "applied_at = CAST(strftime('%s','now') AS INTEGER) * 1000, "
                              "completed_at = CAST(strftime('%s','now') AS INTEGER) * 1000 "
-                             "WHERE version = 10")}}};
+                             "WHERE version = 10")}},
+            {11,
+             {QStringLiteral("INSERT INTO schema_migrations "
+                             "(version, applied_at, started_at, completed_at) VALUES "
+                             "(11, 0, CAST(strftime('%s','now') AS INTEGER) * 1000, NULL)"),
+              QStringLiteral("ALTER TABLE conversations ADD COLUMN "
+                             "group_name TEXT NOT NULL DEFAULT ''"),
+              QStringLiteral("UPDATE schema_migrations SET "
+                             "applied_at = CAST(strftime('%s','now') AS INTEGER) * 1000, "
+                             "completed_at = CAST(strftime('%s','now') AS INTEGER) * 1000 "
+                             "WHERE version = 11")}}};
 }
 
 QString compactJson(const QJsonObject& object) {
@@ -296,8 +306,8 @@ bool EventStore::saveConversation(const domain::Conversation& conversation, QStr
         "INSERT INTO conversations "
         "(id, title, title_is_placeholder, working_directory, agent_kind, model_id, status, "
         "native_thread_id, native_session_id, archived, pinned, tags, created_at, "
-        "last_activity_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+        "last_activity_at, group_name) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
         "ON CONFLICT(id) DO UPDATE SET title = excluded.title, "
         "title_is_placeholder = excluded.title_is_placeholder, "
         "working_directory = excluded.working_directory, agent_kind = excluded.agent_kind, "
@@ -305,7 +315,7 @@ bool EventStore::saveConversation(const domain::Conversation& conversation, QStr
         "native_thread_id = excluded.native_thread_id, "
         "native_session_id = excluded.native_session_id, archived = excluded.archived, "
         "pinned = excluded.pinned, tags = excluded.tags, created_at = excluded.created_at, "
-        "last_activity_at = excluded.last_activity_at"));
+        "last_activity_at = excluded.last_activity_at, group_name = excluded.group_name"));
     query.addBindValue(conversation.id.toString(QUuid::WithoutBraces));
     query.addBindValue(conversation.title);
     query.addBindValue(conversation.titleIsPlaceholder);
@@ -320,6 +330,8 @@ bool EventStore::saveConversation(const domain::Conversation& conversation, QStr
     query.addBindValue(compactStringList(conversation.tags));
     query.addBindValue(conversation.createdAt.toMSecsSinceEpoch());
     query.addBindValue(conversation.lastActivityAt.toMSecsSinceEpoch());
+    query.addBindValue(conversation.groupName.isNull() ? QStringLiteral("")
+                                                       : conversation.groupName);
     if (!query.exec()) {
         setSqlError(error, QStringLiteral("Cannot save conversation"), query.lastError());
         return false;
@@ -333,7 +345,7 @@ std::optional<domain::Conversation> EventStore::conversationById(const QUuid& co
     query.prepare(
         QStringLiteral("SELECT title, title_is_placeholder, working_directory, agent_kind, "
                        "model_id, status, native_thread_id, native_session_id, archived, pinned, "
-                       "tags, created_at, last_activity_at "
+                       "tags, created_at, last_activity_at, group_name "
                        "FROM conversations WHERE id = ?"));
     query.addBindValue(conversationId.toString(QUuid::WithoutBraces));
     if (!query.exec()) {
@@ -361,6 +373,7 @@ std::optional<domain::Conversation> EventStore::conversationById(const QUuid& co
         QDateTime::fromMSecsSinceEpoch(query.value(11).toLongLong(), QTimeZone::UTC);
     conversation.lastActivityAt =
         QDateTime::fromMSecsSinceEpoch(query.value(12).toLongLong(), QTimeZone::UTC);
+    conversation.groupName = query.value(13).toString();
     return conversation;
 }
 
@@ -370,7 +383,7 @@ QList<domain::Conversation> EventStore::conversations(QString* error) const {
     if (!query.exec(QStringLiteral(
             "SELECT id, title, title_is_placeholder, working_directory, agent_kind, model_id, "
             "status, native_thread_id, native_session_id, archived, pinned, tags, created_at, "
-            "last_activity_at "
+            "last_activity_at, group_name "
             "FROM conversations "
             "ORDER BY archived ASC, pinned DESC, title COLLATE NOCASE ASC, id ASC"))) {
         setSqlError(error, QStringLiteral("Cannot load conversations"), query.lastError());
@@ -394,6 +407,7 @@ QList<domain::Conversation> EventStore::conversations(QString* error) const {
             QDateTime::fromMSecsSinceEpoch(query.value(12).toLongLong(), QTimeZone::UTC);
         conversation.lastActivityAt =
             QDateTime::fromMSecsSinceEpoch(query.value(13).toLongLong(), QTimeZone::UTC);
+        conversation.groupName = query.value(14).toString();
         result.append(std::move(conversation));
     }
     return result;
@@ -855,9 +869,9 @@ bool EventStore::validateSchema(bool checkIntegrity, QString* error) const {
 
     QSqlQuery completionQuery(database_);
     if (!completionQuery.exec(QStringLiteral("SELECT COUNT(*) FROM schema_migrations "
-                                             "WHERE version IN (2, 3, 4, 5, 6, 7, 8, 9, 10) "
+                                             "WHERE version IN (2, 3, 4, 5, 6, 7, 8, 9, 10, 11) "
                                              "AND completed_at IS NOT NULL")) ||
-        !completionQuery.next() || completionQuery.value(0).toInt() != 9) {
+        !completionQuery.next() || completionQuery.value(0).toInt() != 10) {
         if (error != nullptr) {
             *error = QStringLiteral("Database schema validation failed: migrations are incomplete");
         }
@@ -893,6 +907,17 @@ bool EventStore::validateSchema(bool checkIntegrity, QString* error) const {
         if (error != nullptr) {
             *error = QStringLiteral(
                 "Database schema validation failed: conversation activity columns are missing");
+        }
+        return false;
+    }
+    QSqlQuery groupColumnQuery(database_);
+    if (!groupColumnQuery.exec(
+            QStringLiteral("SELECT COUNT(*) FROM pragma_table_info('conversations') "
+                           "WHERE name = 'group_name' AND \"notnull\" = 1")) ||
+        !groupColumnQuery.next() || groupColumnQuery.value(0).toInt() != 1) {
+        if (error != nullptr) {
+            *error = QStringLiteral(
+                "Database schema validation failed: conversation group column is missing");
         }
         return false;
     }
