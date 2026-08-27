@@ -17,6 +17,7 @@ class TestWorkspaceSnapshot final : public QObject {
     void reportsOnlyAdvertisedIsolation();
     void producesBoundedNativeDiffHunks();
     void acceptsAndRejectsReviewedChanges();
+    void refusesRejectAfterExternalConflict();
 };
 
 void TestWorkspaceSnapshot::capturesContentAndDetectsChanges() {
@@ -110,6 +111,28 @@ void TestWorkspaceSnapshot::acceptsAndRejectsReviewedChanges() {
     QVERIFY(snack::workspace::WorkspaceChangeReview::acceptCurrent(
         snapshot, QStringLiteral("file.txt"), &error));
     QCOMPARE(snapshot.entry(QStringLiteral("file.txt"))->content, QByteArray("accepted"));
+}
+
+void TestWorkspaceSnapshot::refusesRejectAfterExternalConflict() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    QFile file(directory.filePath(QStringLiteral("file.txt")));
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write("baseline");
+    file.close();
+    const auto snapshot = snack::workspace::WorkspaceSnapshot::capture(directory.path());
+    const QByteArray reviewedHash =
+        QCryptographicHash::hash(QByteArray("reviewed"), QCryptographicHash::Sha256);
+
+    QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    file.write("external edit");
+    file.close();
+    QString error;
+    QVERIFY(!snack::workspace::WorkspaceChangeReview::rejectCurrent(
+        snapshot, QStringLiteral("file.txt"), reviewedHash, &error));
+    QVERIFY(error.contains(QStringLiteral("changed externally")));
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QCOMPARE(file.readAll(), QByteArray("external edit"));
 }
 
 QTEST_GUILESS_MAIN(TestWorkspaceSnapshot)
