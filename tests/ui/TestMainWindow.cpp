@@ -126,6 +126,7 @@ class TestMainWindow final : public QObject {
     void updatesPlaceholderTitleAfterFirstSend();
     void renamesCurrentConversation();
     void editsDisplaysAndSearchesConversationTags();
+    void editsArchivedConversationTagsFromContextMenu();
     void restoresPersistedTimeline();
     void restoresToolReasoningAndPlanViews();
     void hidesToTrayWithoutClosingSession();
@@ -574,6 +575,77 @@ void TestMainWindow::operatesOnSelectedConversationFromContextMenu() {
     QVERIFY(open->isEnabled());
     open->trigger();
     QCOMPARE(title->text(), QStringLiteral("Current"));
+}
+
+void TestMainWindow::editsArchivedConversationTagsFromContextMenu() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::app::AppSettings settings(directory.filePath(QStringLiteral("settings.ini")));
+    UiMemoryEventRepository repository;
+    snack::domain::Conversation current;
+    current.title = QStringLiteral("Current");
+    current.workingDirectory = directory.path();
+    snack::domain::Conversation archived;
+    archived.title = QStringLiteral("Archived reference");
+    archived.workingDirectory = directory.path();
+    archived.archived = true;
+    repository.catalog = {current, archived};
+
+    const auto makeRuntime = [](snack::domain::AgentKind kind) {
+        snack::agent::AgentRuntime runtime;
+        runtime.requestedKind = kind;
+        runtime.selectedKind = kind;
+        runtime.adapter = std::make_unique<snack::agent::FakeAgentAdapter>(nullptr, 1);
+        return runtime;
+    };
+    snack::app::SessionManager sessions(&repository, makeRuntime);
+    QString error;
+    auto* controller = sessions.addPrepared(current, makeRuntime(current.agentKind), &error);
+    QVERIFY2(controller != nullptr, qPrintable(error));
+    snack::ui::MainWindow window(controller, &settings, &sessions, false);
+    auto* list = window.findChild<QListWidget*>(QStringLiteral("conversationList"));
+    auto* editTags =
+        window.findChild<QAction*>(QStringLiteral("contextEditConversationTagsAction"));
+    auto* title = window.findChild<QLabel*>(QStringLiteral("conversationTitle"));
+    QVERIFY(list != nullptr);
+    QVERIFY(editTags != nullptr);
+    QVERIFY(title != nullptr);
+
+    for (int row = 0; row < list->count(); ++row) {
+        if (list->item(row)->data(Qt::UserRole).toUuid() == archived.id) {
+            list->setCurrentRow(row);
+            break;
+        }
+    }
+    QCOMPARE(list->currentItem()->data(Qt::UserRole).toUuid(), archived.id);
+    QVERIFY(QMetaObject::invokeMethod(&window, "prepareConversationContextMenu"));
+    QVERIFY(editTags->isEnabled());
+
+    QTimer::singleShot(0, [] {
+        auto* dialog = qobject_cast<QInputDialog*>(QApplication::activeModalWidget());
+        QVERIFY(dialog != nullptr);
+        QVERIFY(dialog->textValue().isEmpty());
+        dialog->setTextValue(QStringLiteral("history, reference"));
+        dialog->accept();
+    });
+    editTags->trigger();
+
+    const auto saved = repository.conversationById(archived.id, nullptr);
+    QVERIFY(saved.has_value());
+    QCOMPARE(saved->tags, QStringList({QStringLiteral("history"), QStringLiteral("reference")}));
+    QVERIFY(saved->archived);
+    QCOMPARE(title->text(), QStringLiteral("Current"));
+    QCOMPARE(sessions.size(), qsizetype{1});
+
+    bool foundTaggedArchivedRow = false;
+    for (int row = 0; row < list->count(); ++row) {
+        const auto* item = list->item(row);
+        if (item->data(Qt::UserRole).toUuid() == archived.id) {
+            foundTaggedArchivedRow = item->text().contains(QStringLiteral("history · reference"));
+            break;
+        }
+    }
+    QVERIFY(foundTaggedArchivedRow);
 }
 
 void TestMainWindow::updatesConversationRailForBackgroundRuntimeStatus() {

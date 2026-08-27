@@ -34,6 +34,8 @@ Conversation tags are edited as a comma-separated metadata list from the File me
 
 Each rail row exposes a context menu for opening, pinning, archiving, or restoring that selected conversation. Actions operate on the row rather than silently switching first; archiving a background conversation leaves the current chat bound and uses the same active-work guard as the File menu.
 
+The rail context menu applies the same tag editor to the selected background or archived row. Editing a closed row updates repository metadata directly and does not open, restore, or switch to that conversation.
+
 Active rows include a text status such as Connecting, Idle, Running, Waiting for approval/input, Disconnected, or Failed. Status changes from every open runtime refresh the rail in place, so background work remains visible without switching conversations.
 
 A background conversation becomes locally unread when an Agent response, tool, approval/input request, warning, or error begins. Streaming deltas do not repeatedly refresh the rail; opening that conversation clears the in-memory unread marker. The current conversation is never marked unread.

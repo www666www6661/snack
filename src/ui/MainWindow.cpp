@@ -459,6 +459,7 @@ void MainWindow::prepareConversationContextMenu() {
     contextOpenAction_->setEnabled(hasSelection && !archived && !isCurrent);
     contextPinAction_->setEnabled(hasSelection);
     contextPinAction_->setText(pinned ? tr("Unpin conversation") : tr("Pin conversation"));
+    contextEditTagsAction_->setEnabled(hasSelection && (isCurrent || sessions_ != nullptr));
     contextArchiveAction_->setEnabled(hasSelection && !archived);
     contextRestoreAction_->setEnabled(hasSelection && archived);
 }
@@ -799,15 +800,43 @@ void MainWindow::renameConversation() {
 }
 
 void MainWindow::editConversationTags() {
+    editConversationTagsFor(controller_->conversation().id, controller_->conversation().tags);
+}
+
+void MainWindow::editSelectedConversationTags() {
+    if (conversationList_->currentItem() == nullptr) {
+        return;
+    }
+    const QUuid conversationId = conversationList_->currentItem()->data(Qt::UserRole).toUuid();
+    const auto selected =
+        std::find_if(conversationCatalog_.cbegin(), conversationCatalog_.cend(),
+                     [&conversationId](const auto& value) { return value.id == conversationId; });
+    if (selected == conversationCatalog_.cend()) {
+        refreshConversationList();
+        return;
+    }
+    editConversationTagsFor(conversationId, selected->tags);
+}
+
+void MainWindow::editConversationTagsFor(const QUuid& conversationId, const QStringList& tags) {
     bool accepted = false;
     const QString value = QInputDialog::getText(
         this, tr("Edit conversation tags"), tr("Comma-separated tags (up to 8)"), QLineEdit::Normal,
-        controller_->conversation().tags.join(QStringLiteral(", ")), &accepted);
+        tags.join(QStringLiteral(", ")), &accepted);
     if (!accepted) {
         return;
     }
+
     QString error;
-    if (!controller_->setTags(value.split(QLatin1Char(',')), &error)) {
+    const QStringList requestedTags = value.split(QLatin1Char(','));
+    const bool saved =
+        conversationId == controller_->conversation().id
+            ? controller_->setTags(requestedTags, &error)
+            : sessions_ != nullptr && sessions_->setTags(conversationId, requestedTags, &error);
+    if (!saved) {
+        if (error.isEmpty()) {
+            error = QStringLiteral("Conversation is unavailable");
+        }
         statusBar()->showMessage(tr("Cannot update conversation tags: %1").arg(error), 8000);
         return;
     }
@@ -986,6 +1015,8 @@ void MainWindow::buildUi() {
     contextOpenAction_->setObjectName(QStringLiteral("contextOpenConversationAction"));
     contextPinAction_ = conversationContextMenu_->addAction(tr("Pin conversation"));
     contextPinAction_->setObjectName(QStringLiteral("contextPinConversationAction"));
+    contextEditTagsAction_ = conversationContextMenu_->addAction(tr("Edit conversation tags..."));
+    contextEditTagsAction_->setObjectName(QStringLiteral("contextEditConversationTagsAction"));
     conversationContextMenu_->addSeparator();
     contextArchiveAction_ = conversationContextMenu_->addAction(tr("Archive conversation"));
     contextArchiveAction_->setObjectName(QStringLiteral("contextArchiveConversationAction"));
@@ -1171,6 +1202,8 @@ void MainWindow::buildUi() {
     connect(contextOpenAction_, &QAction::triggered, this, &MainWindow::openSelectedConversation);
     connect(contextPinAction_, &QAction::triggered, this,
             &MainWindow::toggleSelectedPinnedConversation);
+    connect(contextEditTagsAction_, &QAction::triggered, this,
+            &MainWindow::editSelectedConversationTags);
     connect(contextArchiveAction_, &QAction::triggered, this,
             &MainWindow::archiveSelectedConversation);
     connect(contextRestoreAction_, &QAction::triggered, this,

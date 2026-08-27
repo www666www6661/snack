@@ -53,6 +53,7 @@ class MainWindow final : public QMainWindow {
     void stopTurn();
     void renameConversation();
     void editConversationTags();
+    void editSelectedConversationTags();
     void reconnectSession();
     void updateQueuedMessages(const QList<domain::QueuedMessage>& messages);
     void updateQueueControls();
@@ -96,6 +97,7 @@ class MainWindow final : public QMainWindow {
     void buildMenus();
     void connectControllerSignals();
     void refreshConversationList();
+    void editConversationTagsFor(const QUuid& conversationId, const QStringList& tags);
     void activateRelativeConversation(int offset);
     void activateConversationById(const QUuid& conversationId);
     void resetConversationView();
@@ -186,6 +188,7 @@ class MainWindow final : public QMainWindow {
     QMenu* conversationContextMenu_{nullptr};
     QAction* contextOpenAction_{nullptr};
     QAction* contextPinAction_{nullptr};
+    QAction* contextEditTagsAction_{nullptr};
     QAction* contextArchiveAction_{nullptr};
     QAction* contextRestoreAction_{nullptr};
     struct ApprovalCardState {
