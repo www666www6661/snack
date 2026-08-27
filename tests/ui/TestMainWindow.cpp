@@ -167,6 +167,13 @@ class UiMemoryEventRepository final : public snack::storage::IEventRepository {
     QHash<QUuid, snack::domain::SavedConversationView> views;
 };
 
+class FakeDesktopNotifier final : public snack::ui::IDesktopNotifier {
+  public:
+    void show(snack::ui::DesktopNotificationKind kind) override { notifications.append(kind); }
+
+    QList<snack::ui::DesktopNotificationKind> notifications;
+};
+
 class TestMainWindow final : public QObject {
     Q_OBJECT
 
@@ -184,6 +191,7 @@ class TestMainWindow final : public QObject {
     void restoresPersistedTimeline();
     void restoresToolReasoningAndPlanViews();
     void hidesToTrayWithoutClosingSession();
+    void sendsOnlyPrivateBackgroundNotifications();
     void restoresWindowLayout();
     void appliesBuiltInWorkbenchLayouts();
     void opensOneDetachedWindowPerConversation();
@@ -2108,6 +2116,52 @@ void TestMainWindow::hidesToTrayWithoutClosingSession() {
     QTRY_VERIFY(window.isVisible());
     window.hide();
     controller.close();
+}
+
+void TestMainWindow::sendsOnlyPrivateBackgroundNotifications() {
+    using snack::domain::AgentEvent;
+    using snack::domain::AgentEventType;
+    using snack::ui::DesktopNotificationKind;
+
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::app::AppSettings settings(directory.filePath(QStringLiteral("settings.ini")));
+    UiMemoryEventRepository repository;
+    snack::domain::Conversation conversation;
+    conversation.title = QStringLiteral("Secret customer title");
+    conversation.workingDirectory = directory.filePath(QStringLiteral("private-workspace"));
+
+    AgentEvent restoredCompletion;
+    restoredCompletion.conversationId = conversation.id;
+    restoredCompletion.sequence = 1;
+    restoredCompletion.type = AgentEventType::TurnCompleted;
+    repository.events.append(restoredCompletion);
+
+    snack::agent::FakeAgentAdapter adapter(nullptr, 1);
+    snack::session::SessionController controller(conversation, &adapter, &repository);
+    FakeDesktopNotifier notifier;
+    snack::ui::MainWindow window(&controller, &settings, nullptr, false, &notifier);
+    QVERIFY(!window.isVisible());
+    QVERIFY(notifier.notifications.isEmpty());
+    QTRY_COMPARE(controller.status(), snack::domain::ConversationStatus::Idle);
+
+    QString error;
+    QVERIFY2(controller.sendMessage(QStringLiteral("private prompt"), &error), qPrintable(error));
+    QTRY_COMPARE_WITH_TIMEOUT(notifier.notifications.size(), 1, 1000);
+    QCOMPARE(notifier.notifications.constFirst(), DesktopNotificationKind::TaskCompleted);
+
+    QVERIFY2(controller.sendMessage(QStringLiteral("another private prompt"), &error),
+             qPrintable(error));
+    AgentEvent approval;
+    approval.turnId = adapter.lastTurnRequest().turnId;
+    approval.type = AgentEventType::ApprovalRequested;
+    approval.payload = {{QStringLiteral("requestId"), QStringLiteral("private-request")},
+                        {QStringLiteral("command"), QStringLiteral("secret command")},
+                        {QStringLiteral("cwd"), conversation.workingDirectory}};
+    emit adapter.eventReceived(approval);
+    QTRY_COMPARE(notifier.notifications.size(), 2);
+    QCOMPARE(notifier.notifications.constLast(), DesktopNotificationKind::TaskNeedsAttention);
+    controller.interrupt();
 }
 
 void TestMainWindow::restoresWindowLayout() {

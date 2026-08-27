@@ -4,6 +4,7 @@
 #include "app/ConversationExporter.h"
 #include "app/SessionManager.h"
 #include "session/SessionController.h"
+#include "ui/DesktopNotifier.h"
 #include "ui/ThemeDefinition.h"
 
 #include <QHash>
@@ -11,6 +12,7 @@
 #include <QPointer>
 #include <QSet>
 
+#include <memory>
 #include <optional>
 
 class QComboBox;
@@ -40,6 +42,9 @@ class MainWindow final : public QMainWindow {
                bool closeToTrayEnabled, QWidget* parent = nullptr);
     MainWindow(session::SessionController* controller, app::AppSettings* settings,
                app::SessionManager* sessions, bool closeToTrayEnabled, QWidget* parent = nullptr);
+    MainWindow(session::SessionController* controller, app::AppSettings* settings,
+               app::SessionManager* sessions, bool closeToTrayEnabled, IDesktopNotifier* notifier,
+               QWidget* parent = nullptr);
 
     void activateWindowForRequest(const std::optional<QString>& directory);
     void showStartupNotice(const QString& notice);
@@ -164,6 +169,8 @@ class MainWindow final : public QMainWindow {
     [[nodiscard]] QString agentDisplayName() const;
     void restoreTimeline();
     void buildTray();
+    void maybeNotify(const domain::AgentEvent& event);
+    [[nodiscard]] bool snackIsForeground() const;
     void persistWindowState();
     void restoreWindowState();
     void ensureWindowVisible();
@@ -210,6 +217,8 @@ class MainWindow final : public QMainWindow {
     QComboBox* effortCombo_{nullptr};
     QComboBox* accessCombo_{nullptr};
     QSystemTrayIcon* trayIcon_{nullptr};
+    IDesktopNotifier* notifier_{nullptr};
+    std::unique_ptr<IDesktopNotifier> ownedNotifier_;
     QWidget* sessionSidebar_{nullptr};
     QDockWidget* taskDock_{nullptr};
     QDockWidget* terminalDock_{nullptr};
@@ -280,7 +289,7 @@ class MainWindow final : public QMainWindow {
 
     MainWindow(session::SessionController* controller, app::AppSettings* settings,
                app::SessionManager* sessions, bool closeToTrayEnabled, bool detachedWindow,
-               QWidget* parent);
+               IDesktopNotifier* notifier, QWidget* parent);
 };
 
 } // namespace snack::ui

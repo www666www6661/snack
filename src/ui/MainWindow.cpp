@@ -241,22 +241,28 @@ bool conversationMatchesQuery(const domain::Conversation& conversation, const QS
 
 MainWindow::MainWindow(session::SessionController* controller, app::AppSettings* settings,
                        QWidget* parent)
-    : MainWindow(controller, settings, nullptr, QSystemTrayIcon::isSystemTrayAvailable(), parent) {}
+    : MainWindow(controller, settings, nullptr, QSystemTrayIcon::isSystemTrayAvailable(), nullptr,
+                 parent) {}
 
 MainWindow::MainWindow(session::SessionController* controller, app::AppSettings* settings,
                        bool closeToTrayEnabled, QWidget* parent)
-    : MainWindow(controller, settings, nullptr, closeToTrayEnabled, parent) {}
+    : MainWindow(controller, settings, nullptr, closeToTrayEnabled, nullptr, parent) {}
 
 MainWindow::MainWindow(session::SessionController* controller, app::AppSettings* settings,
                        app::SessionManager* sessions, bool closeToTrayEnabled, QWidget* parent)
-    : MainWindow(controller, settings, sessions, closeToTrayEnabled, false, parent) {}
+    : MainWindow(controller, settings, sessions, closeToTrayEnabled, nullptr, parent) {}
+
+MainWindow::MainWindow(session::SessionController* controller, app::AppSettings* settings,
+                       app::SessionManager* sessions, bool closeToTrayEnabled,
+                       IDesktopNotifier* notifier, QWidget* parent)
+    : MainWindow(controller, settings, sessions, closeToTrayEnabled, false, notifier, parent) {}
 
 MainWindow::MainWindow(session::SessionController* controller, app::AppSettings* settings,
                        app::SessionManager* sessions, bool closeToTrayEnabled, bool detachedWindow,
-                       QWidget* parent)
+                       IDesktopNotifier* notifier, QWidget* parent)
     : QMainWindow(parent), controller_(controller), sessions_(sessions), settings_(settings),
-      settingsSnapshot_(settings_->load()), closeToTrayEnabled_(closeToTrayEnabled),
-      detachedWindow_(detachedWindow) {
+      settingsSnapshot_(settings_->load()), notifier_(notifier),
+      closeToTrayEnabled_(closeToTrayEnabled), detachedWindow_(detachedWindow) {
     Q_ASSERT(controller_ != nullptr);
     Q_ASSERT(settings_ != nullptr);
     buildUi();
@@ -459,8 +465,11 @@ void MainWindow::refreshConversationList() {
                 connect(openController, &session::SessionController::eventRecorded, openController,
                         [window, conversationId](const domain::AgentEvent& event) {
                             if (window.isNull() ||
-                                conversationId == window->controller_->conversation().id ||
-                                window->unreadConversationIds_.contains(conversationId) ||
+                                conversationId == window->controller_->conversation().id) {
+                                return;
+                            }
+                            window->maybeNotify(event);
+                            if (window->unreadConversationIds_.contains(conversationId) ||
                                 !createsUnreadAttention(event.type)) {
                                 return;
                             }
@@ -806,7 +815,8 @@ void MainWindow::openConversationInNewWindow(const QUuid& conversationId) {
         statusBar()->showMessage(tr("Cannot open conversation: %1").arg(error), 8000);
         return;
     }
-    auto* detached = new MainWindow(detachedController, settings_, nullptr, false, true, this);
+    auto* detached =
+        new MainWindow(detachedController, settings_, nullptr, false, true, nullptr, this);
     detachedWindows_.insert(conversationId, detached);
     detached->show();
     detached->raise();
@@ -2353,6 +2363,7 @@ void MainWindow::appendEvent(const domain::AgentEvent& event) {
     default:
         break;
     }
+    maybeNotify(event);
     timeline_->scrollToBottom();
 }
 
@@ -3156,6 +3167,41 @@ void MainWindow::buildTray() {
                 }
             });
     trayIcon_->show();
+    if (notifier_ == nullptr) {
+        ownedNotifier_ = std::make_unique<SystemTrayDesktopNotifier>(trayIcon_);
+        notifier_ = ownedNotifier_.get();
+    }
+}
+
+void MainWindow::maybeNotify(const domain::AgentEvent& event) {
+    if (notifier_ == nullptr || restoringTimeline_ || snackIsForeground()) {
+        return;
+    }
+
+    if (event.type == domain::AgentEventType::TurnCompleted) {
+        notifier_->show(DesktopNotificationKind::TaskCompleted);
+        return;
+    }
+    switch (event.type) {
+    case domain::AgentEventType::ApprovalRequested:
+    case domain::AgentEventType::UserInputRequested:
+    case domain::AgentEventType::WarningRaised:
+    case domain::AgentEventType::ErrorRaised:
+    case domain::AgentEventType::TurnFailed:
+        notifier_->show(DesktopNotificationKind::TaskNeedsAttention);
+        break;
+    default:
+        break;
+    }
+}
+
+bool MainWindow::snackIsForeground() const {
+    if (qApp->applicationState() != Qt::ApplicationActive) {
+        return false;
+    }
+    const QWidget* activeWindow = QApplication::activeWindow();
+    return activeWindow != nullptr &&
+           qobject_cast<const MainWindow*>(activeWindow->window()) != nullptr;
 }
 
 void MainWindow::persistWindowState() {

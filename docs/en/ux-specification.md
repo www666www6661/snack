@@ -117,4 +117,4 @@ Do not intercept normal shell combinations while a terminal owns focus.
 
 ## 10. Copy and notifications
 
-Localize GUI copy and preserve original CLI errors. OS notifications use generic text only. Destructive prompts name the action and target instead of asking a vague “Are you sure?”
+Localize GUI copy and preserve original CLI errors. While every Snack window is hidden or the application is in the background, a completed turn may show “A task completed” and an approval, input request, warning, error, or failed turn may show “A task needs attention”. The notification boundary accepts only these two state values, so titles, directories, messages, tool arguments, and restored history cannot reach the operating system. Foreground activity does not produce a notification. Destructive prompts name the action and target instead of asking a vague “Are you sure?”

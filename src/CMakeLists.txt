@@ -76,6 +76,8 @@ add_library(
     snack_ui STATIC
     ui/ComposerTextEdit.cpp
     ui/ComposerTextEdit.h
+    ui/DesktopNotifier.cpp
+    ui/DesktopNotifier.h
     ui/MainWindow.cpp
     ui/MainWindow.h
 )
