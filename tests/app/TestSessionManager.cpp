@@ -57,6 +57,10 @@ class TestSessionManager final : public QObject {
     void validatesBeforeCreatingRuntime();
     void createsNewConversationWithExplicitFallback();
     void rejectsInvalidNewConversationRequests();
+    void archivesIdleConversationAndClosesRuntime();
+    void rejectsArchivingActiveConversation();
+    void restoresArchivedConversationMetadata();
+    void keepsConversationArchivedWhenRestoreRuntimeIsUnavailable();
 };
 
 void TestSessionManager::adoptsPreparedRuntimeAndReusesOpenSession() {
@@ -196,6 +200,88 @@ void TestSessionManager::rejectsInvalidNewConversationRequests() {
                            QString{}, &error) == nullptr);
     QCOMPARE(factoryCalls, 1);
     QCOMPARE(error, QStringLiteral("Runtime unavailable"));
+}
+
+void TestSessionManager::archivesIdleConversationAndClosesRuntime() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::storage::EventStore repository;
+    QString error;
+    QVERIFY(repository.open(directory.filePath(QStringLiteral("events.sqlite3")), &error));
+    snack::app::SessionManager manager(&repository,
+                                       [](snack::domain::AgentKind kind) { return runtime(kind); });
+    const auto value = conversation(snack::domain::AgentKind::Mock);
+    auto* controller = manager.addPrepared(value, runtime(value.agentKind), &error);
+    QVERIFY(controller != nullptr);
+
+    QVERIFY(manager.setArchived(value.id, true, &error));
+    QCOMPARE(manager.size(), qsizetype{0});
+    const auto stored = repository.conversationById(value.id, &error);
+    QVERIFY(stored.has_value());
+    QVERIFY(stored->archived);
+}
+
+void TestSessionManager::rejectsArchivingActiveConversation() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::storage::EventStore repository;
+    QString error;
+    QVERIFY(repository.open(directory.filePath(QStringLiteral("events.sqlite3")), &error));
+    snack::app::SessionManager manager(&repository,
+                                       [](snack::domain::AgentKind kind) { return runtime(kind); });
+    auto value = conversation(snack::domain::AgentKind::Mock);
+    value.status = snack::domain::ConversationStatus::Running;
+    QVERIFY(manager.addPrepared(value, runtime(value.agentKind), &error) != nullptr);
+
+    QVERIFY(!manager.setArchived(value.id, true, &error));
+    QVERIFY(error.contains(QStringLiteral("Agent work is active")));
+    QCOMPARE(manager.size(), qsizetype{1});
+}
+
+void TestSessionManager::restoresArchivedConversationMetadata() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::storage::EventStore repository;
+    QString error;
+    QVERIFY(repository.open(directory.filePath(QStringLiteral("events.sqlite3")), &error));
+    snack::app::SessionManager manager(&repository,
+                                       [](snack::domain::AgentKind kind) { return runtime(kind); });
+    auto value = conversation(snack::domain::AgentKind::Codex);
+    value.archived = true;
+    QVERIFY(repository.saveConversation(value, &error));
+
+    auto* restored = manager.restore(value.id, &error);
+    QVERIFY2(restored != nullptr, qPrintable(error));
+    const auto catalog = manager.catalog(&error);
+    QCOMPARE(catalog.size(), 1);
+    QCOMPARE(catalog.constFirst().id, value.id);
+    QVERIFY(!catalog.constFirst().archived);
+    QCOMPARE(manager.size(), qsizetype{1});
+}
+
+void TestSessionManager::keepsConversationArchivedWhenRestoreRuntimeIsUnavailable() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::storage::EventStore repository;
+    QString error;
+    QVERIFY(repository.open(directory.filePath(QStringLiteral("events.sqlite3")), &error));
+    snack::app::SessionManager manager(&repository, [](snack::domain::AgentKind requestedKind) {
+        auto result = runtime(snack::domain::AgentKind::Mock);
+        result.requestedKind = requestedKind;
+        result.detail = QStringLiteral("Codex unavailable");
+        result.fellBack = true;
+        return result;
+    });
+    auto value = conversation(snack::domain::AgentKind::Codex);
+    value.archived = true;
+    QVERIFY(repository.saveConversation(value, &error));
+
+    QVERIFY(manager.restore(value.id, &error) == nullptr);
+    QCOMPARE(error, QStringLiteral("Codex unavailable"));
+    const auto stored = repository.conversationById(value.id, &error);
+    QVERIFY(stored.has_value());
+    QVERIFY(stored->archived);
+    QCOMPARE(manager.size(), qsizetype{0});
 }
 
 QTEST_GUILESS_MAIN(TestSessionManager)

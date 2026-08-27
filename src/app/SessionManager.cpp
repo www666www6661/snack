@@ -5,7 +5,8 @@
 namespace snack::app {
 
 SessionManager::SessionManager(storage::IEventRepository* repository, RuntimeFactory runtimeFactory)
-    : runtimeFactory_(std::move(runtimeFactory)), registry_(repository) {
+    : runtimeFactory_(std::move(runtimeFactory)), repository_(repository), registry_(repository) {
+    Q_ASSERT(repository_ != nullptr);
     Q_ASSERT(runtimeFactory_);
 }
 
@@ -67,6 +68,92 @@ session::SessionController* SessionManager::create(const QString& workingDirecto
     conversation.agentKind = runtime.selectedKind;
     conversation.status = domain::ConversationStatus::Dormant;
     return addPrepared(std::move(conversation), std::move(runtime), error);
+}
+
+bool SessionManager::setArchived(const QUuid& conversationId, bool archived, QString* error) {
+    if (conversationId.isNull()) {
+        setError(error, QStringLiteral("Cannot update an invalid conversation ID"));
+        return false;
+    }
+
+    std::optional<domain::Conversation> stored;
+    if (auto* openController = registry_.controller(conversationId); openController != nullptr) {
+        const domain::ConversationStatus status = openController->status();
+        const bool active = status == domain::ConversationStatus::Connecting ||
+                            status == domain::ConversationStatus::Running ||
+                            status == domain::ConversationStatus::WaitingApproval ||
+                            status == domain::ConversationStatus::WaitingInput;
+        if (archived && active) {
+            setError(error,
+                     QStringLiteral("Cannot archive a conversation while Agent work is active"));
+            return false;
+        }
+        stored = openController->conversation();
+    } else {
+        stored = repository_->conversationById(conversationId, error);
+    }
+    if (!stored.has_value()) {
+        if (error == nullptr || error->isEmpty()) {
+            setError(error, QStringLiteral("Conversation does not exist"));
+        }
+        return false;
+    }
+    if (stored->archived == archived) {
+        return true;
+    }
+
+    if (auto* openController = registry_.controller(conversationId); openController != nullptr) {
+        if (!openController->setArchived(archived, error)) {
+            return false;
+        }
+        if (archived) {
+            registry_.close(conversationId);
+        }
+        return true;
+    }
+    stored->archived = archived;
+    return repository_->saveConversation(*stored, error);
+}
+
+session::SessionController* SessionManager::restore(const QUuid& conversationId, QString* error) {
+    if (conversationId.isNull()) {
+        setError(error, QStringLiteral("Cannot restore an invalid conversation ID"));
+        return nullptr;
+    }
+    auto stored = repository_->conversationById(conversationId, error);
+    if (!stored.has_value()) {
+        if (error == nullptr || error->isEmpty()) {
+            setError(error, QStringLiteral("Conversation does not exist"));
+        }
+        return nullptr;
+    }
+    if (!stored->archived) {
+        return open(*stored, error);
+    }
+
+    agent::AgentRuntime runtime = runtimeFactory_(stored->agentKind);
+    if (runtime.adapter == nullptr || runtime.selectedKind != stored->agentKind) {
+        setError(error, runtime.detail.isEmpty()
+                            ? QStringLiteral("The conversation Agent runtime is unavailable")
+                            : runtime.detail);
+        return nullptr;
+    }
+    stored->archived = false;
+    stored->status = domain::ConversationStatus::Dormant;
+    if (!repository_->saveConversation(*stored, error)) {
+        return nullptr;
+    }
+    auto* controller = addPrepared(*stored, std::move(runtime), error);
+    if (controller == nullptr) {
+        stored->archived = true;
+        QString rollbackError;
+        repository_->saveConversation(*stored, &rollbackError);
+    }
+    return controller;
+}
+
+QList<domain::Conversation> SessionManager::catalog(QString* error) const {
+    return repository_->conversations(error);
 }
 
 bool SessionManager::close(const QUuid& conversationId) { return registry_.close(conversationId); }

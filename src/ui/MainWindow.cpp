@@ -173,10 +173,14 @@ void MainWindow::refreshConversationList() {
             continue;
         }
         auto* item = new QListWidgetItem(
-            QStringLiteral("%1  ·  %2\n%3")
-                .arg(conversation.title, agentName, conversation.workingDirectory),
+            conversation.archived
+                ? tr("Archived · %1 · %2\n%3")
+                      .arg(conversation.title, agentName, conversation.workingDirectory)
+                : QStringLiteral("%1  ·  %2\n%3")
+                      .arg(conversation.title, agentName, conversation.workingDirectory),
             conversationList_);
         item->setData(Qt::UserRole, conversation.id);
+        item->setData(Qt::UserRole + 1, conversation.archived);
         item->setToolTip(conversation.workingDirectory);
         if (conversation.id == controller_->conversation().id) {
             currentRow = conversationList_->count() - 1;
@@ -193,6 +197,10 @@ void MainWindow::activateConversation(QListWidgetItem* item) {
         return;
     }
     const QUuid conversationId = item->data(Qt::UserRole).toUuid();
+    if (item->data(Qt::UserRole + 1).toBool()) {
+        statusBar()->showMessage(tr("Restore the archived conversation before opening it"), 5000);
+        return;
+    }
     if (conversationId == controller_->conversation().id) {
         return;
     }
@@ -233,9 +241,67 @@ void MainWindow::createConversation() {
     composer_->setFocus();
 }
 
+void MainWindow::archiveConversation() {
+    if (sessions_ == nullptr) {
+        return;
+    }
+    const QUuid archivedId = controller_->conversation().id;
+    const QString workspace = controller_->conversation().workingDirectory;
+    persistComposerDraft();
+    QString error;
+    const auto conversations = sessions_->catalog(&error);
+    const auto next = std::find_if(
+        conversations.cbegin(), conversations.cend(), [&archivedId](const auto& conversation) {
+            return !conversation.archived && conversation.id != archivedId;
+        });
+    session::SessionController* nextController = nullptr;
+    if (next != conversations.cend()) {
+        nextController = sessions_->open(*next, &error);
+    } else {
+        nextController = sessions_->create(workspace, settingsSnapshot_.preferredAgentKind,
+                                           tr("New conversation"), &error);
+    }
+    if (nextController == nullptr) {
+        statusBar()->showMessage(tr("Cannot prepare a replacement conversation: %1").arg(error),
+                                 8000);
+        return;
+    }
+    disconnect(controller_, nullptr, this, nullptr);
+    if (!sessions_->setArchived(archivedId, true, &error)) {
+        connectControllerSignals();
+        statusBar()->showMessage(tr("Cannot archive conversation: %1").arg(error), 8000);
+        return;
+    }
+    controller_ = nullptr;
+    bindConversation(nextController);
+}
+
+void MainWindow::restoreSelectedConversation() {
+    if (sessions_ == nullptr || conversationList_->currentItem() == nullptr) {
+        return;
+    }
+    const auto* item = conversationList_->currentItem();
+    if (!item->data(Qt::UserRole + 1).toBool()) {
+        statusBar()->showMessage(tr("The selected conversation is not archived"), 4000);
+        return;
+    }
+    const QUuid conversationId = item->data(Qt::UserRole).toUuid();
+    QString error;
+    auto* restoredController = sessions_->restore(conversationId, &error);
+    if (restoredController == nullptr) {
+        statusBar()->showMessage(tr("Cannot restore conversation: %1").arg(error), 8000);
+        refreshConversationList();
+        return;
+    }
+    persistComposerDraft();
+    bindConversation(restoredController);
+}
+
 void MainWindow::bindConversation(session::SessionController* controller) {
     Q_ASSERT(controller != nullptr);
-    disconnect(controller_, nullptr, this, nullptr);
+    if (controller_ != nullptr) {
+        disconnect(controller_, nullptr, this, nullptr);
+    }
     controller_ = controller;
     resetConversationView();
     connectControllerSignals();
@@ -850,6 +916,14 @@ void MainWindow::buildMenus() {
     renameAction->setObjectName(QStringLiteral("renameConversationAction"));
     renameAction->setShortcut(QKeySequence(Qt::Key_F2));
     connect(renameAction, &QAction::triggered, this, &MainWindow::renameConversation);
+    auto* archiveAction = fileMenu->addAction(tr("Archive conversation"));
+    archiveAction->setObjectName(QStringLiteral("archiveConversationAction"));
+    archiveAction->setEnabled(sessions_ != nullptr);
+    connect(archiveAction, &QAction::triggered, this, &MainWindow::archiveConversation);
+    auto* restoreAction = fileMenu->addAction(tr("Restore selected conversation"));
+    restoreAction->setObjectName(QStringLiteral("restoreConversationAction"));
+    restoreAction->setEnabled(sessions_ != nullptr);
+    connect(restoreAction, &QAction::triggered, this, &MainWindow::restoreSelectedConversation);
     fileMenu->addSeparator();
     auto* quitAction = fileMenu->addAction(tr("Quit"));
     quitAction->setObjectName(QStringLiteral("quitAction"));

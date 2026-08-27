@@ -24,6 +24,10 @@ class SessionManager final {
                                                      domain::AgentKind requestedKind,
                                                      const QString& placeholderTitle,
                                                      QString* error = nullptr);
+    bool setArchived(const QUuid& conversationId, bool archived, QString* error = nullptr);
+    [[nodiscard]] session::SessionController* restore(const QUuid& conversationId,
+                                                      QString* error = nullptr);
+    [[nodiscard]] QList<domain::Conversation> catalog(QString* error = nullptr) const;
     bool close(const QUuid& conversationId);
     void closeAll();
 
@@ -38,6 +42,7 @@ class SessionManager final {
     existingCompatibleController(const domain::Conversation& conversation, QString* error) const;
 
     RuntimeFactory runtimeFactory_;
+    storage::IEventRepository* repository_{nullptr};
     session::SessionRuntimeRegistry registry_;
 };
 

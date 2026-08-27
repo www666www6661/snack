@@ -70,6 +70,8 @@ class MainWindow final : public QMainWindow {
     void preferCodexAgent();
     void preferMockAgent();
     void createConversation();
+    void archiveConversation();
+    void restoreSelectedConversation();
     void activateConversation(QListWidgetItem* item);
 
   private:

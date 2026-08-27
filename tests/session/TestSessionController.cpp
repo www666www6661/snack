@@ -101,6 +101,7 @@ class TestSessionController final : public QObject {
     void streamsAndPersistsTurn();
     void replacesPlaceholderTitleFromFirstMessage();
     void renamesCurrentConversation();
+    void archivesConversationMetadata();
     void exposesConversationCatalog();
     void snapshotsSettingsPerTurn();
     void steersActiveTurn();
@@ -191,6 +192,21 @@ void TestSessionController::renamesCurrentConversation() {
     controller.close();
     QVERIFY(!controller.renameConversation(QStringLiteral("Too late"), &error));
     QVERIFY(error.contains(QStringLiteral("closed")));
+}
+
+void TestSessionController::archivesConversationMetadata() {
+    MemoryEventRepository repository;
+    snack::agent::FakeAgentAdapter adapter(nullptr, 1);
+    snack::session::SessionController controller(conversation(), &adapter, &repository);
+    QString error;
+
+    QVERIFY(controller.setArchived(true, &error));
+    QVERIFY(controller.conversation().archived);
+    QVERIFY(repository.conversation_.archived);
+    QVERIFY(controller.setArchived(true, &error));
+    QVERIFY(controller.setArchived(false, &error));
+    QVERIFY(!controller.conversation().archived);
+    QVERIFY(!repository.conversation_.archived);
 }
 
 void TestSessionController::exposesConversationCatalog() {

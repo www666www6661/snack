@@ -128,6 +128,7 @@ class TestMainWindow final : public QObject {
     void keepsCurrentConversationWhenRailOpenFails();
     void filtersConversationRailLocally();
     void createsConversationFromRail();
+    void archivesAndRestoresConversation();
 };
 
 void TestMainWindow::opensAndSwitchesConversationFromRail() {
@@ -331,6 +332,66 @@ void TestMainWindow::createsConversationFromRail() {
     QVERIFY(!notice->isHidden());
     QVERIFY(window.statusBar()->currentMessage().contains(QStringLiteral("Codex unavailable")));
     QCOMPARE(settings.load().lastConversationId, createdId.toString(QUuid::WithoutBraces));
+}
+
+void TestMainWindow::archivesAndRestoresConversation() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::app::AppSettings settings(directory.filePath(QStringLiteral("settings.ini")));
+    auto snapshot = settings.load();
+    snapshot.preferredAgentKind = snack::domain::AgentKind::Mock;
+    settings.save(snapshot);
+    UiMemoryEventRepository repository;
+    snack::domain::Conversation first;
+    first.title = QStringLiteral("Archive me");
+    first.workingDirectory = directory.path();
+    snack::domain::Conversation second;
+    second.title = QStringLiteral("Keep me");
+    second.workingDirectory = directory.path();
+    repository.catalog = {first, second};
+
+    const auto makeRuntime = [](snack::domain::AgentKind kind) {
+        snack::agent::AgentRuntime runtime;
+        runtime.requestedKind = kind;
+        runtime.selectedKind = kind;
+        runtime.adapter = std::make_unique<snack::agent::FakeAgentAdapter>(nullptr, 1);
+        return runtime;
+    };
+    snack::app::SessionManager sessions(&repository, makeRuntime);
+    QString error;
+    auto* firstController = sessions.addPrepared(first, makeRuntime(first.agentKind), &error);
+    QVERIFY2(firstController != nullptr, qPrintable(error));
+    snack::ui::MainWindow window(firstController, &settings, &sessions, false);
+    auto* archive = window.findChild<QAction*>(QStringLiteral("archiveConversationAction"));
+    auto* restore = window.findChild<QAction*>(QStringLiteral("restoreConversationAction"));
+    auto* list = window.findChild<QListWidget*>(QStringLiteral("conversationList"));
+    auto* title = window.findChild<QLabel*>(QStringLiteral("conversationTitle"));
+    QVERIFY(archive != nullptr);
+    QVERIFY(restore != nullptr);
+    QVERIFY(list != nullptr);
+    QVERIFY(title != nullptr);
+    QTRY_COMPARE(firstController->status(), snack::domain::ConversationStatus::Idle);
+
+    archive->trigger();
+    QCOMPARE(title->text(), QStringLiteral("Keep me"));
+    QVERIFY(sessions.controller(first.id) == nullptr);
+    QCOMPARE(list->count(), 2);
+
+    QListWidgetItem* archivedItem = nullptr;
+    for (int row = 0; row < list->count(); ++row) {
+        if (list->item(row)->data(Qt::UserRole).toUuid() == first.id) {
+            archivedItem = list->item(row);
+        }
+    }
+    QVERIFY(archivedItem != nullptr);
+    QVERIFY(archivedItem->data(Qt::UserRole + 1).toBool());
+    list->setCurrentItem(archivedItem);
+    restore->trigger();
+
+    QCOMPARE(title->text(), QStringLiteral("Archive me"));
+    QVERIFY(sessions.controller(first.id) != nullptr);
+    QVERIFY(!list->currentItem()->data(Qt::UserRole + 1).toBool());
+    QCOMPARE(repository.events.size(), 0);
 }
 
 void TestMainWindow::sendsAndRendersStreamingTurn() {

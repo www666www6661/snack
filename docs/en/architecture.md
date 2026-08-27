@@ -80,6 +80,8 @@ M3 multi-session ownership begins at a Widget-free registry. The application ent
 
 New conversations use a separate `create` path. The requested Agent may explicitly fall back before any native identity exists; the resulting conversation records the runtime's actual Agent type and displays the fallback diagnostic. This does not weaken historical-session isolation.
 
+Archiving is metadata-only and non-destructive. `SessionManager` refuses to archive active Agent work, persists the archive flag for an idle conversation, and then closes its runtime without deleting events, queues, drafts, or native identities. Restore first validates and creates the strict historical Agent runtime; it clears the archive flag only when an owning Controller can be established, so an unavailable Agent leaves the row archived.
+
 ## 6. WebEngine boundary
 
 Load only packaged `qrc://` assets, reject remote subresources, parse Markdown into an AST and render through an allowlist, package Mermaid and math rendering offline, expose only copy/expand/measure/scroll/link requests through WebChannel, and validate external URLs in C++. A renderer crash rebuilds from `EventStore` without affecting the agent.

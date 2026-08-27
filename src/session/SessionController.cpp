@@ -271,6 +271,19 @@ bool SessionController::renameConversation(const QString& title, QString* error)
     return true;
 }
 
+bool SessionController::setArchived(bool archived, QString* error) {
+    if (conversation_.archived == archived) {
+        return true;
+    }
+    const bool previous = conversation_.archived;
+    conversation_.archived = archived;
+    if (!repository_->saveConversation(conversation_, error)) {
+        conversation_.archived = previous;
+        return false;
+    }
+    return true;
+}
+
 bool SessionController::steerMessage(const QString& message, QString* error) {
     const QString trimmed = message.trimmed();
     if (trimmed.isEmpty()) {
