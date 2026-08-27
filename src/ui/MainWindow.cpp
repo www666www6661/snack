@@ -8,6 +8,8 @@
 #include <QApplication>
 #include <QCloseEvent>
 #include <QComboBox>
+#include <QDate>
+#include <QDateTime>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDockWidget>
@@ -33,6 +35,8 @@
 #include <QStyle>
 #include <QStyleHints>
 #include <QSystemTrayIcon>
+#include <QTime>
+#include <QTimeZone>
 #include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
@@ -104,8 +108,16 @@ QStringList conversationQueryTerms(const QString& query) {
     return terms;
 }
 
+std::optional<QDateTime> localDayStart(const QString& value) {
+    const QDate date = QDate::fromString(value, Qt::ISODate);
+    if (!date.isValid()) {
+        return std::nullopt;
+    }
+    return QDateTime(date, QTime(0, 0), QTimeZone::systemTimeZone()).toUTC();
+}
+
 bool conversationMatchesQuery(const domain::Conversation& conversation, const QString& agentName,
-                              const QString& query) {
+                              const QString& query, const QDateTime& now) {
     const QStringList terms = conversationQueryTerms(query);
     for (const QString& term : terms) {
         if (term.left(4).compare(QStringLiteral("tag:"), Qt::CaseInsensitive) == 0) {
@@ -158,6 +170,41 @@ bool conversationMatchesQuery(const domain::Conversation& conversation, const QS
             const QString requestedPath = term.sliced(5);
             if (requestedPath.isEmpty() ||
                 !conversation.workingDirectory.contains(requestedPath, Qt::CaseInsensitive)) {
+                return false;
+            }
+            continue;
+        }
+        if (term.left(6).compare(QStringLiteral("after:"), Qt::CaseInsensitive) == 0) {
+            const auto boundary = localDayStart(term.sliced(6));
+            if (!boundary.has_value() || !conversation.lastActivityAt.isValid() ||
+                conversation.lastActivityAt < *boundary) {
+                return false;
+            }
+            continue;
+        }
+        if (term.left(7).compare(QStringLiteral("before:"), Qt::CaseInsensitive) == 0) {
+            const auto boundary = localDayStart(term.sliced(7));
+            if (!boundary.has_value() || !conversation.lastActivityAt.isValid() ||
+                conversation.lastActivityAt >= *boundary) {
+                return false;
+            }
+            continue;
+        }
+        if (term.left(5).compare(QStringLiteral("time:"), Qt::CaseInsensitive) == 0) {
+            const QString period = term.sliced(5).toCaseFolded();
+            QDateTime boundary;
+            if (period == QLatin1String("today")) {
+                boundary =
+                    QDateTime(now.toLocalTime().date(), QTime(0, 0), QTimeZone::systemTimeZone())
+                        .toUTC();
+            } else if (period == QLatin1String("7d")) {
+                boundary = now.addDays(-7);
+            } else if (period == QLatin1String("30d")) {
+                boundary = now.addDays(-30);
+            } else {
+                return false;
+            }
+            if (!conversation.lastActivityAt.isValid() || conversation.lastActivityAt < boundary) {
                 return false;
             }
             continue;
@@ -263,6 +310,7 @@ void MainWindow::refreshConversationList() {
     conversationList_->clear();
     int currentRow = -1;
     const QString query = conversationSearch_->text().trimmed();
+    const QDateTime queryTime = QDateTime::currentDateTimeUtc();
     for (const auto& conversation : conversationCatalog_) {
         if (conversation.archived && !settingsSnapshot_.showArchivedConversations) {
             continue;
@@ -279,7 +327,7 @@ void MainWindow::refreshConversationList() {
             agentName = tr("Mock Agent");
             break;
         }
-        if (!conversationMatchesQuery(conversation, agentName, query)) {
+        if (!conversationMatchesQuery(conversation, agentName, query, queryTime)) {
             continue;
         }
         const QString title =
@@ -1350,7 +1398,8 @@ void MainWindow::buildUi() {
     conversationSearch_->setObjectName(QStringLiteral("conversationSearch"));
     conversationSearch_->setPlaceholderText(tr("Search conversations or tag:name"));
     conversationSearch_->setToolTip(
-        tr("Filters: tag:name, agent:name, model:id, status:name, path:\"directory\""));
+        tr("Filters: tag:name, agent:name, model:id, status:name, path:\"directory\", "
+           "after:YYYY-MM-DD, before:YYYY-MM-DD, time:today|7d|30d"));
     conversationSearch_->setClearButtonEnabled(true);
     conversationSearch_->installEventFilter(this);
     sessionRow_ = new QLabel(

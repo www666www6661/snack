@@ -8,6 +8,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QComboBox>
+#include <QDateTime>
 #include <QDialog>
 #include <QDir>
 #include <QDockWidget>
@@ -319,11 +320,14 @@ void TestMainWindow::filtersConversationRailLocally() {
     codex.modelId = QStringLiteral("gpt-5.6-sol");
     codex.status = snack::domain::ConversationStatus::WaitingApproval;
     codex.tags = {QStringLiteral("Backend"), QStringLiteral("urgent")};
+    codex.lastActivityAt =
+        QDateTime::fromString(QStringLiteral("2024-01-01T12:00:00Z"), Qt::ISODate);
     snack::domain::Conversation mock;
     mock.title = QStringLiteral("Prototype UI");
     mock.workingDirectory = QStringLiteral("C:/projects/snack");
     mock.modelId = QStringLiteral("mock-balanced");
     mock.tags = {QStringLiteral("frontend")};
+    mock.lastActivityAt = QDateTime::currentDateTimeUtc();
     repository.catalog = {codex, mock};
 
     snack::agent::FakeAgentAdapter adapter(nullptr, 1);
@@ -336,7 +340,8 @@ void TestMainWindow::filtersConversationRailLocally() {
     QCOMPARE(search->placeholderText(), QStringLiteral("Search conversations or tag:name"));
     QCOMPARE(
         search->toolTip(),
-        QStringLiteral("Filters: tag:name, agent:name, model:id, status:name, path:\"directory\""));
+        QStringLiteral("Filters: tag:name, agent:name, model:id, status:name, path:\"directory\", "
+                       "after:YYYY-MM-DD, before:YYYY-MM-DD, time:today|7d|30d"));
     QCOMPARE(list->count(), 2);
 
     search->setText(QStringLiteral("parser"));
@@ -411,6 +416,22 @@ void TestMainWindow::filtersConversationRailLocally() {
     search->setText(QStringLiteral("path:\"compiler tools\" agent:mock"));
     QCOMPARE(list->count(), 0);
     search->setText(QStringLiteral("path:"));
+    QCOMPARE(list->count(), 0);
+    search->setText(QStringLiteral("after:2025-01-01"));
+    QCOMPARE(list->count(), 1);
+    QCOMPARE(list->item(0)->data(Qt::UserRole).toUuid(), mock.id);
+    search->setText(QStringLiteral("before:2025-01-01"));
+    QCOMPARE(list->count(), 1);
+    QCOMPARE(list->item(0)->data(Qt::UserRole).toUuid(), codex.id);
+    search->setText(QStringLiteral("time:today agent:mock"));
+    QCOMPARE(list->count(), 1);
+    QCOMPARE(list->item(0)->data(Qt::UserRole).toUuid(), mock.id);
+    search->setText(QStringLiteral("time:7d"));
+    QCOMPARE(list->count(), 1);
+    QCOMPARE(list->item(0)->data(Qt::UserRole).toUuid(), mock.id);
+    search->setText(QStringLiteral("time:unknown"));
+    QCOMPARE(list->count(), 0);
+    search->setText(QStringLiteral("after:not-a-date"));
     QCOMPARE(list->count(), 0);
     search->setText(QStringLiteral("\"Review parser\""));
     QCOMPARE(list->count(), 1);

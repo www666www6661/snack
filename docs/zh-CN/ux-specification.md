@@ -29,7 +29,7 @@ M3 会话栏由 Repository 目录真实驱动，不使用占位条目。选择�
 
 会话栏遵循标准 Qt 列表导航：方向键只移动选择，不切换会话；`Enter` 或双击通过同一受保护导航路径激活所选条目。归档条目仍不可激活。
 
-会话搜索只在已加载目录中进行本地过滤，并对标题、工作区路径、Agent 类型和标签执行不区分大小写的匹配。空白分隔的搜索词使用 AND 语义，双引号可将内部空白保留在同一个搜索词中；`tag:名称` 要求不区分大小写的完整标签匹配，`agent:codex`、`agent:claude` 或 `agent:mock` 则使用不受界面语言影响的稳定 Agent 类型。`model:标识` 对持久化的下一 Turn 模型 ID 执行不区分大小写的完整匹配，绝不会为发现模型而打开 Runtime。`status:` 接受稳定值 `dormant`、`connecting`、`idle`、`running`、`waiting-approval`、`waiting-input`、`disconnected`、`failed` 和 `closed`。`path:"目录名称"` 对工作区路径执行不区分大小写的子串匹配，并支持包含空格的路径。结构化搜索词可相互组合，也可与普通文本组合。筛选不会打开、关闭、重连或以其他方式修改会话；清空搜索词后恢复 Repository 定义的顺序。
+会话搜索只在已加载目录中进行本地过滤，并对标题、工作区路径、Agent 类型和标签执行不区分大小写的匹配。空白分隔的搜索词使用 AND 语义，双引号可将内部空白保留在同一个搜索词中；`tag:名称` 要求不区分大小写的完整标签匹配，`agent:codex`、`agent:claude` 或 `agent:mock` 则使用不受界面语言影响的稳定 Agent 类型。`model:标识` 对持久化的下一 Turn 模型 ID 执行不区分大小写的完整匹配，绝不会为发现模型而打开 Runtime。`status:` 接受稳定值 `dormant`、`connecting`、`idle`、`running`、`waiting-approval`、`waiting-input`、`disconnected`、`failed` 和 `closed`。`path:"目录名称"` 对工作区路径执行不区分大小写的子串匹配，并支持包含空格的路径。`after:YYYY-MM-DD` 包含本地日期当天零点及之后有活动的会话，`before:YYYY-MM-DD` 使用同一边界执行排他上限，`time:today`、`time:7d` 与 `time:30d` 提供常用最近活动窗口；无效日期或时间窗口不匹配任何条目。结构化搜索词可相互组合，也可与普通文本组合。筛选不会打开、关闭、重连或以其他方式修改会话；清空搜索词后恢复 Repository 定义的顺序。
 
 `Ctrl/Cmd+K` 会清空当前会话栏筛选并聚焦搜索框，不触碰任何会话 Runtime。
 
