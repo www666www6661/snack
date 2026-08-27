@@ -23,6 +23,8 @@ AppSettingsSnapshot AppSettings::load() const {
     result.lastWorkspace = settings_->value(QStringLiteral("session/lastWorkspace")).toString();
     result.lastConversationId =
         settings_->value(QStringLiteral("session/lastConversationId")).toString();
+    result.showArchivedConversations =
+        settings_->value(QStringLiteral("session/showArchivedConversations"), true).toBool();
     result.preferredAgentKind = preferredAgentKindFromString(
         settings_->value(QStringLiteral("agent/preferred"), QStringLiteral("codex")).toString());
     result.codexExecutable = settings_->value(QStringLiteral("agent/codexExecutable")).toString();
@@ -39,6 +41,8 @@ void AppSettings::save(const AppSettingsSnapshot& snapshot) {
                         std::clamp(snapshot.interfaceScale, 0.8, 2.0));
     settings_->setValue(QStringLiteral("session/lastWorkspace"), snapshot.lastWorkspace);
     settings_->setValue(QStringLiteral("session/lastConversationId"), snapshot.lastConversationId);
+    settings_->setValue(QStringLiteral("session/showArchivedConversations"),
+                        snapshot.showArchivedConversations);
     settings_->setValue(QStringLiteral("agent/preferred"),
                         domain::enumName(snapshot.preferredAgentKind));
     settings_->setValue(QStringLiteral("agent/codexExecutable"), snapshot.codexExecutable);

@@ -17,6 +17,7 @@ struct AppSettingsSnapshot {
     double interfaceScale{1.0};
     QString lastWorkspace;
     QString lastConversationId;
+    bool showArchivedConversations{true};
     domain::AgentKind preferredAgentKind{domain::AgentKind::Codex};
     QString codexExecutable;
     QByteArray mainWindowGeometry;

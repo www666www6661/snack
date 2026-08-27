@@ -64,6 +64,7 @@ class MainWindow final : public QMainWindow {
     void applyLightTheme();
     void applyDarkTheme();
     void focusConversationSearch();
+    void setShowArchivedConversations(bool visible);
     void increaseScale();
     void decreaseScale();
     void resetScale();
@@ -165,6 +166,7 @@ class MainWindow final : public QMainWindow {
     QString startupNotice_;
     QList<domain::Conversation> conversationCatalog_;
     QAction* pinConversationAction_{nullptr};
+    QAction* showArchivedConversationsAction_{nullptr};
     QMenu* conversationContextMenu_{nullptr};
     QAction* contextOpenAction_{nullptr};
     QAction* contextPinAction_{nullptr};

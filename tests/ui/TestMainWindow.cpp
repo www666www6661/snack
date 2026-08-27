@@ -146,6 +146,7 @@ class TestMainWindow final : public QObject {
     void pinsAndReordersConversationRail();
     void operatesOnSelectedConversationFromContextMenu();
     void updatesConversationRailForBackgroundRuntimeStatus();
+    void persistsArchivedConversationVisibility();
 };
 
 void TestMainWindow::opensAndSwitchesConversationFromRail() {
@@ -621,6 +622,49 @@ void TestMainWindow::updatesConversationRailForBackgroundRuntimeStatus() {
                               1000);
     QTRY_VERIFY(backgroundItem() != nullptr &&
                 backgroundItem()->text().contains(QStringLiteral("Idle")));
+}
+
+void TestMainWindow::persistsArchivedConversationVisibility() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString settingsPath = directory.filePath(QStringLiteral("settings.ini"));
+    snack::app::AppSettings settings(settingsPath);
+    UiMemoryEventRepository repository;
+    snack::domain::Conversation active;
+    active.title = QStringLiteral("Active");
+    active.workingDirectory = directory.path();
+    snack::domain::Conversation archived;
+    archived.title = QStringLiteral("Archived");
+    archived.workingDirectory = directory.path();
+    archived.archived = true;
+    repository.catalog = {active, archived};
+
+    snack::agent::FakeAgentAdapter adapter(nullptr, 1);
+    snack::session::SessionController controller(active, &adapter, &repository);
+    {
+        snack::ui::MainWindow window(&controller, &settings, false);
+        auto* list = window.findChild<QListWidget*>(QStringLiteral("conversationList"));
+        auto* action =
+            window.findChild<QAction*>(QStringLiteral("showArchivedConversationsAction"));
+        QVERIFY(list != nullptr);
+        QVERIFY(action != nullptr);
+        QVERIFY(action->isChecked());
+        QCOMPARE(list->count(), 2);
+
+        action->setChecked(false);
+        QCOMPARE(list->count(), 1);
+        QCOMPARE(list->item(0)->data(Qt::UserRole).toUuid(), active.id);
+        QVERIFY(!settings.load().showArchivedConversations);
+    }
+
+    snack::ui::MainWindow restored(&controller, &settings, false);
+    auto* restoredList = restored.findChild<QListWidget*>(QStringLiteral("conversationList"));
+    auto* restoredAction =
+        restored.findChild<QAction*>(QStringLiteral("showArchivedConversationsAction"));
+    QVERIFY(restoredList != nullptr);
+    QVERIFY(restoredAction != nullptr);
+    QVERIFY(!restoredAction->isChecked());
+    QCOMPARE(restoredList->count(), 1);
 }
 
 void TestMainWindow::sendsAndRendersStreamingTurn() {

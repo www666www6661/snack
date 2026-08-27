@@ -22,6 +22,7 @@ void TestAppSettings::usesSafeDefaults() {
     QCOMPARE(snapshot.themeMode, snack::app::ThemeMode::System);
     QCOMPARE(snapshot.locale, QStringLiteral("system"));
     QCOMPARE(snapshot.interfaceScale, 1.0);
+    QVERIFY(snapshot.showArchivedConversations);
     QCOMPARE(snapshot.preferredAgentKind, snack::domain::AgentKind::Codex);
     QVERIFY(snapshot.codexExecutable.isEmpty());
     QVERIFY(snapshot.mainWindowGeometry.isEmpty());
@@ -39,6 +40,7 @@ void TestAppSettings::persistsValues() {
         snapshot.locale = QStringLiteral("zh_CN");
         snapshot.interfaceScale = 1.4;
         snapshot.lastWorkspace = QStringLiteral("workspace");
+        snapshot.showArchivedConversations = false;
         snapshot.preferredAgentKind = snack::domain::AgentKind::Mock;
         snapshot.codexExecutable = QStringLiteral("custom-codex");
         snapshot.mainWindowGeometry = QByteArrayLiteral("geometry");
@@ -52,6 +54,7 @@ void TestAppSettings::persistsValues() {
     QCOMPARE(snapshot.locale, QStringLiteral("zh_CN"));
     QCOMPARE(snapshot.interfaceScale, 1.4);
     QCOMPARE(snapshot.lastWorkspace, QStringLiteral("workspace"));
+    QVERIFY(!snapshot.showArchivedConversations);
     QCOMPARE(snapshot.preferredAgentKind, snack::domain::AgentKind::Mock);
     QCOMPARE(snapshot.codexExecutable, QStringLiteral("custom-codex"));
     QCOMPARE(snapshot.mainWindowGeometry, QByteArrayLiteral("geometry"));

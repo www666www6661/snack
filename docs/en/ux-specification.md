@@ -30,6 +30,8 @@ Each rail row exposes a context menu for opening, pinning, archiving, or restori
 
 Active rows include a text status such as Connecting, Idle, Running, Waiting for approval/input, Disconnected, or Failed. Status changes from every open runtime refresh the rail in place, so background work remains visible without switching conversations.
 
+The View menu can hide or show archived rows. This is a persistent local view preference, defaults to visible for compatibility, and never changes archive metadata or runtime ownership.
+
 A persistent notice directly below the header reports an Agent fallback, connection loss, or reconnect attempt. Fallback notices remain visible while the fallback Agent is active. Connection failures preserve the original diagnostic and expose Reconnect in the notice; retrying keeps the previous cause visible until the native handshake succeeds. The status bar may echo the message but is never its only location. `Closed` is terminal: delayed connection, capability, native-identity, or event signals from an asynchronously exiting Agent cannot reopen the conversation, replace its diagnostic, or append timeline data.
 
 ## 4. Timeline

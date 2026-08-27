@@ -155,6 +155,9 @@ void MainWindow::refreshConversationList() {
     int currentRow = -1;
     const QString query = conversationSearch_->text().trimmed();
     for (const auto& conversation : conversationCatalog_) {
+        if (conversation.archived && !settingsSnapshot_.showArchivedConversations) {
+            continue;
+        }
         QString agentName;
         switch (conversation.agentKind) {
         case domain::AgentKind::Codex:
@@ -750,6 +753,12 @@ void MainWindow::focusConversationSearch() {
     conversationSearch_->setFocus();
 }
 
+void MainWindow::setShowArchivedConversations(bool visible) {
+    settingsSnapshot_.showArchivedConversations = visible;
+    settings_->save(settingsSnapshot_);
+    refreshConversationList();
+}
+
 void MainWindow::increaseScale() { applyInterfaceScale(settingsSnapshot_.interfaceScale + 0.1); }
 void MainWindow::decreaseScale() { applyInterfaceScale(settingsSnapshot_.interfaceScale - 0.1); }
 void MainWindow::resetScale() { applyInterfaceScale(1.0); }
@@ -1092,6 +1101,13 @@ void MainWindow::buildMenus() {
     searchConversations->setObjectName(QStringLiteral("searchConversationsAction"));
     searchConversations->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_K));
     connect(searchConversations, &QAction::triggered, this, &MainWindow::focusConversationSearch);
+    showArchivedConversationsAction_ = viewMenu->addAction(tr("Show archived conversations"));
+    showArchivedConversationsAction_->setObjectName(
+        QStringLiteral("showArchivedConversationsAction"));
+    showArchivedConversationsAction_->setCheckable(true);
+    showArchivedConversationsAction_->setChecked(settingsSnapshot_.showArchivedConversations);
+    connect(showArchivedConversationsAction_, &QAction::toggled, this,
+            &MainWindow::setShowArchivedConversations);
     auto* focusComposer = viewMenu->addAction(tr("Focus composer"));
     focusComposer->setObjectName(QStringLiteral("focusComposerAction"));
     focusComposer->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_L));
