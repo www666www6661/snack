@@ -132,6 +132,7 @@ class TestSessionController final : public QObject {
 
   private slots:
     void streamsAndPersistsTurn();
+    void sendsAndQueuesAttachments();
     void replacesPlaceholderTitleFromFirstMessage();
     void renamesCurrentConversation();
     void archivesConversationMetadata();
@@ -183,6 +184,24 @@ void TestSessionController::streamsAndPersistsTurn() {
     for (qsizetype index = 0; index < repository.events_.size(); ++index) {
         QCOMPARE(repository.events_.at(index).sequence, static_cast<quint64>(index + 1));
     }
+}
+
+void TestSessionController::sendsAndQueuesAttachments() {
+    MemoryEventRepository repository;
+    snack::agent::FakeAgentAdapter adapter(nullptr, 1000);
+    snack::session::SessionController controller(conversation(), &adapter, &repository);
+    const QJsonArray attachments{
+        QJsonObject{{QStringLiteral("kind"), QStringLiteral("image")},
+                    {QStringLiteral("path"), QStringLiteral("/tmp/screenshot.png")}}};
+    controller.open();
+    QTRY_COMPARE(controller.status(), snack::domain::ConversationStatus::Idle);
+    QVERIFY(controller.sendMessage({}, attachments));
+    QCOMPARE(adapter.lastTurnRequest().attachments, attachments);
+    QCOMPARE(repository.events_.constFirst().payload.value(QStringLiteral("attachments")).toArray(),
+             attachments);
+    QVERIFY(controller.queueMessage(QStringLiteral("follow up"), attachments));
+    QCOMPARE(controller.queuedMessages().constFirst().attachments, attachments);
+    controller.interrupt();
 }
 
 void TestSessionController::replacesPlaceholderTitleFromFirstMessage() {

@@ -78,9 +78,24 @@ QJsonObject makeTurnStartParameters(const QString& threadId, const QString& cwd,
                                     const TurnRequest& request) {
     QJsonObject params = turnAccessParameters(request.settings.accessLevel);
     params.insert(QStringLiteral("threadId"), threadId);
-    params.insert(QStringLiteral("input"),
-                  QJsonArray{QJsonObject{{QStringLiteral("type"), QStringLiteral("text")},
-                                         {QStringLiteral("text"), request.message}}});
+    QJsonArray input{QJsonObject{{QStringLiteral("type"), QStringLiteral("text")},
+                                 {QStringLiteral("text"), request.message}}};
+    for (const QJsonValue& value : request.attachments) {
+        const QJsonObject attachment = value.toObject();
+        const QString path = attachment.value(QStringLiteral("path")).toString();
+        if (path.isEmpty()) {
+            continue;
+        }
+        if (attachment.value(QStringLiteral("kind")).toString() == QLatin1String("image")) {
+            input.append(QJsonObject{{QStringLiteral("type"), QStringLiteral("localImage")},
+                                     {QStringLiteral("path"), path}});
+        } else {
+            input.append(QJsonObject{{QStringLiteral("type"), QStringLiteral("text")},
+                                     {QStringLiteral("text"),
+                                      QStringLiteral("Attached file reference: @%1").arg(path)}});
+        }
+    }
+    params.insert(QStringLiteral("input"), input);
     params.insert(QStringLiteral("clientUserMessageId"),
                   request.turnId.toString(QUuid::WithoutBraces));
     params.insert(QStringLiteral("cwd"), cwd);

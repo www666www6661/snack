@@ -39,6 +39,8 @@ set(SNACK_CORE_SOURCES
     app/SessionManager.h
     app/SingleInstanceGuard.cpp
     app/SingleInstanceGuard.h
+    app/WorkspaceFileIndex.cpp
+    app/WorkspaceFileIndex.h
     domain/DomainTypes.cpp
     domain/DomainTypes.h
     domain/PromptTemplateEngine.cpp

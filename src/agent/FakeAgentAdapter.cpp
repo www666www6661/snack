@@ -50,6 +50,8 @@ QJsonObject FakeAgentAdapter::lastUserInputAnswers() const { return lastUserInpu
 
 SteerRequest FakeAgentAdapter::lastSteerRequest() const { return lastSteerRequest_; }
 
+TurnRequest FakeAgentAdapter::lastTurnRequest() const { return activeRequest_; }
+
 void FakeAgentAdapter::connectAgent(const AgentConnectionRequest& request) {
     lastConnectionRequest_ = request;
     QTimer::singleShot(0, this, [this] {

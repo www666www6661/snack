@@ -33,6 +33,8 @@ class SessionController final : public QObject {
 
     void open();
     bool sendMessage(const QString& message, QString* error = nullptr);
+    bool sendMessage(const QString& message, const QJsonArray& attachments,
+                     QString* error = nullptr);
     bool renameConversation(const QString& title, QString* error = nullptr);
     bool setArchived(bool archived, QString* error = nullptr);
     bool setPinned(bool pinned, QString* error = nullptr);
@@ -40,6 +42,8 @@ class SessionController final : public QObject {
     bool setGroup(const QString& groupName, QString* error = nullptr);
     bool steerMessage(const QString& message, QString* error = nullptr);
     bool queueMessage(const QString& message, QString* error = nullptr);
+    bool queueMessage(const QString& message, const QJsonArray& attachments,
+                      QString* error = nullptr);
     bool updateQueuedMessage(const QUuid& messageId, const QString& message,
                              QString* error = nullptr);
     bool moveQueuedMessage(const QUuid& messageId, qsizetype position, QString* error = nullptr);

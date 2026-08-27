@@ -67,6 +67,9 @@ class MainWindow final : public QMainWindow {
     void cancelQueuedMessage();
     void showPromptTemplateMenu();
     void saveComposerAsTemplate();
+    void chooseAttachments();
+    void removeSelectedAttachment();
+    void chooseWorkspaceReference();
     void updateSessionSettings();
     void applySystemTheme();
     void applyLightTheme();
@@ -179,6 +182,10 @@ class MainWindow final : public QMainWindow {
     QPushButton* stopButton_{nullptr};
     QPushButton* reconnectButton_{nullptr};
     QPushButton* templateButton_{nullptr};
+    QPushButton* attachmentButton_{nullptr};
+    QPushButton* workspaceReferenceButton_{nullptr};
+    QListWidget* attachmentList_{nullptr};
+    QPushButton* attachmentRemoveButton_{nullptr};
     QMenu* templateMenu_{nullptr};
     QFrame* queueFrame_{nullptr};
     QListWidget* queueList_{nullptr};
@@ -263,6 +270,7 @@ class MainWindow final : public QMainWindow {
     QHash<QString, ReasoningCardState> reasoningCards_;
     QHash<QUuid, QPointer<MainWindow>> detachedWindows_;
     QString streamedPlanText_;
+    QJsonArray composerAttachments_;
     int activeAgentRow_{-1};
     bool restoringTimeline_{false};
     bool closeToTrayEnabled_{false};

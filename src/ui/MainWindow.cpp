@@ -1,5 +1,6 @@
 #include "ui/MainWindow.h"
 
+#include "app/WorkspaceFileIndex.h"
 #include "domain/PromptTemplateEngine.h"
 #include "ui/ComposerTextEdit.h"
 
@@ -14,6 +15,7 @@
 #include <QDialogButtonBox>
 #include <QDockWidget>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QFormLayout>
 #include <QFrame>
 #include <QHBoxLayout>
@@ -925,6 +927,10 @@ void MainWindow::resetConversationView() {
     planExplanation_->setText(tr("Agent plans will appear here."));
     streamedPlanText_.clear();
     taskDock_->hide();
+    composerAttachments_ = {};
+    attachmentList_->clear();
+    attachmentList_->hide();
+    attachmentRemoveButton_->hide();
     const QSignalBlocker blocker(composer_);
     composer_->clear();
 }
@@ -956,16 +962,86 @@ void MainWindow::sendMessage() {
     const bool active = controller_->status() == domain::ConversationStatus::Running ||
                         controller_->status() == domain::ConversationStatus::WaitingApproval ||
                         controller_->status() == domain::ConversationStatus::WaitingInput;
-    const bool queue = active && sendModeCombo_->currentData().toString() == QLatin1String("queue");
-    const bool accepted = queue    ? controller_->queueMessage(composer_->toPlainText(), &error)
-                          : active ? controller_->steerMessage(composer_->toPlainText(), &error)
-                                   : controller_->sendMessage(composer_->toPlainText(), &error);
+    const bool queue =
+        active && (sendModeCombo_->currentData().toString() == QLatin1String("queue") ||
+                   !composerAttachments_.isEmpty());
+    const bool accepted =
+        queue    ? controller_->queueMessage(composer_->toPlainText(), composerAttachments_, &error)
+        : active ? controller_->steerMessage(composer_->toPlainText(), &error)
+                 : controller_->sendMessage(composer_->toPlainText(), composerAttachments_, &error);
     if (!accepted) {
         statusBar()->showMessage(error, 4000);
         return;
     }
     composer_->clear();
+    composerAttachments_ = {};
+    attachmentList_->clear();
+    attachmentList_->hide();
+    attachmentRemoveButton_->hide();
     persistComposerDraft();
+}
+
+void MainWindow::chooseAttachments() {
+    QFileDialog dialog(this, tr("Attach files"), controller_->conversation().workingDirectory);
+    dialog.setObjectName(QStringLiteral("attachmentFileDialog"));
+    dialog.setFileMode(QFileDialog::ExistingFiles);
+    dialog.setOption(QFileDialog::DontUseNativeDialog);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+    static const QSet<QString> imageSuffixes = {QStringLiteral("png"), QStringLiteral("jpg"),
+                                                QStringLiteral("jpeg"), QStringLiteral("gif"),
+                                                QStringLiteral("webp")};
+    for (const QString& path : dialog.selectedFiles()) {
+        const QString absolutePath = QFileInfo(path).absoluteFilePath();
+        bool duplicate = false;
+        for (const QJsonValue& value : composerAttachments_) {
+            duplicate = duplicate || value.toObject().value(QStringLiteral("path")) == absolutePath;
+        }
+        if (duplicate) {
+            continue;
+        }
+        const QString kind = imageSuffixes.contains(QFileInfo(path).suffix().toCaseFolded())
+                                 ? QStringLiteral("image")
+                                 : QStringLiteral("file");
+        composerAttachments_.append(
+            QJsonObject{{QStringLiteral("kind"), kind}, {QStringLiteral("path"), absolutePath}});
+        auto* item = new QListWidgetItem(
+            tr("%1 · %2").arg(kind == QLatin1String("image") ? tr("Image") : tr("File"),
+                              QDir::toNativeSeparators(absolutePath)),
+            attachmentList_);
+        item->setData(Qt::UserRole, absolutePath);
+    }
+    attachmentList_->setVisible(!composerAttachments_.isEmpty());
+    attachmentRemoveButton_->setVisible(!composerAttachments_.isEmpty());
+}
+
+void MainWindow::removeSelectedAttachment() {
+    const int row = attachmentList_->currentRow();
+    if (row < 0 || row >= composerAttachments_.size()) {
+        return;
+    }
+    composerAttachments_.removeAt(row);
+    delete attachmentList_->takeItem(row);
+    attachmentList_->setVisible(!composerAttachments_.isEmpty());
+    attachmentRemoveButton_->setVisible(!composerAttachments_.isEmpty());
+}
+
+void MainWindow::chooseWorkspaceReference() {
+    const QStringList files =
+        app::WorkspaceFileIndex::files(controller_->conversation().workingDirectory);
+    if (files.isEmpty()) {
+        statusBar()->showMessage(tr("No workspace files are available to reference"), 4000);
+        return;
+    }
+    bool accepted = false;
+    const QString selected = QInputDialog::getItem(this, tr("Reference workspace file"), tr("File"),
+                                                   files, 0, true, &accepted);
+    if (!accepted || selected.trimmed().isEmpty()) {
+        return;
+    }
+    composer_->insertPlainText(QStringLiteral("@%1 ").arg(selected.trimmed()));
+    composer_->setFocus();
 }
 
 void MainWindow::queueComposerMessage() {
@@ -991,6 +1067,7 @@ void MainWindow::updateQueuedMessages(const QList<domain::QueuedMessage>& messag
     for (const auto& message : messages) {
         auto* item = new QListWidgetItem(message.content, queueList_);
         item->setData(Qt::UserRole, message.id);
+        item->setData(Qt::UserRole + 1, message.attachments);
         item->setFlags(item->flags() | Qt::ItemIsEditable);
         if (message.id == selectedId) {
             selectedRow = static_cast<int>(message.position);
@@ -1011,9 +1088,11 @@ void MainWindow::updateQueueControls() {
     queueUpButton_->setEnabled(selected && row > 0);
     queueDownButton_->setEnabled(selected && row + 1 < queueList_->count());
     queueRemoveButton_->setEnabled(selected);
+    const bool hasAttachments =
+        selected && !queueList_->currentItem()->data(Qt::UserRole + 1).toJsonArray().isEmpty();
     const bool canSend = controller_->status() == domain::ConversationStatus::Idle ||
                          (controller_->status() == domain::ConversationStatus::Running &&
-                          controller_->capabilities().supportsSteering);
+                          controller_->capabilities().supportsSteering && !hasAttachments);
     queueSendNowButton_->setEnabled(selected && canSend);
 }
 
@@ -1895,6 +1974,12 @@ void MainWindow::buildUi() {
     templateButton_->setToolTip(tr("Prompt templates"));
     templateMenu_ = new QMenu(templateButton_);
     templateMenu_->setObjectName(QStringLiteral("templateMenu"));
+    attachmentButton_ = new QPushButton(QStringLiteral("+"), composerRow);
+    attachmentButton_->setObjectName(QStringLiteral("attachmentButton"));
+    attachmentButton_->setToolTip(tr("Attach files"));
+    workspaceReferenceButton_ = new QPushButton(QStringLiteral("@"), composerRow);
+    workspaceReferenceButton_->setObjectName(QStringLiteral("workspaceReferenceButton"));
+    workspaceReferenceButton_->setToolTip(tr("Reference a workspace file"));
     sendModeCombo_ = new QComboBox(composerRow);
     sendModeCombo_->setObjectName(QStringLiteral("sendModeCombo"));
     sendModeCombo_->hide();
@@ -1903,12 +1988,23 @@ void MainWindow::buildUi() {
     stopButton_ = new QPushButton(tr("Stop"), composerRow);
     stopButton_->setObjectName(QStringLiteral("stopButton"));
     stopButton_->hide();
+    composerRowLayout->addWidget(attachmentButton_, 0, Qt::AlignBottom);
+    composerRowLayout->addWidget(workspaceReferenceButton_, 0, Qt::AlignBottom);
     composerRowLayout->addWidget(templateButton_, 0, Qt::AlignBottom);
     composerRowLayout->addWidget(composer_, 1);
     composerRowLayout->addWidget(sendModeCombo_, 0, Qt::AlignBottom);
     composerRowLayout->addWidget(stopButton_, 0, Qt::AlignBottom);
     composerRowLayout->addWidget(sendButton_, 0, Qt::AlignBottom);
+    attachmentList_ = new QListWidget(composerFrame);
+    attachmentList_->setObjectName(QStringLiteral("attachmentList"));
+    attachmentList_->setMaximumHeight(96);
+    attachmentList_->hide();
+    attachmentRemoveButton_ = new QPushButton(tr("Remove selected attachment"), composerFrame);
+    attachmentRemoveButton_->setObjectName(QStringLiteral("attachmentRemoveButton"));
+    attachmentRemoveButton_->hide();
     composerLayout->addWidget(queueFrame_);
+    composerLayout->addWidget(attachmentList_);
+    composerLayout->addWidget(attachmentRemoveButton_, 0, Qt::AlignRight);
     composerLayout->addWidget(composerRow);
 
     conversationLayout->addWidget(header);
@@ -2009,6 +2105,13 @@ void MainWindow::buildUi() {
     connect(composer_, &ComposerTextEdit::templateMenuRequested, this,
             &MainWindow::showPromptTemplateMenu);
     connect(templateButton_, &QPushButton::clicked, this, &MainWindow::showPromptTemplateMenu);
+    connect(attachmentButton_, &QPushButton::clicked, this, &MainWindow::chooseAttachments);
+    connect(attachmentRemoveButton_, &QPushButton::clicked, this,
+            &MainWindow::removeSelectedAttachment);
+    connect(workspaceReferenceButton_, &QPushButton::clicked, this,
+            &MainWindow::chooseWorkspaceReference);
+    connect(composer_, &ComposerTextEdit::workspaceReferenceRequested, this,
+            &MainWindow::chooseWorkspaceReference);
     connect(templateMenu_, &QMenu::aboutToShow, this, &MainWindow::rebuildPromptTemplateMenu);
     draftSaveTimer_ = new QTimer(this);
     draftSaveTimer_->setSingleShot(true);

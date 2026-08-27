@@ -190,6 +190,7 @@ class TestMainWindow final : public QObject {
     void interruptsRunningTurnFromSendButton();
     void editsAndControlsQueuedMessages();
     void supportsComposerShortcutsGrowthAndDrafts();
+    void attachesFilesAndInsertsWorkspaceReferences();
     void insertsAndManagesPromptTemplates();
     void reconnectsDisconnectedSession();
     void handlesApprovalCard();
@@ -2435,6 +2436,71 @@ void TestMainWindow::supportsComposerShortcutsGrowthAndDrafts() {
     composer->setPlainText(QStringLiteral("saved on close"));
     window.close();
     QCOMPARE(settings.composerDraft(conversation.id), QStringLiteral("saved on close"));
+}
+
+void TestMainWindow::attachesFilesAndInsertsWorkspaceReferences() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    QFile source(directory.filePath(QStringLiteral("source.cpp")));
+    QVERIFY(source.open(QIODevice::WriteOnly));
+    source.write("int main() {}\n");
+    source.close();
+    QFile image(directory.filePath(QStringLiteral("screen.png")));
+    QVERIFY(image.open(QIODevice::WriteOnly));
+    image.write("fake image fixture");
+    image.close();
+    snack::app::AppSettings settings(directory.filePath(QStringLiteral("settings.ini")));
+    UiMemoryEventRepository repository;
+    snack::agent::FakeAgentAdapter adapter(nullptr, 1000);
+    snack::domain::Conversation conversation;
+    conversation.title = QStringLiteral("Attachment UI");
+    conversation.workingDirectory = directory.path();
+    snack::session::SessionController controller(conversation, &adapter, &repository);
+    snack::ui::MainWindow window(&controller, &settings, false);
+    auto* attach = window.findChild<QPushButton*>(QStringLiteral("attachmentButton"));
+    auto* reference = window.findChild<QPushButton*>(QStringLiteral("workspaceReferenceButton"));
+    auto* attachments = window.findChild<QListWidget*>(QStringLiteral("attachmentList"));
+    auto* composer = window.findChild<QPlainTextEdit*>(QStringLiteral("composer"));
+    auto* send = window.findChild<QPushButton*>(QStringLiteral("sendButton"));
+    QVERIFY(attach != nullptr);
+    QVERIFY(reference != nullptr);
+    QVERIFY(attachments != nullptr);
+    QVERIFY(composer != nullptr);
+    QVERIFY(send != nullptr);
+    QTRY_COMPARE(controller.status(), snack::domain::ConversationStatus::Idle);
+
+    QTimer::singleShot(0, [path = image.fileName()] {
+        auto* dialog = qobject_cast<QFileDialog*>(QApplication::activeModalWidget());
+        QVERIFY(dialog != nullptr);
+        dialog->selectFile(path);
+        QVERIFY(QMetaObject::invokeMethod(dialog, "accept"));
+    });
+    attach->click();
+    QCOMPARE(attachments->count(), 1);
+    QVERIFY(!attachments->isHidden());
+
+    QTimer::singleShot(0, [] {
+        auto* dialog = qobject_cast<QInputDialog*>(QApplication::activeModalWidget());
+        QVERIFY(dialog != nullptr);
+        dialog->setTextValue(QStringLiteral("source.cpp"));
+        dialog->accept();
+    });
+    reference->click();
+    QCOMPARE(composer->toPlainText(), QStringLiteral("@source.cpp "));
+    send->click();
+    QCOMPARE(adapter.lastTurnRequest().attachments.size(), 1);
+    QCOMPARE(adapter.lastTurnRequest()
+                 .attachments.at(0)
+                 .toObject()
+                 .value(QStringLiteral("kind"))
+                 .toString(),
+             QStringLiteral("image"));
+    QVERIFY(repository.events.constFirst()
+                .payload.value(QStringLiteral("attachments"))
+                .toArray()
+                .size() == 1);
+    QVERIFY(attachments->isHidden());
+    controller.interrupt();
 }
 
 void TestMainWindow::insertsAndManagesPromptTemplates() {

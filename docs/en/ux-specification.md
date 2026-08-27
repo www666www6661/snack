@@ -76,6 +76,8 @@ The current M3 composer grows with wrapped content up to a bounded reading heigh
 
 The `/` button and a leading `/` keystroke open favorite prompt templates. Templates are stored as plain text and use only explicit `{{parameter}}` placeholders; insertion asks for each unique value, substitutes text literally, and leaves the rendered prompt in the composer for review. The menu can save the current composer text as a template or remove an existing template. It never runs scripts, commands, or substitutions from the workspace.
 
+The `+` button selects one or more local files and shows removable preview rows before sending. Images use the official Codex `localImage` input; other files become explicit local-path references, while queued messages persist the same ordered attachment metadata. Attachments submitted during active work are queued because Codex steering is text-only. The `@` button or key opens a bounded workspace file picker that excludes VCS, dependency, cache, virtual-environment, and build directories; choosing a result inserts a reviewable `@relative/path` token and never reads or uploads the file by itself.
+
 ## 6. Key flows
 
 - New conversation: directory → dirty-workspace warning → agent availability → model/effort/access → actual change mode/read-only capability → create. Preserve form state on failure.

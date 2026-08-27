@@ -229,8 +229,13 @@ void SessionController::open() {
 }
 
 bool SessionController::sendMessage(const QString& message, QString* error) {
+    return sendMessage(message, {}, error);
+}
+
+bool SessionController::sendMessage(const QString& message, const QJsonArray& attachments,
+                                    QString* error) {
     const QString trimmed = message.trimmed();
-    if (trimmed.isEmpty()) {
+    if (trimmed.isEmpty() && attachments.isEmpty()) {
         if (error != nullptr) {
             *error = QStringLiteral("Message cannot be empty");
         }
@@ -243,17 +248,20 @@ bool SessionController::sendMessage(const QString& message, QString* error) {
         return false;
     }
 
-    replacePlaceholderTitle(trimmed);
+    const QString effectiveMessage =
+        trimmed.isEmpty() ? QStringLiteral("Please inspect the attached context.") : trimmed;
+    replacePlaceholderTitle(effectiveMessage);
     activeTurnId_ = QUuid::createUuid();
     activeTurnSettings_ = nextTurnSettings_;
     domain::AgentEvent userEvent;
     userEvent.turnId = activeTurnId_;
     userEvent.type = domain::AgentEventType::UserMessage;
-    userEvent.payload = {{QStringLiteral("text"), trimmed},
+    userEvent.payload = {{QStringLiteral("text"), effectiveMessage},
+                         {QStringLiteral("attachments"), attachments},
                          {QStringLiteral("settings"), nextTurnSettings_.toJson()}};
     recordEvent(userEvent);
     setStatus(domain::ConversationStatus::Running);
-    adapter_->startTurn({activeTurnId_, trimmed, nextTurnSettings_});
+    adapter_->startTurn({activeTurnId_, effectiveMessage, nextTurnSettings_, attachments});
     return true;
 }
 
@@ -378,8 +386,13 @@ bool SessionController::steerMessage(const QString& message, QString* error) {
 }
 
 bool SessionController::queueMessage(const QString& message, QString* error) {
+    return queueMessage(message, {}, error);
+}
+
+bool SessionController::queueMessage(const QString& message, const QJsonArray& attachments,
+                                     QString* error) {
     const QString trimmed = message.trimmed();
-    if (trimmed.isEmpty()) {
+    if (trimmed.isEmpty() && attachments.isEmpty()) {
         if (error != nullptr) {
             *error = QStringLiteral("Queued message cannot be empty");
         }
@@ -398,7 +411,9 @@ bool SessionController::queueMessage(const QString& message, QString* error) {
     QList<domain::QueuedMessage> messages = queuedMessages_;
     domain::QueuedMessage queued;
     queued.conversationId = conversation_.id;
-    queued.content = trimmed;
+    queued.content =
+        trimmed.isEmpty() ? QStringLiteral("Please inspect the attached context.") : trimmed;
+    queued.attachments = attachments;
     messages.append(queued);
     if (!persistQueue(messages, error)) {
         return false;
@@ -495,7 +510,7 @@ bool SessionController::sendQueuedMessageNow(const QUuid& messageId, QString* er
     }
     const bool idle = conversation_.status == domain::ConversationStatus::Idle;
     const bool canSteer = conversation_.status == domain::ConversationStatus::Running &&
-                          capabilities_.supportsSteering;
+                          capabilities_.supportsSteering && iterator->attachments.isEmpty();
     if (!idle && !canSteer) {
         if (error != nullptr) {
             *error = QStringLiteral("Queued message cannot be sent now");
@@ -504,12 +519,14 @@ bool SessionController::sendQueuedMessageNow(const QUuid& messageId, QString* er
     }
 
     const QString content = iterator->content;
+    const QJsonArray attachments = iterator->attachments;
     QList<domain::QueuedMessage> remaining = queuedMessages_;
     remaining.removeAt(std::distance(queuedMessages_.cbegin(), iterator));
     if (!persistQueue(remaining, error)) {
         return false;
     }
-    const bool sent = idle ? sendMessage(content, error) : steerMessage(content, error);
+    const bool sent =
+        idle ? sendMessage(content, attachments, error) : steerMessage(content, error);
     if (!sent) {
         QString restoreError;
         QList<domain::QueuedMessage> original = queuedMessages_;

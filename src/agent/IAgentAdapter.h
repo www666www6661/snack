@@ -44,6 +44,7 @@ struct TurnRequest {
     QUuid turnId;
     QString message;
     domain::TurnSettingsSnapshot settings;
+    QJsonArray attachments;
 };
 
 struct SteerRequest {

@@ -20,6 +20,7 @@ class FakeAgentAdapter final : public IAgentAdapter {
     [[nodiscard]] QString lastUserInputRequestId() const;
     [[nodiscard]] QJsonObject lastUserInputAnswers() const;
     [[nodiscard]] SteerRequest lastSteerRequest() const;
+    [[nodiscard]] TurnRequest lastTurnRequest() const;
     void connectAgent(const AgentConnectionRequest& request) override;
     void startTurn(const TurnRequest& request) override;
     bool steerTurn(const SteerRequest& request) override;

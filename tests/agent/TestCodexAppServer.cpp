@@ -765,7 +765,12 @@ void TestCodexAppServer::mapsAndParsesTurnLifecycle() {
     using namespace snack::agent::codex;
 
     const QUuid guiTurnId = QUuid::createUuid();
-    const auto request = codexTurnRequest(guiTurnId, QStringLiteral("stream this"));
+    auto request = codexTurnRequest(guiTurnId, QStringLiteral("stream this"));
+    request.attachments = {
+        QJsonObject{{QStringLiteral("kind"), QStringLiteral("image")},
+                    {QStringLiteral("path"), QStringLiteral("C:/workspace/screenshot.png")}},
+        QJsonObject{{QStringLiteral("kind"), QStringLiteral("file")},
+                    {QStringLiteral("path"), QStringLiteral("C:/workspace/notes.txt")}}};
     const QJsonObject params = makeTurnStartParameters(QStringLiteral("thread-1"),
                                                        QStringLiteral("C:/workspace"), request);
     QCOMPARE(params.value(QStringLiteral("threadId")).toString(), QStringLiteral("thread-1"));
@@ -787,6 +792,17 @@ void TestCodexAppServer::mapsAndParsesTurnLifecycle() {
                  .value(QStringLiteral("text"))
                  .toString(),
              QStringLiteral("stream this"));
+    QCOMPARE(
+        params.value(QStringLiteral("input")).toArray().at(1).toObject(),
+        QJsonObject({{QStringLiteral("type"), QStringLiteral("localImage")},
+                     {QStringLiteral("path"), QStringLiteral("C:/workspace/screenshot.png")}}));
+    QVERIFY(params.value(QStringLiteral("input"))
+                .toArray()
+                .at(2)
+                .toObject()
+                .value(QStringLiteral("text"))
+                .toString()
+                .contains(QStringLiteral("notes.txt")));
     QCOMPARE(turnAccessParameters(snack::domain::AccessLevel::Strict)
                  .value(QStringLiteral("sandboxPolicy"))
                  .toObject()
