@@ -95,6 +95,7 @@ class TestCodexAppServer final : public QObject {
     void parsesApprovalLifecycle();
     void parsesUserInputAndTokenUsage();
     void adapterPublishesPaginatedCapabilities();
+    void adapterRejectsInvalidTurnRequests();
     void adapterStreamsAndCompletesTurn();
     void adapterSteersActiveTurn();
     void adapterMapsToolReasoningAndPlanEvents();
@@ -1129,6 +1130,85 @@ void TestCodexAppServer::adapterPublishesPaginatedCapabilities() {
                             QStringLiteral("C:/second-workspace")));
     QCOMPARE(connectionSpy.count(), 3);
     QVERIFY(connectionSpy.constLast().constFirst().toBool());
+    adapter.closeAgent();
+}
+
+void TestCodexAppServer::adapterRejectsInvalidTurnRequests() {
+    using namespace snack::agent::codex;
+    using snack::agent::TurnRequest;
+    using snack::domain::AgentEvent;
+    using snack::domain::AgentEventType;
+
+    FakeProcessTransport disconnectedTransport;
+    CodexAdapter disconnected({.status = CliStatus::Available,
+                               .executablePath = QStringLiteral("codex"),
+                               .version = QStringLiteral("0.149.0")},
+                              &disconnectedTransport);
+    QSignalSpy disconnectedEventSpy(&disconnected, &CodexAdapter::eventReceived);
+    QSignalSpy disconnectedFinishedSpy(&disconnected, &CodexAdapter::turnFinished);
+    const TurnRequest disconnectedRequest = codexTurnRequest(QUuid::createUuid());
+    disconnected.startTurn(disconnectedRequest);
+    QCOMPARE(disconnectedTransport.writes.size(), 0);
+    QCOMPARE(disconnectedEventSpy.count(), 1);
+    QCOMPARE(disconnectedEventSpy.constFirst().constFirst().value<AgentEvent>().type,
+             AgentEventType::TurnFailed);
+    QVERIFY(disconnectedEventSpy.constFirst()
+                .constFirst()
+                .value<AgentEvent>()
+                .payload.value(QStringLiteral("message"))
+                .toString()
+                .contains(QStringLiteral("not connected")));
+    QCOMPARE(disconnectedFinishedSpy.count(), 1);
+
+    FakeProcessTransport transport;
+    CodexAdapter adapter({.status = CliStatus::Available,
+                          .executablePath = QStringLiteral("codex"),
+                          .version = QStringLiteral("0.149.0")},
+                         &transport);
+    connectAdapter(adapter, transport);
+    QSignalSpy eventSpy(&adapter, &CodexAdapter::eventReceived);
+    QSignalSpy finishedSpy(&adapter, &CodexAdapter::turnFinished);
+    const auto expectRejected = [&](const TurnRequest& request, const QString& detail) {
+        const qsizetype writesBefore = transport.writes.size();
+        const qsizetype eventsBefore = eventSpy.size();
+        const qsizetype finishesBefore = finishedSpy.size();
+        adapter.startTurn(request);
+        QCOMPARE(transport.writes.size(), writesBefore);
+        QCOMPARE(eventSpy.size(), eventsBefore + 1);
+        QCOMPARE(finishedSpy.size(), finishesBefore + 1);
+        const AgentEvent event = eventSpy.constLast().constFirst().value<AgentEvent>();
+        QCOMPARE(event.turnId, request.turnId);
+        QCOMPARE(event.type, AgentEventType::TurnFailed);
+        QVERIFY2(event.payload.value(QStringLiteral("message")).toString().contains(detail),
+                 qPrintable(event.payload.value(QStringLiteral("message")).toString()));
+        QVERIFY(!finishedSpy.constLast().at(2).toBool());
+    };
+
+    expectRejected(codexTurnRequest({}), QStringLiteral("invalid"));
+    expectRejected(codexTurnRequest(QUuid::createUuid(), QStringLiteral("   ")),
+                   QStringLiteral("invalid"));
+
+    TurnRequest wrongAgent = codexTurnRequest(QUuid::createUuid());
+    wrongAgent.settings.agentKind = snack::domain::AgentKind::Claude;
+    expectRejected(wrongAgent, QStringLiteral("unsupported agent or model"));
+
+    TurnRequest wrongModel = codexTurnRequest(QUuid::createUuid());
+    wrongModel.settings.modelId = QStringLiteral("unknown-model");
+    expectRejected(wrongModel, QStringLiteral("unsupported agent or model"));
+
+    TurnRequest wrongEffort = codexTurnRequest(QUuid::createUuid());
+    wrongEffort.settings.reasoningEffort = snack::domain::ReasoningEffort::Minimal;
+    expectRejected(wrongEffort, QStringLiteral("does not support"));
+
+    TurnRequest wrongDirectory = codexTurnRequest(QUuid::createUuid());
+    wrongDirectory.settings.workingDirectory = QStringLiteral("C:/other-workspace");
+    expectRejected(wrongDirectory, QStringLiteral("unexpected working directory"));
+
+    const TurnRequest active = codexTurnRequest(QUuid::createUuid());
+    const qsizetype writesBeforeActive = transport.writes.size();
+    adapter.startTurn(active);
+    QCOMPARE(transport.writes.size(), writesBeforeActive + 1);
+    expectRejected(codexTurnRequest(QUuid::createUuid()), QStringLiteral("already active"));
     adapter.closeAgent();
 }
 
