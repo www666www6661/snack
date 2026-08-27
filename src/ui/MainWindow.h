@@ -70,6 +70,7 @@ class MainWindow final : public QMainWindow {
     void applyDarkTheme();
     void focusConversationSearch();
     void saveConversationView();
+    void renameConversationView();
     void deleteConversationView();
     void applyConversationView(int index);
     void activateFirstSearchResult();
@@ -192,6 +193,7 @@ class MainWindow final : public QMainWindow {
     QAction* showArchivedConversationsAction_{nullptr};
     QAction* markAllConversationsReadAction_{nullptr};
     QAction* nextUnreadConversationAction_{nullptr};
+    QAction* renameConversationViewAction_{nullptr};
     QMenu* conversationContextMenu_{nullptr};
     QAction* contextOpenAction_{nullptr};
     QAction* contextPinAction_{nullptr};

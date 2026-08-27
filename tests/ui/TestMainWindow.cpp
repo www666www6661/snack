@@ -148,6 +148,7 @@ class TestMainWindow final : public QObject {
     void renamesCurrentConversation();
     void editsDisplaysAndSearchesConversationTags();
     void savesAndAppliesConversationViews();
+    void renamesConversationViews();
     void editsArchivedConversationTagsFromContextMenu();
     void restoresPersistedTimeline();
     void restoresToolReasoningAndPlanViews();
@@ -1536,6 +1537,47 @@ void TestMainWindow::savesAndAppliesConversationViews() {
     QCOMPARE(search->text(), QStringLiteral("tag:backend"));
     QVERIFY(!showArchived->isChecked());
     QCOMPARE(list->count(), 1);
+}
+
+void TestMainWindow::renamesConversationViews() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::app::AppSettings settings(directory.filePath(QStringLiteral("settings.ini")));
+    UiMemoryEventRepository repository;
+    snack::domain::Conversation conversation;
+    conversation.title = QStringLiteral("Saved view rename");
+    conversation.workingDirectory = directory.path();
+    snack::domain::SavedConversationView view;
+    view.name = QStringLiteral("Original view");
+    view.query = QStringLiteral("tag:backend");
+    view.showArchived = false;
+    repository.views.insert(view.id, view);
+    snack::agent::FakeAgentAdapter adapter(nullptr, 1);
+    snack::session::SessionController controller(conversation, &adapter, &repository);
+    snack::ui::MainWindow window(&controller, &settings, false);
+
+    auto* views = window.findChild<QComboBox*>(QStringLiteral("conversationViewCombo"));
+    auto* rename = window.findChild<QAction*>(QStringLiteral("renameConversationViewAction"));
+    QVERIFY(views != nullptr);
+    QVERIFY(rename != nullptr);
+    QVERIFY(!rename->isEnabled());
+    views->setCurrentIndex(views->findData(view.id));
+    QVERIFY(rename->isEnabled());
+
+    QTimer::singleShot(0, [] {
+        auto* dialog = qobject_cast<QInputDialog*>(QApplication::activeModalWidget());
+        QVERIFY(dialog != nullptr);
+        QCOMPARE(dialog->textValue(), QStringLiteral("Original view"));
+        dialog->setTextValue(QStringLiteral("  Renamed view  "));
+        dialog->accept();
+    });
+    rename->trigger();
+
+    QCOMPARE(repository.views.value(view.id).name, QStringLiteral("Renamed view"));
+    QCOMPARE(repository.views.value(view.id).query, QStringLiteral("tag:backend"));
+    QVERIFY(!repository.views.value(view.id).showArchived);
+    QCOMPARE(views->currentData().toUuid(), view.id);
+    QCOMPARE(views->currentText(), QStringLiteral("Renamed view"));
 }
 
 void TestMainWindow::restoresPersistedTimeline() {

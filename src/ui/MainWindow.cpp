@@ -34,6 +34,7 @@
 #include <QStyleHints>
 #include <QSystemTrayIcon>
 #include <QTimer>
+#include <QToolButton>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -1062,6 +1063,38 @@ void MainWindow::deleteConversationView() {
     rebuildConversationViews();
 }
 
+void MainWindow::renameConversationView() {
+    const QUuid viewId = conversationViewCombo_->currentData().toUuid();
+    if (viewId.isNull()) {
+        return;
+    }
+    QString error;
+    const auto views = controller_->conversationViews(&error);
+    const auto selected = std::find_if(views.cbegin(), views.cend(),
+                                       [&viewId](const auto& view) { return view.id == viewId; });
+    if (!error.isEmpty() || selected == views.cend()) {
+        statusBar()->showMessage(error.isEmpty() ? tr("Conversation view no longer exists") : error,
+                                 8000);
+        rebuildConversationViews();
+        return;
+    }
+    bool accepted = false;
+    const QString name =
+        QInputDialog::getText(this, tr("Rename conversation view"), tr("View name"),
+                              QLineEdit::Normal, selected->name, &accepted)
+            .simplified();
+    if (!accepted || name == selected->name) {
+        return;
+    }
+    domain::SavedConversationView renamed = *selected;
+    renamed.name = name;
+    if (!controller_->saveConversationView(renamed, &error)) {
+        statusBar()->showMessage(tr("Cannot rename conversation view: %1").arg(error), 8000);
+        return;
+    }
+    rebuildConversationViews(viewId);
+}
+
 void MainWindow::saveConversationView() {
     bool accepted = false;
     const QString name = QInputDialog::getText(this, tr("Save conversation view"), tr("View name"),
@@ -1090,6 +1123,7 @@ void MainWindow::saveConversationView() {
 
 void MainWindow::applyConversationView(int index) {
     deleteConversationViewButton_->setEnabled(index > 0);
+    renameConversationViewAction_->setEnabled(index > 0);
     if (index <= 0) {
         return;
     }
@@ -1106,6 +1140,7 @@ void MainWindow::applyConversationView(int index) {
     const QSignalBlocker blocker(conversationViewCombo_);
     conversationViewCombo_->setCurrentIndex(conversationViewCombo_->findData(viewId));
     deleteConversationViewButton_->setEnabled(true);
+    renameConversationViewAction_->setEnabled(true);
 }
 
 void MainWindow::rebuildConversationViews(const QUuid& selectedViewId) {
@@ -1121,6 +1156,7 @@ void MainWindow::rebuildConversationViews(const QUuid& selectedViewId) {
         selectedViewId.isNull() ? 0 : conversationViewCombo_->findData(selectedViewId);
     conversationViewCombo_->setCurrentIndex(std::max(0, selectedIndex));
     deleteConversationViewButton_->setEnabled(selectedIndex > 0);
+    renameConversationViewAction_->setEnabled(selectedIndex > 0);
     if (!error.isEmpty()) {
         statusBar()->showMessage(error, 8000);
     }
@@ -1188,11 +1224,22 @@ void MainWindow::buildUi() {
     conversationViewCombo_->setObjectName(QStringLiteral("conversationViewCombo"));
     saveConversationViewButton_ = new QPushButton(tr("Save view"), viewRow);
     saveConversationViewButton_->setObjectName(QStringLiteral("saveConversationViewButton"));
+    auto* manageConversationViewButton = new QToolButton(viewRow);
+    manageConversationViewButton->setObjectName(QStringLiteral("manageConversationViewButton"));
+    manageConversationViewButton->setText(tr("Manage"));
+    manageConversationViewButton->setPopupMode(QToolButton::InstantPopup);
+    auto* manageConversationViewMenu = new QMenu(manageConversationViewButton);
+    renameConversationViewAction_ =
+        manageConversationViewMenu->addAction(tr("Rename saved view..."));
+    renameConversationViewAction_->setObjectName(QStringLiteral("renameConversationViewAction"));
+    renameConversationViewAction_->setEnabled(false);
+    manageConversationViewButton->setMenu(manageConversationViewMenu);
     deleteConversationViewButton_ = new QPushButton(tr("Delete"), viewRow);
     deleteConversationViewButton_->setObjectName(QStringLiteral("deleteConversationViewButton"));
     deleteConversationViewButton_->setEnabled(false);
     viewRowLayout->addWidget(conversationViewCombo_, 1);
     viewRowLayout->addWidget(saveConversationViewButton_);
+    viewRowLayout->addWidget(manageConversationViewButton);
     viewRowLayout->addWidget(deleteConversationViewButton_);
     conversationSearch_ = new QLineEdit(sidebar);
     conversationSearch_->setObjectName(QStringLiteral("conversationSearch"));
@@ -1387,6 +1434,8 @@ void MainWindow::buildUi() {
     connect(newConversation, &QPushButton::clicked, this, &MainWindow::createConversation);
     connect(saveConversationViewButton_, &QPushButton::clicked, this,
             &MainWindow::saveConversationView);
+    connect(renameConversationViewAction_, &QAction::triggered, this,
+            &MainWindow::renameConversationView);
     connect(deleteConversationViewButton_, &QPushButton::clicked, this,
             &MainWindow::deleteConversationView);
     connect(conversationViewCombo_, &QComboBox::currentIndexChanged, this,
