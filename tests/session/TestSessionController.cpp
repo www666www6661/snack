@@ -72,7 +72,7 @@ class MemoryEventRepository : public snack::storage::IEventRepository {
     }
 
     bool deletePromptTemplate(const QUuid& templateId, QString*) override {
-        return templates_.remove(templateId) > 0;
+        return templates_.remove(templateId);
     }
 
     QList<snack::domain::PromptTemplate> promptTemplates(QString*) const override {
@@ -92,7 +92,7 @@ class MemoryEventRepository : public snack::storage::IEventRepository {
     }
 
     bool deleteConversationView(const QUuid& viewId, QString*) override {
-        return views_.remove(viewId) > 0;
+        return views_.remove(viewId);
     }
 
     QList<snack::domain::SavedConversationView> conversationViews(QString*) const override {
