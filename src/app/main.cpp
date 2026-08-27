@@ -2,8 +2,8 @@
 #include "app/AppSettings.h"
 #include "app/ConversationBootstrap.h"
 #include "app/Logging.h"
+#include "app/SessionManager.h"
 #include "app/SingleInstanceGuard.h"
-#include "session/SessionRuntimeRegistry.h"
 #include "storage/EventStore.h"
 #include "ui/MainWindow.h"
 
@@ -121,17 +121,20 @@ int main(int argc, char* argv[]) {
     settingsSnapshot.lastConversationId = conversation.id.toString(QUuid::WithoutBraces);
     settings.save(settingsSnapshot);
 
-    snack::session::SessionRuntimeRegistry sessionRuntimes(&eventStore);
+    snack::app::SessionManager sessions(
+        &eventStore,
+        [codexExecutable = settingsSnapshot.codexExecutable](snack::domain::AgentKind kind) {
+            return snack::agent::AgentRuntimeFactory::create(kind, codexExecutable);
+        });
     QString sessionError;
-    if (!sessionRuntimes.add(conversation, std::move(agentRuntime), &sessionError)) {
+    auto* controller = sessions.addPrepared(conversation, std::move(agentRuntime), &sessionError);
+    if (controller == nullptr) {
         QMessageBox::critical(
             nullptr, QObject::tr("Snack"),
             QObject::tr("Cannot create the conversation session: %1").arg(sessionError));
         return 3;
     }
-    auto* controller = sessionRuntimes.controller(conversation.id);
-    const auto* currentRuntime = sessionRuntimes.runtime(conversation.id);
-    Q_ASSERT(controller != nullptr);
+    const auto* currentRuntime = sessions.runtime(conversation.id);
     Q_ASSERT(currentRuntime != nullptr);
 
     const bool closeToTrayEnabled = QSystemTrayIcon::isSystemTrayAvailable();

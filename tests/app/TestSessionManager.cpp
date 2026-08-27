@@ -1,0 +1,148 @@
+#include "app/SessionManager.h"
+
+#include "storage/EventStore.h"
+
+#include <QTemporaryDir>
+#include <QTest>
+
+#include <memory>
+
+namespace {
+
+class TestAdapter final : public snack::agent::IAgentAdapter {
+  public:
+    explicit TestAdapter(snack::domain::AgentKind kind) : kind_(kind) {}
+
+    [[nodiscard]] snack::domain::AgentKind kind() const override { return kind_; }
+    [[nodiscard]] snack::agent::CapabilitySet capabilities() const override { return {}; }
+    void connectAgent(const snack::agent::AgentConnectionRequest&) override {}
+    void startTurn(const snack::agent::TurnRequest&) override {}
+    bool steerTurn(const snack::agent::SteerRequest&) override { return false; }
+    bool respondToApproval(const QString&, snack::domain::ApprovalDecision) override {
+        return false;
+    }
+    bool respondToUserInput(const QString&, const QJsonObject&) override { return false; }
+    void interruptTurn() override {}
+    void closeAgent() override {}
+
+  private:
+    snack::domain::AgentKind kind_;
+};
+
+snack::domain::Conversation conversation(snack::domain::AgentKind kind) {
+    snack::domain::Conversation result;
+    result.title = QStringLiteral("Conversation");
+    result.workingDirectory = QStringLiteral("/workspace");
+    result.agentKind = kind;
+    return result;
+}
+
+snack::agent::AgentRuntime runtime(snack::domain::AgentKind kind) {
+    snack::agent::AgentRuntime result;
+    result.requestedKind = kind;
+    result.selectedKind = kind;
+    result.adapter = std::make_unique<TestAdapter>(kind);
+    return result;
+}
+
+} // namespace
+
+class TestSessionManager final : public QObject {
+    Q_OBJECT
+
+  private slots:
+    void adoptsPreparedRuntimeAndReusesOpenSession();
+    void opensMultipleConversationsOnDemand();
+    void rejectsUnavailableAndConflictingAgentTypes();
+    void validatesBeforeCreatingRuntime();
+};
+
+void TestSessionManager::adoptsPreparedRuntimeAndReusesOpenSession() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::storage::EventStore repository;
+    QString error;
+    QVERIFY(repository.open(directory.filePath(QStringLiteral("events.sqlite3")), &error));
+    int factoryCalls = 0;
+    snack::app::SessionManager manager(&repository, [&factoryCalls](snack::domain::AgentKind kind) {
+        ++factoryCalls;
+        return runtime(kind);
+    });
+    const auto value = conversation(snack::domain::AgentKind::Mock);
+
+    auto* prepared = manager.addPrepared(value, runtime(value.agentKind), &error);
+    QVERIFY2(prepared != nullptr, qPrintable(error));
+    QCOMPARE(manager.open(value, &error), prepared);
+    QCOMPARE(factoryCalls, 0);
+    QCOMPARE(manager.conversationIds(), QList<QUuid>({value.id}));
+}
+
+void TestSessionManager::opensMultipleConversationsOnDemand() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::storage::EventStore repository;
+    QString error;
+    QVERIFY(repository.open(directory.filePath(QStringLiteral("events.sqlite3")), &error));
+    int factoryCalls = 0;
+    snack::app::SessionManager manager(&repository, [&factoryCalls](snack::domain::AgentKind kind) {
+        ++factoryCalls;
+        return runtime(kind);
+    });
+    const auto codex = conversation(snack::domain::AgentKind::Codex);
+    const auto mock = conversation(snack::domain::AgentKind::Mock);
+
+    QVERIFY(manager.open(codex, &error) != nullptr);
+    QVERIFY(manager.open(mock, &error) != nullptr);
+    QCOMPARE(factoryCalls, 2);
+    QCOMPARE(manager.size(), qsizetype{2});
+    QCOMPARE(manager.conversationIds(), QList<QUuid>({codex.id, mock.id}));
+    QVERIFY(manager.close(codex.id));
+    QCOMPARE(manager.size(), qsizetype{1});
+}
+
+void TestSessionManager::rejectsUnavailableAndConflictingAgentTypes() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::storage::EventStore repository;
+    QString error;
+    QVERIFY(repository.open(directory.filePath(QStringLiteral("events.sqlite3")), &error));
+    snack::app::SessionManager manager(&repository, [](snack::domain::AgentKind requestedKind) {
+        auto result = runtime(snack::domain::AgentKind::Mock);
+        result.requestedKind = requestedKind;
+        result.detail = QStringLiteral("Requested Agent is unavailable");
+        result.fellBack = true;
+        return result;
+    });
+    const auto codex = conversation(snack::domain::AgentKind::Codex);
+    QVERIFY(manager.open(codex, &error) == nullptr);
+    QCOMPARE(error, QStringLiteral("Requested Agent is unavailable"));
+    QCOMPARE(manager.size(), qsizetype{0});
+
+    auto mock = conversation(snack::domain::AgentKind::Mock);
+    QVERIFY(manager.addPrepared(mock, runtime(mock.agentKind), &error) != nullptr);
+    mock.agentKind = snack::domain::AgentKind::Codex;
+    QVERIFY(manager.open(mock, &error) == nullptr);
+    QCOMPARE(error, QStringLiteral("The open session uses a different Agent type"));
+}
+
+void TestSessionManager::validatesBeforeCreatingRuntime() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::storage::EventStore repository;
+    QString error;
+    QVERIFY(repository.open(directory.filePath(QStringLiteral("events.sqlite3")), &error));
+    int factoryCalls = 0;
+    snack::app::SessionManager manager(&repository, [&factoryCalls](snack::domain::AgentKind kind) {
+        ++factoryCalls;
+        return runtime(kind);
+    });
+    auto invalid = conversation(snack::domain::AgentKind::Mock);
+    invalid.id = QUuid{};
+
+    QVERIFY(manager.open(invalid, &error) == nullptr);
+    QCOMPARE(factoryCalls, 0);
+    QVERIFY(error.contains(QStringLiteral("invalid conversation ID")));
+}
+
+QTEST_GUILESS_MAIN(TestSessionManager)
+#include "TestSessionManager.moc"

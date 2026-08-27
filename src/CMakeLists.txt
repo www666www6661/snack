@@ -33,6 +33,8 @@ set(SNACK_CORE_SOURCES
     app/ConversationBootstrap.h
     app/Logging.cpp
     app/Logging.h
+    app/SessionManager.cpp
+    app/SessionManager.h
     app/SingleInstanceGuard.cpp
     app/SingleInstanceGuard.h
     domain/DomainTypes.cpp

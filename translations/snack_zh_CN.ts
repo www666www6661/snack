@@ -6,7 +6,7 @@
     <message>
         <location filename="../src/app/main.cpp" line="47"/>
         <location filename="../src/app/main.cpp" line="84"/>
-        <location filename="../src/app/main.cpp" line="128"/>
+        <location filename="../src/app/main.cpp" line="133"/>
         <source>Snack</source>
         <translation>零食</translation>
     </message>
@@ -21,7 +21,7 @@
         <translation>无法打开本地数据：%1</translation>
     </message>
     <message>
-        <location filename="../src/app/main.cpp" line="129"/>
+        <location filename="../src/app/main.cpp" line="134"/>
         <source>Cannot create the conversation session: %1</source>
         <translation>无法创建会话：%1</translation>
     </message>
@@ -39,7 +39,7 @@
         <translation>模拟会话</translation>
     </message>
     <message>
-        <location filename="../src/app/main.cpp" line="141"/>
+        <location filename="../src/app/main.cpp" line="144"/>
         <source>Using Mock Agent because %1</source>
         <translation>正在使用模拟智能体，原因：%1</translation>
     </message>
