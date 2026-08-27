@@ -36,6 +36,8 @@ A conversation may have one group name of at most 64 Unicode code points; an emp
 
 Each rail row exposes a context menu for opening, pinning, archiving, or restoring that selected conversation. Actions operate on the row rather than silently switching first; archiving a background conversation leaves the current chat bound and uses the same active-work guard as the File menu.
 
+Permanent deletion is available from the File and row context menus, is blocked while that conversation has active Agent work, and always names the target in a destructive confirmation. Deleting removes messages, queued prompts, local metadata, and its saved draft. Deleting the current conversation prepares another active conversation first and then rebinds the window; deleting a background or archived row never switches the current chat.
+
 The rail context menu applies the same tag editor to the selected background or archived row. Editing a closed row updates repository metadata directly and does not open, restore, or switch to that conversation.
 
 Active rows include a text status such as Connecting, Idle, Running, Waiting for approval/input, Disconnected, or Failed. Status changes from every open runtime refresh the rail in place, so background work remains visible without switching conversations.

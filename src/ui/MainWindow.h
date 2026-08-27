@@ -93,10 +93,12 @@ class MainWindow final : public QMainWindow {
     void preferMockAgent();
     void createConversation();
     void archiveConversation();
+    void deleteConversation();
     void restoreSelectedConversation();
     void togglePinnedConversation();
     void openSelectedConversation();
     void archiveSelectedConversation();
+    void deleteSelectedConversation();
     void toggleSelectedPinnedConversation();
     void prepareConversationContextMenu();
     void activateConversation(QListWidgetItem* item);
@@ -110,6 +112,7 @@ class MainWindow final : public QMainWindow {
     void moveConversationView(int offset);
     void editConversationTagsFor(const QUuid& conversationId, const QStringList& tags);
     void editConversationGroupFor(const QUuid& conversationId, const QString& groupName);
+    void deleteConversationFor(const QUuid& conversationId, const QString& title);
     void activateRelativeConversation(int offset);
     void activateConversationById(const QUuid& conversationId);
     void resetConversationView();
@@ -211,6 +214,7 @@ class MainWindow final : public QMainWindow {
     QAction* contextEditGroupAction_{nullptr};
     QAction* contextArchiveAction_{nullptr};
     QAction* contextRestoreAction_{nullptr};
+    QAction* contextDeleteAction_{nullptr};
     struct ApprovalCardState {
         QLabel* status{nullptr};
         QList<QPushButton*> buttons;

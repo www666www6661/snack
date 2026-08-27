@@ -197,6 +197,7 @@ class TestMainWindow final : public QObject {
     void focusesConversationSearchWithShortcut();
     void createsConversationFromRail();
     void archivesAndRestoresConversation();
+    void deletesCurrentAndBackgroundConversations();
     void pinsAndReordersConversationRail();
     void operatesOnSelectedConversationFromContextMenu();
     void updatesConversationRailForBackgroundRuntimeStatus();
@@ -600,6 +601,91 @@ void TestMainWindow::archivesAndRestoresConversation() {
     QVERIFY(sessions.controller(first.id) != nullptr);
     QVERIFY(!list->currentItem()->data(Qt::UserRole + 1).toBool());
     QCOMPARE(repository.events.size(), 0);
+}
+
+void TestMainWindow::deletesCurrentAndBackgroundConversations() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::app::AppSettings settings(directory.filePath(QStringLiteral("settings.ini")));
+    auto snapshot = settings.load();
+    snapshot.preferredAgentKind = snack::domain::AgentKind::Mock;
+    settings.save(snapshot);
+    UiMemoryEventRepository repository;
+    snack::domain::Conversation first;
+    first.title = QStringLiteral("Delete current");
+    first.workingDirectory = directory.path();
+    snack::domain::Conversation second = first;
+    second.id = QUuid::createUuid();
+    second.title = QStringLiteral("Keep current");
+    snack::domain::Conversation third = first;
+    third.id = QUuid::createUuid();
+    third.title = QStringLiteral("Delete background");
+    repository.catalog = {first, second, third};
+    snack::domain::AgentEvent event;
+    event.conversationId = first.id;
+    event.type = snack::domain::AgentEventType::UserMessage;
+    repository.events = {event};
+    settings.saveComposerDraft(first.id, QStringLiteral("private draft"));
+
+    const auto makeRuntime = [](snack::domain::AgentKind kind) {
+        snack::agent::AgentRuntime runtime;
+        runtime.requestedKind = kind;
+        runtime.selectedKind = kind;
+        runtime.adapter = std::make_unique<snack::agent::FakeAgentAdapter>(nullptr, 1);
+        return runtime;
+    };
+    snack::app::SessionManager sessions(&repository, makeRuntime);
+    QString error;
+    auto* controller = sessions.addPrepared(first, makeRuntime(first.agentKind), &error);
+    QVERIFY2(controller != nullptr, qPrintable(error));
+    snack::ui::MainWindow window(controller, &settings, &sessions, false);
+    auto* deleteCurrent = window.findChild<QAction*>(QStringLiteral("deleteConversationAction"));
+    auto* deleteSelected =
+        window.findChild<QAction*>(QStringLiteral("contextDeleteConversationAction"));
+    auto* list = window.findChild<QListWidget*>(QStringLiteral("conversationList"));
+    auto* title = window.findChild<QLabel*>(QStringLiteral("conversationTitle"));
+    QVERIFY(deleteCurrent != nullptr);
+    QVERIFY(deleteSelected != nullptr);
+    QVERIFY(list != nullptr);
+    QVERIFY(title != nullptr);
+    QTRY_COMPARE(controller->status(), snack::domain::ConversationStatus::Idle);
+
+    const auto acceptDelete = [] {
+        QTimer::singleShot(0, [] {
+            auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+            QVERIFY(prompt != nullptr);
+            for (auto* button : prompt->findChildren<QPushButton*>()) {
+                if (button->text() == QStringLiteral("Delete conversation")) {
+                    button->click();
+                    return;
+                }
+            }
+            QFAIL("Delete confirmation button was not found");
+        });
+    };
+    acceptDelete();
+    deleteCurrent->trigger();
+
+    QVERIFY(!repository.conversationById(first.id, nullptr).has_value());
+    QVERIFY(repository.events.isEmpty());
+    QVERIFY(settings.composerDraft(first.id).isEmpty());
+    QCOMPARE(title->text(), QStringLiteral("Delete background"));
+    QCOMPARE(list->count(), 2);
+
+    for (int row = 0; row < list->count(); ++row) {
+        if (list->item(row)->data(Qt::UserRole).toUuid() == second.id) {
+            list->setCurrentRow(row);
+            break;
+        }
+    }
+    QVERIFY(QMetaObject::invokeMethod(&window, "prepareConversationContextMenu"));
+    acceptDelete();
+    deleteSelected->trigger();
+
+    QVERIFY(!repository.conversationById(second.id, nullptr).has_value());
+    QCOMPARE(title->text(), QStringLiteral("Delete background"));
+    QCOMPARE(list->count(), 1);
+    QCOMPARE(list->item(0)->data(Qt::UserRole).toUuid(), third.id);
 }
 
 void TestMainWindow::pinsAndReordersConversationRail() {

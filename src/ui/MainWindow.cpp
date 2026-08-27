@@ -84,6 +84,13 @@ bool createsUnreadAttention(domain::AgentEventType type) {
     }
 }
 
+bool agentWorkIsActive(domain::ConversationStatus status) {
+    return status == domain::ConversationStatus::Connecting ||
+           status == domain::ConversationStatus::Running ||
+           status == domain::ConversationStatus::WaitingApproval ||
+           status == domain::ConversationStatus::WaitingInput;
+}
+
 QStringList conversationQueryTerms(const QString& query) {
     QStringList terms;
     QString current;
@@ -580,6 +587,93 @@ void MainWindow::archiveConversation() {
     bindConversation(nextController);
 }
 
+void MainWindow::deleteConversation() {
+    deleteConversationFor(controller_->conversation().id, controller_->conversation().title);
+}
+
+void MainWindow::deleteSelectedConversation() {
+    if (conversationList_->currentItem() == nullptr) {
+        return;
+    }
+    const QUuid conversationId = conversationList_->currentItem()->data(Qt::UserRole).toUuid();
+    const auto selected =
+        std::find_if(conversationCatalog_.cbegin(), conversationCatalog_.cend(),
+                     [&conversationId](const auto& value) { return value.id == conversationId; });
+    if (selected == conversationCatalog_.cend()) {
+        refreshConversationList();
+        return;
+    }
+    deleteConversationFor(conversationId, selected->title);
+}
+
+void MainWindow::deleteConversationFor(const QUuid& conversationId, const QString& title) {
+    if (sessions_ == nullptr || conversationId.isNull()) {
+        return;
+    }
+    if (auto* openController = sessions_->controller(conversationId);
+        openController != nullptr && agentWorkIsActive(openController->status())) {
+        statusBar()->showMessage(tr("Cannot delete a conversation while Agent work is active"),
+                                 8000);
+        return;
+    }
+
+    QMessageBox prompt(
+        QMessageBox::Warning, tr("Delete conversation?"),
+        tr("Delete \"%1\" permanently?\nMessages, queued prompts, and local metadata will be "
+           "removed. This cannot be undone.")
+            .arg(title),
+        QMessageBox::NoButton, this);
+    auto* deleteButton = prompt.addButton(tr("Delete conversation"), QMessageBox::DestructiveRole);
+    auto* cancelButton = prompt.addButton(QMessageBox::Cancel);
+    prompt.setDefaultButton(cancelButton);
+    prompt.setEscapeButton(cancelButton);
+    prompt.exec();
+    if (prompt.clickedButton() != deleteButton) {
+        return;
+    }
+
+    const bool deletingCurrent = conversationId == controller_->conversation().id;
+    session::SessionController* replacement = nullptr;
+    QString error;
+    if (deletingCurrent) {
+        persistComposerDraft();
+        const auto replacementRecord =
+            std::find_if(conversationCatalog_.cbegin(), conversationCatalog_.cend(),
+                         [&conversationId](const auto& conversation) {
+                             return !conversation.archived && conversation.id != conversationId;
+                         });
+        replacement = replacementRecord == conversationCatalog_.cend()
+                          ? sessions_->create(controller_->conversation().workingDirectory,
+                                              settingsSnapshot_.preferredAgentKind,
+                                              tr("New conversation"), &error)
+                          : sessions_->open(*replacementRecord, &error);
+        if (replacement == nullptr) {
+            statusBar()->showMessage(tr("Cannot prepare a replacement conversation: %1").arg(error),
+                                     8000);
+            return;
+        }
+        disconnect(controller_, nullptr, this, nullptr);
+        controller_ = nullptr;
+    }
+
+    if (!sessions_->deleteConversation(conversationId, &error)) {
+        if (deletingCurrent) {
+            auto* restored = sessions_->controller(conversationId);
+            bindConversation(restored != nullptr ? restored : replacement);
+        }
+        statusBar()->showMessage(tr("Cannot delete conversation: %1").arg(error), 8000);
+        return;
+    }
+
+    settings_->saveComposerDraft(conversationId, {});
+    unreadConversationIds_.remove(conversationId);
+    if (deletingCurrent) {
+        bindConversation(replacement);
+    } else {
+        refreshConversationList();
+    }
+}
+
 void MainWindow::restoreSelectedConversation() {
     if (sessions_ == nullptr || conversationList_->currentItem() == nullptr) {
         return;
@@ -673,6 +767,7 @@ void MainWindow::prepareConversationContextMenu() {
     contextEditGroupAction_->setEnabled(hasSelection && (isCurrent || sessions_ != nullptr));
     contextArchiveAction_->setEnabled(hasSelection && !archived);
     contextRestoreAction_->setEnabled(hasSelection && archived);
+    contextDeleteAction_->setEnabled(hasSelection && sessions_ != nullptr);
 }
 
 void MainWindow::bindConversation(session::SessionController* controller) {
@@ -1539,6 +1634,9 @@ void MainWindow::buildUi() {
     contextArchiveAction_->setObjectName(QStringLiteral("contextArchiveConversationAction"));
     contextRestoreAction_ = conversationContextMenu_->addAction(tr("Restore conversation"));
     contextRestoreAction_->setObjectName(QStringLiteral("contextRestoreConversationAction"));
+    conversationContextMenu_->addSeparator();
+    contextDeleteAction_ = conversationContextMenu_->addAction(tr("Delete conversation..."));
+    contextDeleteAction_->setObjectName(QStringLiteral("contextDeleteConversationAction"));
     sidebarLayout->addWidget(brand);
     sidebarLayout->addSpacing(10);
     sidebarLayout->addWidget(newConversation);
@@ -1745,6 +1843,8 @@ void MainWindow::buildUi() {
             &MainWindow::archiveSelectedConversation);
     connect(contextRestoreAction_, &QAction::triggered, this,
             &MainWindow::restoreSelectedConversation);
+    connect(contextDeleteAction_, &QAction::triggered, this,
+            &MainWindow::deleteSelectedConversation);
     connect(conversationSearch_, &QLineEdit::textChanged, this, [this] {
         conversationViewCombo_->setCurrentIndex(0);
         refreshConversationList();
@@ -1804,6 +1904,10 @@ void MainWindow::buildMenus() {
     restoreAction->setObjectName(QStringLiteral("restoreConversationAction"));
     restoreAction->setEnabled(sessions_ != nullptr);
     connect(restoreAction, &QAction::triggered, this, &MainWindow::restoreSelectedConversation);
+    auto* deleteAction = fileMenu->addAction(tr("Delete conversation..."));
+    deleteAction->setObjectName(QStringLiteral("deleteConversationAction"));
+    deleteAction->setEnabled(sessions_ != nullptr);
+    connect(deleteAction, &QAction::triggered, this, &MainWindow::deleteConversation);
     pinConversationAction_ = fileMenu->addAction(tr("Pin conversation"));
     pinConversationAction_->setObjectName(QStringLiteral("pinConversationAction"));
     pinConversationAction_->setEnabled(sessions_ != nullptr);
