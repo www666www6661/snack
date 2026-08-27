@@ -147,6 +147,7 @@ class TestMainWindow final : public QObject {
     void updatesPlaceholderTitleAfterFirstSend();
     void renamesCurrentConversation();
     void editsDisplaysAndSearchesConversationTags();
+    void savesAndAppliesConversationViews();
     void editsArchivedConversationTagsFromContextMenu();
     void restoresPersistedTimeline();
     void restoresToolReasoningAndPlanViews();
@@ -1447,6 +1448,66 @@ void TestMainWindow::editsDisplaysAndSearchesConversationTags() {
     QCOMPARE(controller.conversation().tags,
              QStringList({QStringLiteral("Backend"), QStringLiteral("urgent")}));
     QVERIFY(window.statusBar()->currentMessage().contains(QStringLiteral("Cannot update")));
+}
+
+void TestMainWindow::savesAndAppliesConversationViews() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::app::AppSettings settings(directory.filePath(QStringLiteral("settings.ini")));
+    UiMemoryEventRepository repository;
+    snack::domain::Conversation backend;
+    backend.title = QStringLiteral("Backend work");
+    backend.workingDirectory = directory.path();
+    backend.tags = {QStringLiteral("backend")};
+    snack::domain::Conversation frontend;
+    frontend.title = QStringLiteral("Frontend work");
+    frontend.workingDirectory = directory.path();
+    frontend.tags = {QStringLiteral("frontend")};
+    frontend.archived = true;
+    repository.catalog = {backend, frontend};
+    snack::agent::FakeAgentAdapter adapter(nullptr, 1);
+    snack::session::SessionController controller(backend, &adapter, &repository);
+    snack::ui::MainWindow window(&controller, &settings, false);
+
+    auto* search = window.findChild<QLineEdit*>(QStringLiteral("conversationSearch"));
+    auto* list = window.findChild<QListWidget*>(QStringLiteral("conversationList"));
+    auto* views = window.findChild<QComboBox*>(QStringLiteral("conversationViewCombo"));
+    auto* save = window.findChild<QPushButton*>(QStringLiteral("saveConversationViewButton"));
+    auto* showArchived =
+        window.findChild<QAction*>(QStringLiteral("showArchivedConversationsAction"));
+    QVERIFY(search != nullptr);
+    QVERIFY(list != nullptr);
+    QVERIFY(views != nullptr);
+    QVERIFY(save != nullptr);
+    QVERIFY(showArchived != nullptr);
+    QCOMPARE(views->count(), 1);
+
+    search->setText(QStringLiteral("tag:backend"));
+    showArchived->setChecked(false);
+    QCOMPARE(list->count(), 1);
+    QTimer::singleShot(0, [] {
+        auto* dialog = qobject_cast<QInputDialog*>(QApplication::activeModalWidget());
+        QVERIFY(dialog != nullptr);
+        dialog->setTextValue(QStringLiteral("  Backend only  "));
+        dialog->accept();
+    });
+    save->click();
+
+    QCOMPARE(repository.views.size(), 1);
+    const auto saved = repository.views.constBegin().value();
+    QCOMPARE(saved.name, QStringLiteral("Backend only"));
+    QCOMPARE(saved.query, QStringLiteral("tag:backend"));
+    QVERIFY(!saved.showArchived);
+    QCOMPARE(views->currentData().toUuid(), saved.id);
+
+    search->clear();
+    showArchived->setChecked(true);
+    QCOMPARE(list->count(), 2);
+    views->setCurrentIndex(views->findData(saved.id));
+    QCOMPARE(search->text(), QStringLiteral("tag:backend"));
+    QVERIFY(!showArchived->isChecked());
+    QCOMPARE(list->count(), 1);
+    QCOMPARE(list->item(0)->data(Qt::UserRole).toUuid(), backend.id);
 }
 
 void TestMainWindow::restoresPersistedTimeline() {

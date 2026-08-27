@@ -1031,9 +1031,72 @@ void MainWindow::activatePreviousConversation() { activateRelativeConversation(-
 void MainWindow::activateNextConversation() { activateRelativeConversation(1); }
 
 void MainWindow::setShowArchivedConversations(bool visible) {
+    const QSignalBlocker blocker(conversationViewCombo_);
+    conversationViewCombo_->setCurrentIndex(0);
     settingsSnapshot_.showArchivedConversations = visible;
     settings_->save(settingsSnapshot_);
     refreshConversationList();
+}
+
+void MainWindow::saveConversationView() {
+    bool accepted = false;
+    const QString name = QInputDialog::getText(this, tr("Save conversation view"), tr("View name"),
+                                               QLineEdit::Normal, {}, &accepted)
+                             .simplified();
+    if (!accepted) {
+        return;
+    }
+    QString error;
+    const auto views = controller_->conversationViews(&error);
+    if (!error.isEmpty()) {
+        statusBar()->showMessage(error, 8000);
+        return;
+    }
+    domain::SavedConversationView view;
+    view.name = name;
+    view.query = conversationSearch_->text();
+    view.showArchived = settingsSnapshot_.showArchivedConversations;
+    view.position = views.size();
+    if (!controller_->saveConversationView(view, &error)) {
+        statusBar()->showMessage(tr("Cannot save conversation view: %1").arg(error), 8000);
+        return;
+    }
+    rebuildConversationViews(view.id);
+}
+
+void MainWindow::applyConversationView(int index) {
+    if (index <= 0) {
+        return;
+    }
+    const QUuid viewId = conversationViewCombo_->itemData(index).toUuid();
+    const auto views = controller_->conversationViews();
+    const auto selected = std::find_if(views.cbegin(), views.cend(),
+                                       [&viewId](const auto& view) { return view.id == viewId; });
+    if (selected == views.cend()) {
+        rebuildConversationViews();
+        return;
+    }
+    conversationSearch_->setText(selected->query);
+    showArchivedConversationsAction_->setChecked(selected->showArchived);
+    const QSignalBlocker blocker(conversationViewCombo_);
+    conversationViewCombo_->setCurrentIndex(conversationViewCombo_->findData(viewId));
+}
+
+void MainWindow::rebuildConversationViews(const QUuid& selectedViewId) {
+    QString error;
+    const auto views = controller_->conversationViews(&error);
+    const QSignalBlocker blocker(conversationViewCombo_);
+    conversationViewCombo_->clear();
+    conversationViewCombo_->addItem(tr("Current filter"));
+    for (const auto& view : views) {
+        conversationViewCombo_->addItem(view.name, view.id);
+    }
+    const int selectedIndex =
+        selectedViewId.isNull() ? 0 : conversationViewCombo_->findData(selectedViewId);
+    conversationViewCombo_->setCurrentIndex(std::max(0, selectedIndex));
+    if (!error.isEmpty()) {
+        statusBar()->showMessage(error, 8000);
+    }
 }
 
 void MainWindow::increaseScale() { applyInterfaceScale(settingsSnapshot_.interfaceScale + 0.1); }
@@ -1091,6 +1154,15 @@ void MainWindow::buildUi() {
     auto* newConversation = new QPushButton(tr("New conversation"), sidebar);
     newConversation->setObjectName(QStringLiteral("newConversationButton"));
     newConversation->setEnabled(sessions_ != nullptr);
+    auto* viewRow = new QWidget(sidebar);
+    auto* viewRowLayout = new QHBoxLayout(viewRow);
+    viewRowLayout->setContentsMargins(0, 0, 0, 0);
+    conversationViewCombo_ = new QComboBox(viewRow);
+    conversationViewCombo_->setObjectName(QStringLiteral("conversationViewCombo"));
+    saveConversationViewButton_ = new QPushButton(tr("Save view"), viewRow);
+    saveConversationViewButton_->setObjectName(QStringLiteral("saveConversationViewButton"));
+    viewRowLayout->addWidget(conversationViewCombo_, 1);
+    viewRowLayout->addWidget(saveConversationViewButton_);
     conversationSearch_ = new QLineEdit(sidebar);
     conversationSearch_->setObjectName(QStringLiteral("conversationSearch"));
     conversationSearch_->setPlaceholderText(tr("Search conversations or tag:name"));
@@ -1121,6 +1193,7 @@ void MainWindow::buildUi() {
     sidebarLayout->addWidget(brand);
     sidebarLayout->addSpacing(10);
     sidebarLayout->addWidget(newConversation);
+    sidebarLayout->addWidget(viewRow);
     sidebarLayout->addWidget(conversationSearch_);
     sidebarLayout->addWidget(sessionRow_);
     sidebarLayout->addWidget(conversationList_, 1);
@@ -1281,6 +1354,10 @@ void MainWindow::buildUi() {
     connect(stopButton_, &QPushButton::clicked, this, &MainWindow::stopTurn);
     connect(reconnectButton_, &QPushButton::clicked, this, &MainWindow::reconnectSession);
     connect(newConversation, &QPushButton::clicked, this, &MainWindow::createConversation);
+    connect(saveConversationViewButton_, &QPushButton::clicked, this,
+            &MainWindow::saveConversationView);
+    connect(conversationViewCombo_, &QComboBox::currentIndexChanged, this,
+            &MainWindow::applyConversationView);
     connect(conversationList_, &QListWidget::itemClicked, this, &MainWindow::activateConversation);
     connect(conversationList_, &QListWidget::itemActivated, this,
             &MainWindow::activateConversation);
@@ -1304,8 +1381,11 @@ void MainWindow::buildUi() {
             &MainWindow::archiveSelectedConversation);
     connect(contextRestoreAction_, &QAction::triggered, this,
             &MainWindow::restoreSelectedConversation);
-    connect(conversationSearch_, &QLineEdit::textChanged, this,
-            [this] { refreshConversationList(); });
+    connect(conversationSearch_, &QLineEdit::textChanged, this, [this] {
+        const QSignalBlocker blocker(conversationViewCombo_);
+        conversationViewCombo_->setCurrentIndex(0);
+        refreshConversationList();
+    });
     connect(composer_, &ComposerTextEdit::sendRequested, this, &MainWindow::sendMessage);
     connect(composer_, &ComposerTextEdit::queueRequested, this, &MainWindow::queueComposerMessage);
     connect(composer_, &ComposerTextEdit::stopRequested, this, &MainWindow::stopTurn);
@@ -1332,6 +1412,7 @@ void MainWindow::buildUi() {
     connect(accessCombo_, &QComboBox::currentIndexChanged, this,
             &MainWindow::updateSessionSettings);
     rebuildPromptTemplateMenu();
+    rebuildConversationViews();
 }
 
 void MainWindow::buildMenus() {

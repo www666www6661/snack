@@ -127,6 +127,7 @@ class TestSessionController final : public QObject {
     void reconnectsWithoutReplayingQueuedMessages();
     void returnsToDisconnectedWhenConnectRejected();
     void managesPromptTemplates();
+    void savesConversationViews();
     void interruptsActiveTurn();
     void handlesApprovalLifecycle();
     void handlesUserInputLifecycleAndConcurrentWaitingStates();
@@ -484,6 +485,22 @@ void TestSessionController::managesPromptTemplates() {
     QVERIFY(controller.promptTemplates().isEmpty());
     QCOMPARE(templatesSpy.count(), 2);
     QVERIFY(!controller.deletePromptTemplate(promptTemplate.id, &error));
+}
+
+void TestSessionController::savesConversationViews() {
+    MemoryEventRepository repository;
+    snack::agent::FakeAgentAdapter adapter(nullptr, 1);
+    snack::session::SessionController controller(conversation(), &adapter, &repository);
+    snack::domain::SavedConversationView view;
+    view.name = QStringLiteral("  Active backend  ");
+    view.query = QStringLiteral(" tag:backend status:running ");
+    QString error;
+
+    QVERIFY2(controller.saveConversationView(view, &error), qPrintable(error));
+    const auto views = controller.conversationViews(&error);
+    QCOMPARE(views.size(), 1);
+    QCOMPARE(views.constFirst().name, QStringLiteral("Active backend"));
+    QCOMPARE(views.constFirst().query, QStringLiteral("tag:backend status:running"));
 }
 
 void TestSessionController::interruptsActiveTurn() {

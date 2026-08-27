@@ -69,6 +69,8 @@ class MainWindow final : public QMainWindow {
     void applyLightTheme();
     void applyDarkTheme();
     void focusConversationSearch();
+    void saveConversationView();
+    void applyConversationView(int index);
     void activateFirstSearchResult();
     void leaveConversationSearch();
     void markAllConversationsRead();
@@ -97,6 +99,7 @@ class MainWindow final : public QMainWindow {
     void buildMenus();
     void connectControllerSignals();
     void refreshConversationList();
+    void rebuildConversationViews(const QUuid& selectedViewId = {});
     void editConversationTagsFor(const QUuid& conversationId, const QStringList& tags);
     void activateRelativeConversation(int offset);
     void activateConversationById(const QUuid& conversationId);
@@ -167,6 +170,8 @@ class MainWindow final : public QMainWindow {
     QLabel* titleLabel_{nullptr};
     QLabel* usageLabel_{nullptr};
     QLabel* sessionRow_{nullptr};
+    QComboBox* conversationViewCombo_{nullptr};
+    QPushButton* saveConversationViewButton_{nullptr};
     QLineEdit* conversationSearch_{nullptr};
     QListWidget* conversationList_{nullptr};
     QComboBox* modelCombo_{nullptr};

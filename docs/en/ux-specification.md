@@ -46,6 +46,8 @@ Open next unread conversation follows repository order from the current row, wra
 
 The View menu can hide or show archived rows. This is a persistent local view preference, defaults to visible for compatibility, and never changes archive metadata or runtime ownership.
 
+The conversation rail can save the current query and archived-row visibility under a named view. Choosing a saved view reapplies both values locally and refreshes the catalog without opening, switching, reconnecting, or otherwise mutating any conversation runtime. Manual search or visibility edits return the selector to Current filter while preserving the saved definition.
+
 `Ctrl+Tab` and `Ctrl+Shift+Tab` cycle forward and backward through active conversations in repository order, wrap at either end, skip archived rows, and save the outgoing draft before opening the target through the normal strict Agent boundary.
 
 A persistent notice directly below the header reports an Agent fallback, connection loss, or reconnect attempt. Fallback notices remain visible while the fallback Agent is active. Connection failures preserve the original diagnostic and expose Reconnect in the notice; retrying keeps the previous cause visible until the native handshake succeeds. The status bar may echo the message but is never its only location. `Closed` is terminal: delayed connection, capability, native-identity, or event signals from an asynchronously exiting Agent cannot reopen the conversation, replace its diagnostic, or append timeline data.

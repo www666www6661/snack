@@ -25,6 +25,8 @@ class SessionController final : public QObject {
     [[nodiscard]] const QList<domain::QueuedMessage>& queuedMessages() const;
     [[nodiscard]] QList<domain::Conversation> conversationCatalog(QString* error = nullptr) const;
     [[nodiscard]] QList<domain::PromptTemplate> promptTemplates(QString* error = nullptr) const;
+    [[nodiscard]] QList<domain::SavedConversationView>
+    conversationViews(QString* error = nullptr) const;
     [[nodiscard]] QList<domain::AgentEvent> restoredEvents(QString* error = nullptr);
 
     void open();
@@ -42,6 +44,7 @@ class SessionController final : public QObject {
     bool sendQueuedMessageNow(const QUuid& messageId, QString* error = nullptr);
     bool savePromptTemplate(domain::PromptTemplate promptTemplate, QString* error = nullptr);
     bool deletePromptTemplate(const QUuid& templateId, QString* error = nullptr);
+    bool saveConversationView(domain::SavedConversationView view, QString* error = nullptr);
     bool respondToApproval(const QString& requestId, domain::ApprovalDecision decision,
                            QString* error = nullptr);
     bool respondToUserInput(const QString& requestId, const QJsonObject& answers,

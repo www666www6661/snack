@@ -188,6 +188,10 @@ QList<domain::PromptTemplate> SessionController::promptTemplates(QString* error)
     return repository_->promptTemplates(error);
 }
 
+QList<domain::SavedConversationView> SessionController::conversationViews(QString* error) const {
+    return repository_->conversationViews(error);
+}
+
 QList<domain::AgentEvent> SessionController::restoredEvents(QString* error) {
     const auto events = repository_->eventsForConversation(conversation_.id, error);
     if (!events.isEmpty()) {
@@ -523,6 +527,12 @@ bool SessionController::deletePromptTemplate(const QUuid& templateId, QString* e
     }
     emit promptTemplatesChanged(templates);
     return true;
+}
+
+bool SessionController::saveConversationView(domain::SavedConversationView view, QString* error) {
+    view.name = view.name.simplified();
+    view.query = view.query.trimmed();
+    return repository_->saveConversationView(view, error);
 }
 
 bool SessionController::respondToApproval(const QString& requestId,
