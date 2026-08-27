@@ -319,6 +319,7 @@ void MainWindow::refreshConversationList() {
     int currentRow = -1;
     const QString query = conversationSearch_->text().trimmed();
     const QDateTime queryTime = QDateTime::currentDateTimeUtc();
+    QList<const domain::Conversation*> visibleConversations;
     for (const auto& conversation : conversationCatalog_) {
         if (conversation.archived && !settingsSnapshot_.showArchivedConversations) {
             continue;
@@ -338,31 +339,86 @@ void MainWindow::refreshConversationList() {
         if (!conversationMatchesQuery(conversation, agentName, query, queryTime)) {
             continue;
         }
-        const QString title =
-            conversation.pinned ? tr("Pinned · %1").arg(conversation.title) : conversation.title;
-        const QString displayTitle =
-            unreadConversationIds_.contains(conversation.id) ? tr("Unread · %1").arg(title) : title;
-        const QString taggedTitle =
-            conversation.tags.isEmpty()
-                ? displayTitle
-                : QStringLiteral("%1  [%2]").arg(displayTitle, conversation.tags.join(" · "));
-        const QString groupedTitle =
-            conversation.groupName.isEmpty()
-                ? taggedTitle
-                : tr("%1  {Group: %2}").arg(taggedTitle, conversation.groupName);
-        const QString status = conversationStatusText(conversation.status);
-        auto* item = new QListWidgetItem(
-            conversation.archived
-                ? tr("Archived · %1 · %2\n%3")
-                      .arg(groupedTitle, agentName, conversation.workingDirectory)
-                : tr("%1 · %2 · %3\n%4")
-                      .arg(groupedTitle, agentName, status, conversation.workingDirectory),
-            conversationList_);
-        item->setData(Qt::UserRole, conversation.id);
-        item->setData(Qt::UserRole + 1, conversation.archived);
-        item->setToolTip(conversation.workingDirectory);
-        if (conversation.id == controller_->conversation().id) {
-            currentRow = conversationList_->count() - 1;
+        visibleConversations.append(&conversation);
+    }
+
+    const bool showGroupSections =
+        std::any_of(visibleConversations.cbegin(), visibleConversations.cend(),
+                    [](const auto* conversation) { return !conversation->groupName.isEmpty(); });
+    QList<QString> sectionKeys;
+    QHash<QString, QList<const domain::Conversation*>> sections;
+    if (showGroupSections) {
+        for (const auto* conversation : visibleConversations) {
+            const QString key = QStringLiteral("%1\n%2")
+                                    .arg(conversation->archived ? 1 : 0)
+                                    .arg(conversation->groupName.toCaseFolded());
+            if (!sections.contains(key)) {
+                sectionKeys.append(key);
+            }
+            sections[key].append(conversation);
+        }
+    } else {
+        sectionKeys.append(QString{});
+        sections.insert(QString{}, visibleConversations);
+    }
+
+    for (const QString& sectionKey : sectionKeys) {
+        const auto& section = sections[sectionKey];
+        if (section.isEmpty()) {
+            continue;
+        }
+        if (showGroupSections) {
+            const auto* first = section.constFirst();
+            QString sectionTitle;
+            if (first->groupName.isEmpty()) {
+                sectionTitle = first->archived ? tr("Archived · Ungrouped") : tr("Ungrouped");
+            } else {
+                sectionTitle = first->archived ? tr("Archived group · %1").arg(first->groupName)
+                                               : tr("Group · %1").arg(first->groupName);
+            }
+            auto* header = new QListWidgetItem(sectionTitle, conversationList_);
+            header->setFlags(Qt::NoItemFlags);
+            auto headerFont = header->font();
+            headerFont.setBold(true);
+            header->setFont(headerFont);
+        }
+        for (const auto* value : section) {
+            const auto& conversation = *value;
+            QString agentName;
+            switch (conversation.agentKind) {
+            case domain::AgentKind::Codex:
+                agentName = QStringLiteral("Codex");
+                break;
+            case domain::AgentKind::Claude:
+                agentName = QStringLiteral("Claude");
+                break;
+            case domain::AgentKind::Mock:
+                agentName = tr("Mock Agent");
+                break;
+            }
+            const QString title = conversation.pinned ? tr("Pinned · %1").arg(conversation.title)
+                                                      : conversation.title;
+            const QString displayTitle = unreadConversationIds_.contains(conversation.id)
+                                             ? tr("Unread · %1").arg(title)
+                                             : title;
+            const QString taggedTitle =
+                conversation.tags.isEmpty()
+                    ? displayTitle
+                    : QStringLiteral("%1  [%2]").arg(displayTitle, conversation.tags.join(" · "));
+            const QString status = conversationStatusText(conversation.status);
+            auto* item = new QListWidgetItem(
+                conversation.archived
+                    ? tr("Archived · %1 · %2\n%3")
+                          .arg(taggedTitle, agentName, conversation.workingDirectory)
+                    : tr("%1 · %2 · %3\n%4")
+                          .arg(taggedTitle, agentName, status, conversation.workingDirectory),
+                conversationList_);
+            item->setData(Qt::UserRole, conversation.id);
+            item->setData(Qt::UserRole + 1, conversation.archived);
+            item->setToolTip(conversation.workingDirectory);
+            if (conversation.id == controller_->conversation().id) {
+                currentRow = conversationList_->count() - 1;
+            }
         }
     }
     conversationList_->setCurrentRow(currentRow);
@@ -411,11 +467,15 @@ void MainWindow::activateConversation(QListWidgetItem* item) {
     if (item == nullptr || sessions_ == nullptr) {
         return;
     }
+    const QUuid conversationId = item->data(Qt::UserRole).toUuid();
+    if (conversationId.isNull()) {
+        return;
+    }
     if (item->data(Qt::UserRole + 1).toBool()) {
         statusBar()->showMessage(tr("Restore the archived conversation before opening it"), 5000);
         return;
     }
-    activateConversationById(item->data(Qt::UserRole).toUuid());
+    activateConversationById(conversationId);
 }
 
 void MainWindow::activateConversationById(const QUuid& conversationId) {
@@ -597,7 +657,7 @@ void MainWindow::toggleSelectedPinnedConversation() {
 
 void MainWindow::prepareConversationContextMenu() {
     const auto* item = conversationList_->currentItem();
-    const bool hasSelection = item != nullptr;
+    const bool hasSelection = item != nullptr && !item->data(Qt::UserRole).toUuid().isNull();
     const bool archived = hasSelection && item->data(Qt::UserRole + 1).toBool();
     const QUuid conversationId = hasSelection ? item->data(Qt::UserRole).toUuid() : QUuid{};
     const auto selected =
@@ -1075,6 +1135,9 @@ void MainWindow::focusConversationSearch() {
 void MainWindow::activateFirstSearchResult() {
     for (int row = 0; row < conversationList_->count(); ++row) {
         auto* item = conversationList_->item(row);
+        if (item->data(Qt::UserRole).toUuid().isNull()) {
+            continue;
+        }
         if (item->data(Qt::UserRole + 1).toBool()) {
             continue;
         }
@@ -1661,6 +1724,9 @@ void MainWindow::buildUi() {
             [this](const QPoint& position) {
                 auto* item = conversationList_->itemAt(position);
                 if (item == nullptr) {
+                    return;
+                }
+                if (item->data(Qt::UserRole).toUuid().isNull()) {
                     return;
                 }
                 conversationList_->setCurrentItem(item);

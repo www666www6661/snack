@@ -1497,7 +1497,14 @@ void TestMainWindow::editsDisplaysAndSearchesConversationGroups() {
     snack::domain::Conversation conversation;
     conversation.title = QStringLiteral("Grouped conversation");
     conversation.workingDirectory = directory.path();
-    repository.catalog = {conversation};
+    snack::domain::Conversation peer = conversation;
+    peer.id = QUuid::createUuid();
+    peer.title = QStringLiteral("Peer conversation");
+    peer.groupName = QStringLiteral("Backend Work");
+    snack::domain::Conversation ungrouped = conversation;
+    ungrouped.id = QUuid::createUuid();
+    ungrouped.title = QStringLiteral("Ungrouped conversation");
+    repository.catalog = {conversation, peer, ungrouped};
     snack::session::SessionController controller(conversation, &adapter, &repository);
     snack::ui::MainWindow window(&controller, &settings, false);
 
@@ -1516,9 +1523,17 @@ void TestMainWindow::editsDisplaysAndSearchesConversationGroups() {
     editGroup->trigger();
 
     QCOMPARE(controller.conversation().groupName, QStringLiteral("Backend Work"));
-    QVERIFY(list->item(0)->text().contains(QStringLiteral("Group: Backend Work")));
+    QCOMPARE(list->count(), 5);
+    QCOMPARE(list->item(0)->text(), QStringLiteral("Group · Backend Work"));
+    QVERIFY(list->item(0)->data(Qt::UserRole).toUuid().isNull());
+    QVERIFY(!(list->item(0)->flags() & Qt::ItemIsSelectable));
+    QCOMPARE(list->item(1)->data(Qt::UserRole).toUuid(), conversation.id);
+    QCOMPARE(list->item(2)->data(Qt::UserRole).toUuid(), peer.id);
+    QCOMPARE(list->item(3)->text(), QStringLiteral("Ungrouped"));
+    QCOMPARE(list->item(4)->data(Qt::UserRole).toUuid(), ungrouped.id);
     search->setText(QStringLiteral("group:\"backend work\""));
-    QCOMPARE(list->count(), 1);
+    QCOMPARE(list->count(), 3);
+    QCOMPARE(list->item(0)->text(), QStringLiteral("Group · Backend Work"));
     search->setText(QStringLiteral("group:backend"));
     QCOMPARE(list->count(), 0);
 }
