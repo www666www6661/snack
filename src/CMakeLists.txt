@@ -57,6 +57,9 @@ set(SNACK_CORE_SOURCES
     workspace/WorkspaceChangeReview.h
     workspace/WorkspaceWriteLease.cpp
     workspace/WorkspaceWriteLease.h
+    terminal/ITerminalProcess.h
+    terminal/TerminalSession.cpp
+    terminal/TerminalSession.h
     app/WorkspaceFilePreview.cpp
     app/WorkspaceFilePreview.h
     app/WorkspaceExternalOpener.cpp
