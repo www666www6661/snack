@@ -105,6 +105,7 @@ class TestSessionController final : public QObject {
     void pinsConversationMetadata();
     void updatesConversationTags();
     void exposesConversationCatalog();
+    void restoresAndPersistsConversationModel();
     void snapshotsSettingsPerTurn();
     void steersActiveTurn();
     void persistsEditsAndDispatchesQueuedMessages();
@@ -252,6 +253,26 @@ void TestSessionController::exposesConversationCatalog() {
     QCOMPARE(catalog.constFirst().id, repository.conversation_.id);
 }
 
+void TestSessionController::restoresAndPersistsConversationModel() {
+    MemoryEventRepository repository;
+    repository.conversation_ = conversation();
+    repository.conversation_.modelId = QStringLiteral("mock-fast");
+    snack::agent::FakeAgentAdapter firstAdapter(nullptr, 1);
+    snack::session::SessionController first(repository.conversation_, &firstAdapter, &repository);
+    QCOMPARE(first.nextTurnSettings().modelId, QStringLiteral("mock-fast"));
+
+    auto settings = first.nextTurnSettings();
+    settings.modelId = QStringLiteral("mock-balanced");
+    QString error;
+    QVERIFY2(first.setNextTurnSettings(settings, &error), qPrintable(error));
+    QCOMPARE(first.conversation().modelId, QStringLiteral("mock-balanced"));
+    QCOMPARE(repository.conversation_.modelId, QStringLiteral("mock-balanced"));
+
+    snack::agent::FakeAgentAdapter secondAdapter(nullptr, 1);
+    snack::session::SessionController second(repository.conversation_, &secondAdapter, &repository);
+    QCOMPARE(second.nextTurnSettings().modelId, QStringLiteral("mock-balanced"));
+}
+
 void TestSessionController::snapshotsSettingsPerTurn() {
     MemoryEventRepository repository;
     snack::agent::FakeAgentAdapter adapter(nullptr, 1);
@@ -262,7 +283,8 @@ void TestSessionController::snapshotsSettingsPerTurn() {
     auto settings = controller.nextTurnSettings();
     settings.modelId = QStringLiteral("mock-fast");
     settings.reasoningEffort = snack::domain::ReasoningEffort::Low;
-    controller.setNextTurnSettings(settings);
+    QVERIFY(controller.setNextTurnSettings(settings));
+    QCOMPARE(repository.conversation_.modelId, QStringLiteral("mock-fast"));
     QVERIFY(controller.sendMessage(QStringLiteral("snapshot")));
 
     const auto saved = snack::domain::TurnSettingsSnapshot::fromJson(
@@ -610,7 +632,7 @@ void TestSessionController::validatesStateAndNormalizesSettings() {
     settings.workingDirectory = QStringLiteral("/wrong");
     settings.capabilityVersion = QStringLiteral("wrong");
     settings.modelId = QStringLiteral("mock-fast");
-    controller.setNextTurnSettings(settings);
+    QVERIFY(controller.setNextTurnSettings(settings));
     QCOMPARE(settingsSpy.count(), 1);
     QCOMPARE(controller.nextTurnSettings().agentKind, snack::domain::AgentKind::Mock);
     QCOMPARE(controller.nextTurnSettings().workingDirectory,
@@ -622,10 +644,10 @@ void TestSessionController::validatesStateAndNormalizesSettings() {
     settings = controller.nextTurnSettings();
     settings.modelId = QStringLiteral("missing-model");
     settings.reasoningEffort = snack::domain::ReasoningEffort::Ultra;
-    controller.setNextTurnSettings(settings);
+    QVERIFY(controller.setNextTurnSettings(settings));
     QCOMPARE(controller.nextTurnSettings().modelId, QStringLiteral("mock-balanced"));
     QCOMPARE(controller.nextTurnSettings().reasoningEffort, snack::domain::ReasoningEffort::Medium);
-    controller.setNextTurnSettings(controller.nextTurnSettings());
+    QVERIFY(controller.setNextTurnSettings(controller.nextTurnSettings()));
     QCOMPARE(settingsSpy.count(), 2);
 
     QVERIFY(controller.sendMessage(QStringLiteral("first"), &error));
@@ -759,6 +781,16 @@ void TestSessionController::reportsPersistenceFailure() {
     snack::agent::FakeAgentAdapter adapter(nullptr, 1);
     snack::session::SessionController controller(conversation(), &adapter, &repository);
     QSignalSpy errorSpy(&controller, &snack::session::SessionController::persistenceError);
+    QSignalSpy settingsSpy(&controller,
+                           &snack::session::SessionController::nextTurnSettingsChanged);
+    auto settings = controller.nextTurnSettings();
+    settings.modelId = QStringLiteral("mock-fast");
+    QString error;
+    QVERIFY(!controller.setNextTurnSettings(settings, &error));
+    QCOMPARE(error, QStringLiteral("save failed"));
+    QCOMPARE(controller.nextTurnSettings().modelId, QStringLiteral("mock-balanced"));
+    QCOMPARE(controller.conversation().modelId, QStringLiteral("mock-balanced"));
+    QCOMPARE(settingsSpy.count(), 0);
     controller.open();
     QCOMPARE(controller.status(), snack::domain::ConversationStatus::Failed);
     QVERIFY(errorSpy.count() >= 1);

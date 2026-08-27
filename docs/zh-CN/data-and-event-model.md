@@ -9,7 +9,7 @@
 | 实体 | 关键字段 |
 |---|---|
 | `Workspace` | `id`, `canonicalPath`, `displayPath`, `gitState`, `lastOpenedAt` |
-| `Conversation` | `id`, `workspaceId`, `agentKind`, `title`, `titleIsPlaceholder`, `nativeSessionId`, `status`, `archived`, `pinned`, `tags` |
+| `Conversation` | `id`, `workspaceId`, `agentKind`, `modelId`, `title`, `titleIsPlaceholder`, `nativeSessionId`, `status`, `archived`, `pinned`, `tags` |
 | `AgentRuntime` | `conversationId`, `cliPath`, `cliVersion`, `protocolVersion`, `capabilities` |
 | `Turn` | `id`, `nativeTurnId`, `conversationId`, `status`, `settingsSnapshot`, `startedAt`, `finishedAt` |
 | `AgentEvent` | `id`, `conversationId`, `turnId`, `sequence`, `type`, `payload`, `rawRef` |
@@ -43,7 +43,7 @@ Codex 文本 Turn 使用 GUI `QUuid` 作为领域 `turnId`，并把 app-server �
 
 ## 4. 设置快照
 
-每个 Turn 保存不可变的 `TurnSettingsSnapshot`：Agent、模型 ID、推理强度、访问层级、沙箱/审批映射、工作目录、隔离修改状态和协议能力版本。运行中 UI设置只更新 `nextTurnSettings`。
+每个 Turn 保存不可变的 `TurnSettingsSnapshot`：Agent、模型 ID、推理强度、访问层级、沙箱/审批映射、工作目录、隔离修改状态和协议能力版本。运行中 UI设置只更新 `nextTurnSettings`。会话目录另行持久化规范化后的下一 Turn 模型 ID，使关闭或恢复后的会话无需从历史事件重建设置即可筛选。
 
 `CapabilitySet` 同时保存可见模型 ID 和逐模型展示信息、默认强度、支持的强度 ID/说明、输入模态、人格支持及服务端默认模型。领域枚举暂不认识的新强度 ID 仍保留用于展示，但不会被误当作可执行设置。
 
@@ -71,6 +71,6 @@ Codex 文本 Turn 使用 GUI `QUuid` 作为领域 `turnId`，并把 app-server �
 
 迁移只向前执行，每步幂等并记录开始/完成。升级前自动备份数据库。迁移失败进入只读恢复模式；不得用空数据库覆盖旧数据。
 
-当前数据库 Schema 版本为 7。会话分别持久化 `native_thread_id` 与 `native_session_id`，Codex 恢复不会用一个身份推导另一个。M3 会话标签以 JSON 字符串数组存放在非空的 `conversations.tags` 列中，旧记录迁移后使用空数组。Composer 待发送内容存放在有序的 `queued_messages` 表中，编辑、排序、取消与重启都不会丢失。收藏提示词模板作为有序纯文本存放在 `prompt_templates`；参数替换仅在内存中进行，绝不执行代码。现有数据库存在待执行升级时，`EventStore` 会先在数据库旁创建后缀为 `.pre-migration-v<版本>-<时间>-<标识>.bak` 的 SQLite 一致性快照。全部待执行步骤位于同一事务中；任一语句或提交失败都会回滚事务，并以只读方式重新打开原数据库，所有写 API 随后安全失败。由更高版本零食创建的数据库也会在不修改文件的前提下进入只读模式。成功升级产生的安全备份会保留，供用户明确恢复，后续再纳入维护清理策略。
+当前数据库 Schema 版本为 8。会话分别持久化 `native_thread_id` 与 `native_session_id`，Codex 恢复不会用一个身份推导另一个。非空的 `conversations.model_id` 列保存规范化后的下一 Turn 模型选择；旧记录迁移为空值，并在下次打开时采用 Runtime 默认模型。M3 会话标签以 JSON 字符串数组存放在非空的 `conversations.tags` 列中，旧记录迁移后使用空数组。Composer 待发送内容存放在有序的 `queued_messages` 表中，编辑、排序、取消与重启都不会丢失。收藏提示词模板作为有序纯文本存放在 `prompt_templates`；参数替换仅在内存中进行，绝不执行代码。现有数据库存在待执行升级时，`EventStore` 会先在数据库旁创建后缀为 `.pre-migration-v<版本>-<时间>-<标识>.bak` 的 SQLite 一致性快照。全部待执行步骤位于同一事务中；任一语句或提交失败都会回滚事务，并以只读方式重新打开原数据库，所有写 API 随后安全失败。由更高版本零食创建的数据库也会在不修改文件的前提下进入只读模式。成功升级产生的安全备份会保留，供用户明确恢复，后续再纳入维护清理策略。
 
 尚未发送的 Composer 草稿属于私有 UI 状态，不是领域事件。`AppSettings` 按会话 UUID 保存一份原样文本，成功发送或明确清空后移除对应键；加载草稿绝不会触发 Turn 或排队操作。

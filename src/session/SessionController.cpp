@@ -41,9 +41,13 @@ SessionController::SessionController(domain::Conversation conversation,
     Q_ASSERT(repository_ != nullptr);
     capabilities_ = adapter_->capabilities();
     nextTurnSettings_.agentKind = adapter_->kind();
+    if (!conversation_.modelId.isEmpty()) {
+        nextTurnSettings_.modelId = conversation_.modelId;
+    }
     nextTurnSettings_.workingDirectory = conversation_.workingDirectory;
     nextTurnSettings_.capabilityVersion = capabilities_.version;
     nextTurnSettings_ = normalizeSettings(nextTurnSettings_);
+    conversation_.modelId = nextTurnSettings_.modelId;
     queuedMessages_ =
         repository_->queuedMessagesForConversation(conversation_.id, &queueLoadError_);
 
@@ -112,8 +116,10 @@ void SessionController::handleCapabilitiesChanged(const agent::CapabilitySet& ca
     if (normalized == nextTurnSettings_) {
         return;
     }
-    nextTurnSettings_ = normalized;
-    emit nextTurnSettingsChanged(nextTurnSettings_);
+    QString error;
+    if (!setNextTurnSettings(normalized, &error)) {
+        emit persistenceError(error);
+    }
 }
 
 domain::TurnSettingsSnapshot
@@ -597,13 +603,23 @@ void SessionController::close() {
     setStatus(domain::ConversationStatus::Closed);
 }
 
-void SessionController::setNextTurnSettings(const domain::TurnSettingsSnapshot& settings) {
+bool SessionController::setNextTurnSettings(const domain::TurnSettingsSnapshot& settings,
+                                            QString* error) {
     const domain::TurnSettingsSnapshot normalized = normalizeSettings(settings);
     if (normalized == nextTurnSettings_) {
-        return;
+        return true;
+    }
+    if (normalized.modelId != conversation_.modelId) {
+        domain::Conversation updated = conversation_;
+        updated.modelId = normalized.modelId;
+        if (!repository_->saveConversation(updated, error)) {
+            return false;
+        }
+        conversation_ = std::move(updated);
     }
     nextTurnSettings_ = normalized;
     emit nextTurnSettingsChanged(nextTurnSettings_);
+    return true;
 }
 
 void SessionController::handleAdapterEvent(domain::AgentEvent event) {

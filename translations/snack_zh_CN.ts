@@ -70,37 +70,37 @@ Safety backup: %1</source>
 <context>
     <name>snack::ui::MainWindow</name>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1062"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1067"/>
         <source>Snack</source>
         <translation>零食</translation>
     </message>
     <message>
         <location filename="../src/ui/MainWindow.cpp" line="410"/>
         <location filename="../src/ui/MainWindow.cpp" line="437"/>
-        <location filename="../src/ui/MainWindow.cpp" line="1078"/>
-        <location filename="../src/ui/MainWindow.cpp" line="1326"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1083"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1331"/>
         <source>New conversation</source>
         <translation>新建会话</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1391"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1396"/>
         <source>Search conversations</source>
         <translation>搜索会话</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1216"/>
-        <location filename="../src/ui/MainWindow.cpp" line="2114"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1221"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2119"/>
         <source>Send</source>
         <translation>发送</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1877"/>
-        <location filename="../src/ui/MainWindow.cpp" line="1915"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1882"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1920"/>
         <source>Running</source>
         <translation>执行中</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1218"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1223"/>
         <source>Stop</source>
         <translation>停止</translation>
     </message>
@@ -110,65 +110,65 @@ Safety backup: %1</source>
         <translation>正在停止当前任务</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2239"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2244"/>
         <source>Strict confirmation</source>
         <translation>严格确认</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2242"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2247"/>
         <source>Workspace automatic</source>
         <translation>工作区自动</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2245"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2250"/>
         <source>Full automatic</source>
         <translation>完全自动</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="937"/>
+        <location filename="../src/ui/MainWindow.cpp" line="942"/>
         <source>Settings apply to the next message</source>
         <translation>设置从下一条消息生效</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1358"/>
-        <location filename="../src/ui/MainWindow.cpp" line="2269"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1363"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2274"/>
         <source>Agent</source>
         <translation>智能体</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2263"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2268"/>
         <source>Codex</source>
         <translation>Codex</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2265"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2270"/>
         <source>Claude</source>
         <translation>Claude</translation>
     </message>
     <message>
         <location filename="../src/ui/MainWindow.cpp" line="270"/>
-        <location filename="../src/ui/MainWindow.cpp" line="2267"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2272"/>
         <source>Mock Agent</source>
         <translation>模拟智能体</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1361"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1366"/>
         <source>Use Codex for new conversations</source>
         <translation>新会话使用 Codex</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1364"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1369"/>
         <source>Use Mock Agent for new conversations</source>
         <translation>新会话使用模拟智能体</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2257"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2262"/>
         <source>Agent choice applies to the next conversation</source>
         <translation>智能体选择从下一会话生效</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1089"/>
-        <location filename="../src/ui/MainWindow.cpp" line="2180"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1094"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2185"/>
         <source>●  %1
     %2</source>
         <translation>●  %1
@@ -245,7 +245,7 @@ Safety backup: %1</source>
         <translation>会话标题</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1077"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1082"/>
         <source>SNACK  /  零食</source>
         <translation>SNACK  /  零食</translation>
     </message>
@@ -254,59 +254,59 @@ Safety backup: %1</source>
         <translation type="vanished">筛选器：tag:名称、agent:名称、status:名称</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1126"/>
-        <location filename="../src/ui/MainWindow.cpp" line="1871"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1131"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1876"/>
         <source>Dormant</source>
         <translation>休眠</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1128"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1133"/>
         <source>Reconnect</source>
         <translation>重新连接</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1181"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1186"/>
         <source>Queued messages</source>
         <translation>排队消息</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1183"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1188"/>
         <source>Up</source>
         <translation>上移</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1185"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1190"/>
         <source>Down</source>
         <translation>下移</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1187"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1192"/>
         <source>Send now</source>
         <translation>立即发送</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1189"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1194"/>
         <source>Remove</source>
         <translation>移除</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1207"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1212"/>
         <source>Ask the agent about this workspace...</source>
         <translation>向智能体询问此工作区...</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1210"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1215"/>
         <source>Prompt templates</source>
         <translation>提示词模板</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1237"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1242"/>
         <source>Tasks</source>
         <translation>任务</translation>
     </message>
     <message>
         <location filename="../src/ui/MainWindow.cpp" line="592"/>
-        <location filename="../src/ui/MainWindow.cpp" line="1241"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1246"/>
         <source>Agent plans will appear here.</source>
         <translation>智能体计划会显示在这里。</translation>
     </message>
@@ -331,8 +331,8 @@ Safety backup: %1</source>
     <message>
         <location filename="../src/ui/MainWindow.cpp" line="324"/>
         <location filename="../src/ui/MainWindow.cpp" line="542"/>
-        <location filename="../src/ui/MainWindow.cpp" line="1099"/>
-        <location filename="../src/ui/MainWindow.cpp" line="1347"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1104"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1352"/>
         <source>Pin conversation</source>
         <translation>置顶会话</translation>
     </message>
@@ -384,33 +384,38 @@ Safety backup: %1</source>
         <translation>正在使用模拟智能体，原因：%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1085"/>
+        <location filename="../src/ui/MainWindow.cpp" line="938"/>
+        <source>Cannot update conversation settings: %1</source>
+        <translation>无法更新会话设置：%1</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindow.cpp" line="1090"/>
         <source>Filters: tag:name, agent:name, status:name, path:&quot;directory&quot;</source>
         <translation>筛选器：tag:名称、agent:名称、status:名称、path:&quot;目录&quot;</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1260"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1265"/>
         <source>Terminal</source>
         <translation>终端</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1263"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1268"/>
         <source>Terminal integration is scheduled for M4.</source>
         <translation>终端集成计划在 M4 实现。</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1325"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1330"/>
         <source>File</source>
         <translation>文件</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1332"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1337"/>
         <source>Rename conversation...</source>
         <translation>重命名会话...</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1104"/>
-        <location filename="../src/ui/MainWindow.cpp" line="1339"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1109"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1344"/>
         <source>Archive conversation</source>
         <translation>归档会话</translation>
     </message>
@@ -442,23 +447,23 @@ Safety backup: %1</source>
         <translation>无法更新会话标签：%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1097"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1102"/>
         <source>Open conversation</source>
         <translation>打开会话</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1106"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1111"/>
         <source>Restore conversation</source>
         <translation>恢复会话</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1101"/>
-        <location filename="../src/ui/MainWindow.cpp" line="1336"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1106"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1341"/>
         <source>Edit conversation tags...</source>
         <translation>编辑会话标签...</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1083"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1088"/>
         <source>Search conversations or tag:name</source>
         <translation>搜索会话或使用 tag:名称</translation>
     </message>
@@ -467,228 +472,228 @@ Safety backup: %1</source>
         <translation type="vanished">筛选器：tag:名称、agent:codex|claude|mock</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1343"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1348"/>
         <source>Restore selected conversation</source>
         <translation>恢复所选会话</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1353"/>
-        <location filename="../src/ui/MainWindow.cpp" line="2362"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1358"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2367"/>
         <source>Quit</source>
         <translation>退出</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1374"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1379"/>
         <source>View</source>
         <translation>视图</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1377"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1382"/>
         <source>System theme</source>
         <translation>跟随系统</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1378"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1383"/>
         <source>Light theme</source>
         <translation>浅色主题</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1379"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1384"/>
         <source>Dark theme</source>
         <translation>深色主题</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1395"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1400"/>
         <source>Show archived conversations</source>
         <translation>显示已归档会话</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1402"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1407"/>
         <source>Mark all conversations read</source>
         <translation>全部标为已读</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1408"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1413"/>
         <source>Open next unread conversation</source>
         <translation>打开下一条未读会话</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1413"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1418"/>
         <source>Previous conversation</source>
         <translation>上一条会话</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1419"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1424"/>
         <source>Next conversation</source>
         <translation>下一条会话</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1424"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1429"/>
         <source>Focus composer</source>
         <translation>聚焦输入框</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1429"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1434"/>
         <source>Zoom in</source>
         <translation>放大</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1430"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1435"/>
         <source>Zoom out</source>
         <translation>缩小</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1431"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1436"/>
         <source>Actual size</source>
         <translation>实际大小</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1448"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1453"/>
         <source>You
 %1</source>
         <translation>你
 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1452"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1457"/>
         <source>%1
 </source>
         <translation>%1
 </translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1498"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1503"/>
         <source>Turn interrupted</source>
         <translation>任务已中断</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1526"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1531"/>
         <source>Command approval</source>
         <translation>命令审批</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1526"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1531"/>
         <source>File change approval</source>
         <translation>文件变更审批</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1534"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1539"/>
         <source>Network: %1 (%2)</source>
         <translation>网络：%1（%2）</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1542"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1547"/>
         <source>Write access: %1</source>
         <translation>写入权限：%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1554"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1559"/>
         <source>Proposed files: %1</source>
         <translation>拟变更文件：%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1559"/>
-        <location filename="../src/ui/MainWindow.cpp" line="1829"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1564"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1834"/>
         <source>Working directory: %1</source>
         <translation>工作目录：%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1563"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1568"/>
         <source>Reason: %1</source>
         <translation>原因：%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1572"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1577"/>
         <source>Expired approval</source>
         <translation>审批已过期</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1572"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1577"/>
         <source>Waiting for your decision</source>
         <translation>等待你的决定</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1599"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1604"/>
         <source>Allow once</source>
         <translation>允许一次</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1601"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1606"/>
         <source>Allow for session</source>
         <translation>本会话允许</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1603"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1608"/>
         <source>Deny</source>
         <translation>拒绝</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1605"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1610"/>
         <source>Cancel turn</source>
         <translation>取消任务</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1625"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1630"/>
         <source>Approval closed: %1</source>
         <translation>审批已关闭：%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1626"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1631"/>
         <source>Decision sent: %1</source>
         <translation>决定已发送：%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1641"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1646"/>
         <source>Agent needs your input</source>
         <translation>Agent 需要你的回答</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1675"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1680"/>
         <source>Other...</source>
         <translation>其他...</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1678"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1683"/>
         <source>Enter another answer</source>
         <translation>输入其他回答</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1706"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1711"/>
         <source>Expired question</source>
         <translation>问题已过期</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1706"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1711"/>
         <source>Waiting for your answer</source>
         <translation>等待你的回答</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1708"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1713"/>
         <source>Submit answers</source>
         <translation>提交回答</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1760"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1765"/>
         <source>Answers sent</source>
         <translation>回答已发送</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1761"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1766"/>
         <source>Question closed: %1</source>
         <translation>问题已关闭：%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1771"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1776"/>
         <source>Tokens: %1</source>
         <translation>Token：%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1774"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1779"/>
         <source>Tokens: %1 / %2 (%3%)</source>
         <translation>Token：%1 / %2（%3%）</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1782"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1787"/>
         <source>Input: %1
 Cached input: %2
 Output: %3
@@ -699,180 +704,180 @@ Reasoning output: %4</source>
 推理输出：%4</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1794"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1799"/>
         <source>Command</source>
         <translation>命令</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1797"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1802"/>
         <source>File changes</source>
         <translation>文件变更</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1800"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1805"/>
         <source>MCP tool: %1 / %2</source>
         <translation>MCP 工具：%1 / %2</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1805"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1810"/>
         <source>Tool: %1</source>
         <translation>工具：%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1808"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1813"/>
         <source>Collaboration tool</source>
         <translation>协作工具</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1811"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1816"/>
         <source>Web search</source>
         <translation>网页搜索</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1814"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1819"/>
         <source>Image view</source>
         <translation>查看图片</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1817"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1822"/>
         <source>Context compaction</source>
         <translation>上下文压缩</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1819"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1824"/>
         <source>Tool execution</source>
         <translation>工具执行</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1846"/>
-        <location filename="../src/ui/MainWindow.cpp" line="1853"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1851"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1858"/>
         <source>Arguments: %1</source>
         <translation>参数：%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1850"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1855"/>
         <source>Namespace: %1</source>
         <translation>命名空间：%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1873"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1878"/>
         <source>Connecting</source>
         <translation>正在连接</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1875"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1880"/>
         <source>Idle</source>
         <translation>空闲</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1879"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1884"/>
         <source>Waiting for approval</source>
         <translation>等待审批</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1881"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1886"/>
         <source>Waiting for input</source>
         <translation>等待输入</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1883"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1888"/>
         <source>Disconnected</source>
         <translation>已断开</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1885"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1890"/>
         <source>Failed</source>
         <translation>失败</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1887"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1892"/>
         <source>Closed</source>
         <translation>已关闭</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1889"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1894"/>
         <source>Unknown</source>
         <translation>未知</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1958"/>
-        <location filename="../src/ui/MainWindow.cpp" line="2030"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1963"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2035"/>
         <source>Completed</source>
         <translation>已完成</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1987"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1992"/>
         <source>Reasoning summary</source>
         <translation>推理摘要</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1992"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1997"/>
         <source>Thinking</source>
         <translation>思考中</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2050"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2055"/>
         <source>Current plan</source>
         <translation>当前计划</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2085"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2090"/>
         <source>Interface scale: %1%</source>
         <translation>界面缩放：%1%</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2102"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2107"/>
         <source>Steer now</source>
         <translation>立即引导</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2105"/>
-        <location filename="../src/ui/MainWindow.cpp" line="2117"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2110"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2122"/>
         <source>Queue</source>
         <translation>排队</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2116"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2121"/>
         <source>Steer</source>
         <translation>引导</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2167"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2172"/>
         <source>Agent connection unavailable</source>
         <translation>Agent 连接不可用</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2168"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2173"/>
         <source>Reconnecting agent</source>
         <translation>正在重新连接 Agent</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2169"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2174"/>
         <source>Agent fallback active</source>
         <translation>Agent 回退已启用</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2291"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2296"/>
         <source>Snack coding agent</source>
         <translation>零食编码智能体</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2293"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2298"/>
         <source>Open Snack</source>
         <translation>打开零食</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2295"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2300"/>
         <source>Quit Snack</source>
         <translation>退出零食</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2358"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2363"/>
         <source>Quit Snack?</source>
         <translation>退出零食？</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2359"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2364"/>
         <source>The active Agent task will be interrupted and will not be sent again automatically.</source>
         <translation>活动中的 Agent 任务将被中断，并且不会自动重新发送。</translation>
     </message>

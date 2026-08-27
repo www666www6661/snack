@@ -932,7 +932,12 @@ void MainWindow::updateSessionSettings() {
     snapshot.reasoningEffort =
         static_cast<domain::ReasoningEffort>(effortCombo_->currentData().toInt());
     snapshot.accessLevel = static_cast<domain::AccessLevel>(accessCombo_->currentData().toInt());
-    controller_->setNextTurnSettings(snapshot);
+    QString error;
+    if (!controller_->setNextTurnSettings(snapshot, &error)) {
+        rebuildCapabilityControls(controller_->nextTurnSettings());
+        statusBar()->showMessage(tr("Cannot update conversation settings: %1").arg(error), 8000);
+        return;
+    }
     if (controller_->status() == domain::ConversationStatus::Running) {
         statusBar()->showMessage(tr("Settings apply to the next message"), 3000);
     }

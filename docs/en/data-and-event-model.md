@@ -9,7 +9,7 @@ GUI entities use random UUIDs. Native agent IDs are separate values, never datab
 | Entity | Important fields |
 |---|---|
 | `Workspace` | `id`, `canonicalPath`, `displayPath`, `gitState`, `lastOpenedAt` |
-| `Conversation` | `id`, `workspaceId`, `agentKind`, `title`, `titleIsPlaceholder`, `nativeSessionId`, `status`, `archived`, `pinned`, `tags` |
+| `Conversation` | `id`, `workspaceId`, `agentKind`, `modelId`, `title`, `titleIsPlaceholder`, `nativeSessionId`, `status`, `archived`, `pinned`, `tags` |
 | `AgentRuntime` | `conversationId`, `cliPath`, `cliVersion`, `protocolVersion`, `capabilities` |
 | `Turn` | `id`, `nativeTurnId`, `conversationId`, `status`, `settingsSnapshot`, timestamps |
 | `AgentEvent` | `id`, `conversationId`, `turnId`, `sequence`, `type`, `payload`, `rawRef` |
@@ -31,7 +31,7 @@ A Codex text turn keeps the GUI `QUuid` as its domain `turnId` and stores the ap
 
 ## 4. Settings snapshots
 
-Every turn stores an immutable `TurnSettingsSnapshot`: agent, model ID, effort, access level, mapped sandbox/approval settings, cwd, isolated-change state, and protocol capability version. UI edits during a turn update only `nextTurnSettings`.
+Every turn stores an immutable `TurnSettingsSnapshot`: agent, model ID, effort, access level, mapped sandbox/approval settings, cwd, isolated-change state, and protocol capability version. UI edits during a turn update only `nextTurnSettings`. The conversation catalog separately persists the normalized next-turn model ID so closed and restored conversations remain filterable without reconstructing settings from historical events.
 
 `CapabilitySet` carries the visible model IDs plus per-model display metadata, default effort, supported effort IDs/descriptions, input modalities, personality support, and the server-selected default model. Raw future effort IDs remain available for display even when the current domain enum cannot execute them.
 
@@ -57,6 +57,6 @@ Raw logs and reviewed snapshots default to 30 days with a 10 GB cap. Pending rev
 
 Migrations are forward-only, idempotent, and record start/completion. Back up the database before upgrading. Failure enters read-only recovery mode and never replaces old data with an empty database.
 
-The store currently uses schema version 7. Conversations persist `native_thread_id` and `native_session_id` separately so Codex resume never reconstructs one identity from the other. M3 conversation tags are stored as a JSON string array in the non-null `conversations.tags` column; legacy rows migrate to an empty array. Pending composer messages live in the ordered `queued_messages` table and survive edits, reordering, cancellation, and restarts. Favorite prompt templates live in `prompt_templates` as ordered plain text; parameter substitution is performed in memory and never executes code. Before any pending upgrade of an existing file, `EventStore` creates a consistent SQLite snapshot beside the database with a `.pre-migration-v<version>-<timestamp>-<id>.bak` suffix. All pending steps execute in one transaction. A statement or commit failure rolls the transaction back and reopens the original database read-only; write APIs then fail closed. Databases created by a newer Snack version follow the same read-only path without being modified. Successful safety backups are retained for explicit user recovery and later maintenance policy.
+The store currently uses schema version 8. Conversations persist `native_thread_id` and `native_session_id` separately so Codex resume never reconstructs one identity from the other. The non-null `conversations.model_id` column stores the normalized next-turn model selection; legacy rows migrate to an empty value and adopt the runtime default when next opened. M3 conversation tags are stored as a JSON string array in the non-null `conversations.tags` column; legacy rows migrate to an empty array. Pending composer messages live in the ordered `queued_messages` table and survive edits, reordering, cancellation, and restarts. Favorite prompt templates live in `prompt_templates` as ordered plain text; parameter substitution is performed in memory and never executes code. Before any pending upgrade of an existing file, `EventStore` creates a consistent SQLite snapshot beside the database with a `.pre-migration-v<version>-<timestamp>-<id>.bak` suffix. All pending steps execute in one transaction. A statement or commit failure rolls the transaction back and reopens the original database read-only; write APIs then fail closed. Databases created by a newer Snack version follow the same read-only path without being modified. Successful safety backups are retained for explicit user recovery and later maintenance policy.
 
 Unsent composer drafts are private UI state rather than domain events. `AppSettings` stores one exact text value per conversation UUID and removes the key after a successful send or explicit clear; loading a draft never triggers a turn or queue operation.

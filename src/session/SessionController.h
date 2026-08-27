@@ -48,7 +48,8 @@ class SessionController final : public QObject {
                             QString* error = nullptr);
     void interrupt();
     void close();
-    void setNextTurnSettings(const domain::TurnSettingsSnapshot& settings);
+    bool setNextTurnSettings(const domain::TurnSettingsSnapshot& settings,
+                             QString* error = nullptr);
 
   signals:
     void statusChanged(snack::domain::ConversationStatus status);

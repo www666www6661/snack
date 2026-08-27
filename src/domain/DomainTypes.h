@@ -74,6 +74,7 @@ struct Conversation {
     bool titleIsPlaceholder{false};
     QString workingDirectory;
     AgentKind agentKind{AgentKind::Mock};
+    QString modelId{QStringLiteral("")};
     ConversationStatus status{ConversationStatus::Dormant};
     QString nativeThreadId;
     QString nativeSessionId;
