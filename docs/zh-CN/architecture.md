@@ -119,12 +119,11 @@ stateDiagram-v2
 
 ## 6. WebEngine 安全架构
 
-- 只加载 `qrc://` 打包资源；默认拒绝远程子资源。
-- Markdown 先解析为 AST，再由白名单 Renderer 生成 DOM。
-- Mermaid 和数学渲染库离线打包；消息不能注入 HTML、CSS 或 JavaScript。
-- WebChannel 只暴露复制、展开、测量、滚动和安全链接请求。
-- 外部 URL返回 C++ 层校验后交给系统浏览器。
-- Renderer 崩溃时重建页面并从 EventStore 回放，不影响 Agent。
+每个可见会话窗口的 `RichTextView` 拥有一个无痕 `QWebEngineProfile`、Page 和 View。Profile 不使用 HTTP 缓存或持久 Cookie；请求拦截器与导航策略只接受规范化、无 Host 的 `qrc:/renderer/*` 资源和 Qt 打包的 WebChannel 脚本。网络、文件、data、JavaScript、路径穿越、查询参数和 Fragment 全部安全拒绝，同时关闭弹窗、插件、PDF Viewer，以及本地内容对文件和远程 URL 的访问。
+
+C++/WebChannel 边界只包含消息 JSON、主题 JSON 和一个外链请求。Markdown-it 禁止原始 HTML 与自动链接，图片 Token 转为无行为文本；DOMPurify 使用明确的禁用标签/属性；KaTeX 使用严格且不可信输入模式；Mermaid 先严格渲染，再对产出的 SVG 二次清理。四个 Renderer 及字体、许可证均固定版本离线打包。C++ 只接受不含用户信息且带 Host 的 HTTP(S) URL，以及地址非空的 `mailto:`，通过后才由 MainWindow 交给系统。
+
+`EventStore` 中的消息始终是权威记录，Web 页面只是投影。Renderer 进程重启时重新加载打包文档并发布内存投影，不重连或改变 Agent。Qt 构建不含 WebEngine 时编译并测试明确的纯文本时间线降级，不用安全边界更弱的 HTML Renderer 冒充富文本。
 
 ## 7. 可测试性边界
 

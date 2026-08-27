@@ -3,6 +3,7 @@
 #include "app/WorkspaceFileIndex.h"
 #include "domain/PromptTemplateEngine.h"
 #include "ui/ComposerTextEdit.h"
+#include "ui/RichTextView.h"
 
 #include <QAction>
 #include <QActionGroup>
@@ -11,6 +12,7 @@
 #include <QComboBox>
 #include <QDate>
 #include <QDateTime>
+#include <QDesktopServices>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDockWidget>
@@ -651,7 +653,7 @@ void MainWindow::deleteSelectedConversation() {
     deleteConversationFor(conversationId, selected->title);
 }
 
-void MainWindow::deleteConversationFor(const QUuid& conversationId, const QString& title) {
+void MainWindow::deleteConversationFor(QUuid conversationId, const QString& title) {
     if (sessions_ == nullptr || conversationId.isNull()) {
         return;
     }
@@ -672,8 +674,11 @@ void MainWindow::deleteConversationFor(const QUuid& conversationId, const QStrin
     auto* cancelButton = prompt.addButton(QMessageBox::Cancel);
     prompt.setDefaultButton(cancelButton);
     prompt.setEscapeButton(cancelButton);
+    bool deletionConfirmed = false;
+    connect(deleteButton, &QPushButton::clicked, &prompt,
+            [&deletionConfirmed] { deletionConfirmed = true; });
     prompt.exec();
-    if (prompt.clickedButton() != deleteButton) {
+    if (!deletionConfirmed) {
         return;
     }
 
@@ -946,6 +951,8 @@ void MainWindow::resetConversationView() {
     pendingReasoningText_.clear();
     planUpdatePending_ = false;
     timeline_->clear();
+    richTextView_->resetDocument();
+    refreshActivityTimelineVisibility();
     approvalCards_.clear();
     userInputCards_.clear();
     toolCards_.clear();
@@ -1966,6 +1973,10 @@ void MainWindow::buildUi() {
     timeline_->setObjectName(QStringLiteral("timeline"));
     timeline_->setWordWrap(true);
     timeline_->setSelectionMode(QAbstractItemView::NoSelection);
+    richTextView_ = new RichTextView(conversation);
+    connect(richTextView_, &RichTextView::externalLinkRequested, this,
+            [](const QUrl& url) { QDesktopServices::openUrl(url); });
+    timeline_->setVisible(!richTextView_->rendererAvailable());
 
     auto* composerFrame = new QWidget(conversation);
     auto* composerLayout = new QVBoxLayout(composerFrame);
@@ -2041,6 +2052,7 @@ void MainWindow::buildUi() {
 
     conversationLayout->addWidget(header);
     conversationLayout->addWidget(connectionNoticeFrame_);
+    conversationLayout->addWidget(richTextView_, 2);
     conversationLayout->addWidget(timeline_, 1);
     conversationLayout->addWidget(composerFrame);
     rootLayout->addWidget(sessionSidebar_);
@@ -2335,13 +2347,17 @@ void MainWindow::appendEvent(const domain::AgentEvent& event) {
 
     switch (event.type) {
     case domain::AgentEventType::UserMessage:
+        richTextView_->appendUserMessage(event.payload.value(QStringLiteral("text")).toString());
         timeline_->addItem(
             tr("You\n%1").arg(event.payload.value(QStringLiteral("text")).toString()));
+        timeline_->item(timeline_->count() - 1)->setHidden(richTextView_->rendererAvailable());
         activeAgentRow_ = -1;
         break;
     case domain::AgentEventType::AgentMessageStart:
+        richTextView_->startAgentMessage(agentDisplayName());
         timeline_->addItem(tr("%1\n").arg(agentDisplayName()));
         activeAgentRow_ = timeline_->count() - 1;
+        timeline_->item(activeAgentRow_)->setHidden(richTextView_->rendererAvailable());
         break;
     case domain::AgentEventType::AgentMessageDelta:
         if (activeAgentRow_ >= 0) {
@@ -2400,9 +2416,24 @@ void MainWindow::appendEvent(const domain::AgentEvent& event) {
         break;
     }
     maybeNotify(event);
+    refreshActivityTimelineVisibility();
     if (!streamedDelta) {
         timeline_->scrollToBottom();
     }
+}
+
+void MainWindow::refreshActivityTimelineVisibility() {
+    if (!richTextView_->rendererAvailable()) {
+        timeline_->show();
+        return;
+    }
+    for (int row = 0; row < timeline_->count(); ++row) {
+        if (!timeline_->item(row)->isHidden()) {
+            timeline_->show();
+            return;
+        }
+    }
+    timeline_->hide();
 }
 
 void MainWindow::scheduleTimelineFlush() {
@@ -2417,6 +2448,7 @@ void MainWindow::flushPendingTimelineUpdates() {
 
     if (pendingAgentRow_ >= 0 && pendingAgentRow_ < timeline_->count() &&
         !pendingAgentText_.isEmpty()) {
+        richTextView_->appendAgentDelta(pendingAgentText_);
         auto* item = timeline_->item(pendingAgentRow_);
         item->setText(boundedText(item->text() + pendingAgentText_, maximumAgentMessage));
         changed = true;
@@ -3026,6 +3058,7 @@ void MainWindow::updatePlan(const domain::AgentEvent& event) {
 
 void MainWindow::applyTheme(const ThemeDefinition& theme) {
     qApp->setStyleSheet(theme.styleSheet());
+    richTextView_->applyTheme(theme);
 }
 
 void MainWindow::refreshSystemTheme() {
@@ -3041,6 +3074,7 @@ void MainWindow::applyInterfaceScale(double scale) {
     QFont font = qApp->font();
     font.setPointSizeF(10.0 * settingsSnapshot_.interfaceScale);
     qApp->setFont(font);
+    richTextView_->applyInterfaceScale(settingsSnapshot_.interfaceScale);
     statusBar()->showMessage(
         tr("Interface scale: %1%").arg(settingsSnapshot_.interfaceScale * 100.0, 0, 'f', 0), 1500);
 }

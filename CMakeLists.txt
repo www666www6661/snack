@@ -27,6 +27,14 @@ option(
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Network Sql Widgets LinguistTools)
+find_package(Qt6 6.8 QUIET COMPONENTS WebChannel WebEngineWidgets)
+
+if(Qt6WebChannel_FOUND AND Qt6WebEngineWidgets_FOUND)
+    set(SNACK_HAS_WEBENGINE ON)
+else()
+    set(SNACK_HAS_WEBENGINE OFF)
+    message(STATUS "Qt WebEngine unavailable: Snack will build the explicit plain-text fallback")
+endif()
 
 include(SnackCoverage)
 include(SnackWarnings)

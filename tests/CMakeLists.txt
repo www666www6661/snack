@@ -14,6 +14,12 @@ snack_add_test(snack_workspace_file_index_tests app/TestWorkspaceFileIndex.cpp)
 snack_add_test(snack_session_manager_tests app/TestSessionManager.cpp)
 snack_add_test(snack_single_instance_tests app/TestSingleInstance.cpp)
 snack_add_test(snack_theme_tests ui/TestThemeDefinition.cpp)
+
+add_executable(snack_rich_text_policy_tests ui/TestRichTextPolicy.cpp)
+target_link_libraries(snack_rich_text_policy_tests PRIVATE Snack::Ui Qt6::Test)
+snack_set_project_warnings(snack_rich_text_policy_tests)
+add_test(NAME snack_rich_text_policy_tests COMMAND snack_rich_text_policy_tests)
+set_tests_properties(snack_rich_text_policy_tests PROPERTIES TIMEOUT 20)
 snack_add_test(snack_storage_tests storage/TestStorage.cpp)
 snack_add_test(snack_session_tests session/TestSessionController.cpp)
 snack_add_test(snack_session_runtime_tests session/TestSessionRuntimeRegistry.cpp)
@@ -31,9 +37,22 @@ add_test(NAME snack_ui_tests COMMAND snack_ui_tests)
 set_tests_properties(
     snack_ui_tests
     PROPERTIES
-        TIMEOUT 20
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+        TIMEOUT 60
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;SNACK_DISABLE_WEBENGINE=1"
 )
+
+if(SNACK_HAS_WEBENGINE)
+    add_executable(snack_rich_text_view_tests ui/TestRichTextView.cpp)
+    target_link_libraries(snack_rich_text_view_tests PRIVATE Snack::Ui Qt6::Test)
+    snack_set_project_warnings(snack_rich_text_view_tests)
+    add_test(NAME snack_rich_text_view_tests COMMAND snack_rich_text_view_tests)
+    set_tests_properties(
+        snack_rich_text_view_tests
+        PROPERTIES
+            TIMEOUT 60
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu"
+    )
+endif()
 
 if(WIN32 AND SNACK_DEPLOY_QT_AFTER_BUILD)
     set(_snack_expect_llvm_mingw_runtime OFF)

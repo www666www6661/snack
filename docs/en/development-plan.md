@@ -20,7 +20,7 @@ Acceptance evidence includes fixture coverage for normal, failure, cancellation,
 
 ## M3: daily conversation UX (`0.1.0-beta.1`)
 
-Status: in progress. The existing composer foundation includes bounded auto-growth, per-conversation drafts, steer/queue controls, editable persistent queues, parameterized prompt templates, fixed shortcuts, interface zoom, and a live system/light/dark theme selector. Conversation identity now persists placeholder-title state, replaces it once with a safe first-prompt fallback, and supports explicit normalized renaming, preparing stable labels for the conversation rail without overwriting established titles.
+Status: complete for local Windows implementation and automated acceptance as of 2026-08-27. The conversation rail, typed historical session isolation, local search/groups/tags/saved views, archive/delete/export, detached windows, attachments and workspace references, templates, steer/persistent queue, private notifications, workbench layouts, high-output batching, and safe rich text are implemented. The official Qt 6.8.3 MSVC WebEngine build and the official LLVM-MinGW plain-text fallback both pass 16/16 strict-warning Debug tests; the instrumented fallback build passes 15/15 tests with 84.10% first-party line coverage and translations are complete at 232/232. This is local Windows evidence only, not Ubuntu, Debian, macOS, packaging, or long-running production validation.
 
 Navigation/search/groups/tags/views, detached chat, attachments and `@`, templates and `/`, steer/queue, safe WebEngine Markdown/LaTeX/Mermaid, themes, tray, private notifications, shortcuts, zoom, and layouts. Acceptance: daily multi-session Codex use remains responsive under heavy output.
 

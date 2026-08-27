@@ -86,7 +86,11 @@ Permanent deletion is a separate lifecycle boundary. `SessionManager` rejects de
 
 ## 6. WebEngine boundary
 
-Load only packaged `qrc://` assets, reject remote subresources, parse Markdown into an AST and render through an allowlist, package Mermaid and math rendering offline, expose only copy/expand/measure/scroll/link requests through WebChannel, and validate external URLs in C++. A renderer crash rebuilds from `EventStore` without affecting the agent.
+`RichTextView` owns one off-the-record `QWebEngineProfile`, page, and view per visible conversation window. The profile has no HTTP cache or persistent cookies. Its request interceptor and navigation policy accept only normalized, hostless `qrc:/renderer/*` resources plus Qt's packaged WebChannel script; network, file, data, JavaScript, traversal, query, and fragment variants fail closed. Popups, plugins, PDF viewing, and local-content access to file or remote URLs are disabled.
+
+The C++/WebChannel surface contains only JSON message/theme properties and one external-link request. Markdown-it runs with raw HTML and linkification disabled, image tokens become inert text, DOMPurify applies explicit forbidden tags and attributes, KaTeX uses strict untrusted input, and Mermaid uses strict SVG rendering followed by a second SVG sanitization. All four renderers and their fonts/licenses are pinned offline resources. C++ accepts only host-bearing HTTP(S) links without user information and non-empty `mailto:` links before the MainWindow delegates to the operating system.
+
+Messages remain authoritative in `EventStore`; the page is only a projection. A render-process restart reloads the packaged document and republishes the in-memory projection without reconnecting or changing the Agent. Qt builds without WebEngine compile and test an explicit plain-text timeline fallback instead of substituting a weaker HTML renderer.
 
 ## 7. Testability
 

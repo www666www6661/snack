@@ -33,7 +33,9 @@ GUI 提供稳定语义，适配器映射到各 CLI 官方策略：
 
 ## 5. WebEngine 与内容
 
-消息不是可信 HTML。使用 Markdown AST白名单，移除脚本、事件属性、iframe、任意样式、远程资源和本地文件 URL。Mermaid 在受控配置下渲染，外链必须回到 C++ 层确认目标。自定义主题是校验后的 JSON变量，不能包含 QSS/CSS/JS。
+消息不是可信 HTML。Markdown 解析关闭 HTML 与图片，再由 DOMPurify 移除脚本、事件属性、iframe、用户任意样式、媒体/表单和资源属性。KaTeX 使用 `trust: false`；Mermaid 使用禁止 HTML Label 的严格模式，产出的 SVG 再清理一次。禁止联网的 CSP 与 C++ 请求拦截器分别独立拒绝远程子资源和本地文件 URL。外链必须回到 C++，且只允许校验后的 HTTP(S)/`mailto:`。自定义主题只能提供通过 Schema 校验的 JSON 颜色 Token，不能包含 QSS/CSS/JS。
+
+Renderer 无法通过 WebChannel 得到工具参数、工作区路径、任意命令或 Agent 句柄，无痕 Profile 不持久化 Cookie 或缓存。普通测试禁用 WebEngine 并使用纯文本降级；独立的 MSVC/Qt 官方构建测试只从 qrc 渲染恶意 Markdown，在 C++ 边界检查链接，绝不启动浏览器或访问主机。
 
 ## 6. 数据保护
 

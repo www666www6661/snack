@@ -18,6 +18,8 @@
 
 第三方库通过 `FetchContent` 固定版本或提交。顶层 `cmake/Dependencies.cmake` 集中声明，关闭第三方示例和测试。正式构建使用缓存并生成 third-party notices。Qt由 SDK提供，不从源码随项目构建。
 
+M3 Renderer 在 `src/resources/renderer/vendor` 中离线保存 markdown-it 14.1.0、DOMPurify 3.2.6、KaTeX 0.16.22 和 Mermaid 11.9.0 的发布资产。上游许可证文本与资源放在一起，打包时必须进入第三方声明。它们是 qrc 运行资源，不要求 Node.js 或 CDN。只有 Qt WebChannel 与 WebEngineWidgets 同时存在时 CMake 才启用 Renderer；否则配置阶段明确报告纯文本降级。
+
 ## 4. 建议 Presets
 
 - `windows-clang-debug`, `windows-clang-release`
@@ -65,3 +67,5 @@ SemVer，从 `0.1.0` 开始，标签为 `v0.1.0`。数据库和备份 Schema独�
 ## 9. 本地开发前置
 
 开发者需要 Clang、CMake、Ninja、Qt 6.8+（含 WebEngine）和 Git。本机还需至少一个可测试的 Codex/Claude CLI，但默认测试使用模拟协议。Windows 需 Visual Studio Build Tools 与 Windows SDK。
+
+当前已验证的 Windows WebEngine 配置使用 Qt 官方 6.8.3 `msvc2022_64`、MSVC Build Tools 与 Ninja。此环境中的 Qt 官方 LLVM-MinGW 包不包含 WebEngine，因此只验证纯文本降级路径。该本机结果不代表 Ubuntu、Debian 或 macOS 已经通过；它们必须分别运行自己的工具链。

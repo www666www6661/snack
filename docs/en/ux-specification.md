@@ -66,6 +66,10 @@ A persistent notice directly below the header reports an Agent fallback, connect
 
 ## 4. Timeline
 
+The M3 reading surface uses one WebEngine document for user and Agent messages and keeps tool, reasoning, approval, question, warning, and interruption cards as native Widgets activity. The plain-text message rows still exist as an explicit fallback but are hidden when the safe renderer is available, so users never see duplicate messages. Restoring or switching a conversation rebuilds both projections from the same persisted event sequence.
+
+Markdown supports paragraphs, lists and task markers, tables, links, fenced code, KaTeX display/inline delimiters, and Mermaid fences. Raw HTML and remote images are shown only as inert text or omission markers. Agent text is coalesced on the existing 16 ms UI boundary and the rendered projection keeps the latest 256K characters per Agent message; persistence remains complete. Application zoom applies the same 80%-200% factor to Widgets and the WebEngine surface, and live theme changes pass only fixed color tokens.
+
 Use a quiet user-message surface and a broad reading column for the agent. Tool cards show one-line summary, state, and duration before expansion. Collapse completed reasoning and label whether it is detailed reasoning or a summary. Approval cards outrank tools and explain action, target, reason, and risk. Prompt cards submit one question. Plans show current step inline and full detail in the task dock. Interruption and unknown-result states persist.
 
 ## 5. Composer

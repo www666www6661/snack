@@ -33,7 +33,9 @@ Persistent rules are structured by operation, argv/pattern, canonical path scope
 
 ## 5. Web content
 
-Messages are not trusted HTML. Render an allowlisted Markdown AST and remove scripts, event handlers, iframes, arbitrary style, remote subresources, and local-file URLs. Mermaid uses a constrained configuration. External navigation returns to C++ for validation. User themes are schema-validated JSON, never QSS/CSS/JS.
+Messages are not trusted HTML. Markdown parsing disables HTML and images, then DOMPurify removes scripts, event handlers, iframes, arbitrary user style, media/forms, and source attributes. KaTeX runs with `trust: false`; Mermaid uses strict mode without HTML labels and its generated SVG is sanitized again. A no-network CSP and C++ request interceptor independently reject remote subresources and local-file URLs. External navigation returns to C++ and allows only validated HTTP(S)/`mailto:` targets. User themes are schema-validated JSON color tokens, never QSS/CSS/JS.
+
+The renderer cannot receive tool arguments, workspace paths, arbitrary commands, or an Agent handle through WebChannel. Its off-the-record profile persists no cookies or cache. Generic tests disable WebEngine and use the plain-text fallback; a dedicated MSVC/official-Qt suite renders hostile Markdown entirely from qrc, checks links at the C++ boundary, and never opens a browser or contacts a host.
 
 ## 6. Data protection
 

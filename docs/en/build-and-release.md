@@ -18,6 +18,8 @@ Expected modules: Core, Gui, Widgets, Network, Sql, Concurrent, WebEngineWidgets
 
 Pin third-party versions or commits with `FetchContent` in a central `cmake/Dependencies.cmake`, disable upstream examples/tests, cache sources for release builds, and generate notices. Qt comes from an SDK rather than being built by the project.
 
+The M3 renderer vendors release assets for markdown-it 14.1.0, DOMPurify 3.2.6, KaTeX 0.16.22, and Mermaid 11.9.0 under `src/resources/renderer/vendor`. Their upstream license texts are stored beside the assets and must be copied into packaged third-party notices. These files are runtime qrc inputs; Node.js and a CDN are not required. CMake enables this renderer only when both Qt WebChannel and WebEngineWidgets are present and otherwise reports the plain-text fallback at configure time.
+
 ## 4. Presets
 
 Provide Windows Clang debug/release, Linux Clang debug/release, Linux ARM64 release, macOS Intel/ARM release, and Linux coverage presets. Keep machine-specific paths in untracked `CMakeUserPresets.json`.
@@ -43,3 +45,5 @@ Use SemVer from `0.1.0` and tags such as `v0.1.0`. Database and backup schemas v
 ## 9. Developer prerequisites
 
 Clang, CMake, Ninja, Qt 6.8+ with WebEngine, and Git. At least one local CLI is useful for integration testing, but default tests use protocol simulators. Windows also requires Visual Studio Build Tools and the Windows SDK.
+
+The verified local Windows WebEngine profile uses official Qt 6.8.3 `msvc2022_64` with MSVC Build Tools and Ninja. The official Qt LLVM-MinGW package does not contain WebEngine in this setup and therefore verifies the fallback path only. This local result makes no claim for Ubuntu, Debian, or macOS until their own toolchains run.

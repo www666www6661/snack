@@ -31,6 +31,7 @@ class QTimer;
 namespace snack::ui {
 
 class ComposerTextEdit;
+class RichTextView;
 
 class MainWindow final : public QMainWindow {
     Q_OBJECT
@@ -129,7 +130,7 @@ class MainWindow final : public QMainWindow {
     void moveConversationView(int offset);
     void editConversationTagsFor(const QUuid& conversationId, const QStringList& tags);
     void editConversationGroupFor(const QUuid& conversationId, const QString& groupName);
-    void deleteConversationFor(const QUuid& conversationId, const QString& title);
+    void deleteConversationFor(QUuid conversationId, const QString& title);
     void exportConversation(app::ConversationExportFormat format);
     void openConversationInNewWindow(const QUuid& conversationId);
     void closeDetachedConversation(const QUuid& conversationId);
@@ -138,6 +139,7 @@ class MainWindow final : public QMainWindow {
     void resetConversationView();
     void bindConversation(session::SessionController* controller);
     void appendEvent(const domain::AgentEvent& event);
+    void refreshActivityTimelineVisibility();
     void scheduleTimelineFlush();
     void flushPendingTimelineUpdates();
     void appendApprovalRequest(const domain::AgentEvent& event);
@@ -185,6 +187,7 @@ class MainWindow final : public QMainWindow {
     app::AppSettings* settings_{nullptr};
     app::AppSettingsSnapshot settingsSnapshot_;
     QListWidget* timeline_{nullptr};
+    RichTextView* richTextView_{nullptr};
     ComposerTextEdit* composer_{nullptr};
     QTimer* draftSaveTimer_{nullptr};
     QTimer* timelineFlushTimer_{nullptr};

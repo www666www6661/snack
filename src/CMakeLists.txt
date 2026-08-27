@@ -80,10 +80,27 @@ add_library(
     ui/DesktopNotifier.h
     ui/MainWindow.cpp
     ui/MainWindow.h
+    ui/RichTextPolicy.cpp
+    ui/RichTextPolicy.h
+    ui/RichTextView.cpp
+    ui/RichTextView.h
 )
 add_library(Snack::Ui ALIAS snack_ui)
 target_include_directories(snack_ui PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(snack_ui PUBLIC Snack::Core Qt6::Widgets)
+target_compile_definitions(snack_ui PUBLIC SNACK_HAS_WEBENGINE=$<BOOL:${SNACK_HAS_WEBENGINE}>)
+if(SNACK_HAS_WEBENGINE)
+    target_link_libraries(snack_ui PUBLIC Qt6::WebChannel Qt6::WebEngineWidgets)
+    file(GLOB_RECURSE SNACK_RENDERER_ASSETS CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/renderer/*"
+    )
+    qt_add_resources(
+        snack_ui renderer_assets
+        PREFIX "/renderer"
+        BASE "${CMAKE_CURRENT_SOURCE_DIR}/resources/renderer"
+        FILES ${SNACK_RENDERER_ASSETS}
+    )
+endif()
 snack_set_project_warnings(snack_ui)
 
 qt_add_executable(
