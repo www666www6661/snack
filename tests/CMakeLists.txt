@@ -12,6 +12,7 @@ snack_add_test(snack_conversation_bootstrap_tests app/TestConversationBootstrap.
 snack_add_test(snack_conversation_exporter_tests app/TestConversationExporter.cpp)
 snack_add_test(snack_workspace_file_index_tests app/TestWorkspaceFileIndex.cpp)
 snack_add_test(snack_workspace_watcher_tests app/TestWorkspaceWatcher.cpp)
+snack_add_test(snack_workspace_snapshot_tests workspace/TestWorkspaceSnapshot.cpp)
 snack_add_test(snack_session_manager_tests app/TestSessionManager.cpp)
 snack_add_test(snack_single_instance_tests app/TestSingleInstance.cpp)
 snack_add_test(snack_theme_tests ui/TestThemeDefinition.cpp)
