@@ -121,6 +121,10 @@ add_library(
     ui/RichTextPolicy.h
     ui/RichTextView.cpp
     ui/RichTextView.h
+    ui/TerminalPane.cpp
+    ui/TerminalPane.h
+    ui/TerminalTabs.cpp
+    ui/TerminalTabs.h
     ui/TerminalView.cpp
     ui/TerminalView.h
 )
