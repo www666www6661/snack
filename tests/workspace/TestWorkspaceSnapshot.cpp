@@ -2,8 +2,10 @@
 #include "workspace/WorkspaceChangeReview.h"
 #include "workspace/WorkspaceDiff.h"
 #include "workspace/WorkspaceSnapshot.h"
+#include "workspace/WorkspaceWriteLease.h"
 
 #include <QCryptographicHash>
+#include <QDir>
 #include <QFile>
 #include <QTemporaryDir>
 #include <QTest>
@@ -18,6 +20,7 @@ class TestWorkspaceSnapshot final : public QObject {
     void producesBoundedNativeDiffHunks();
     void acceptsAndRejectsReviewedChanges();
     void refusesRejectAfterExternalConflict();
+    void serializesWorkspaceWriteLeases();
 };
 
 void TestWorkspaceSnapshot::capturesContentAndDetectsChanges() {
@@ -133,6 +136,30 @@ void TestWorkspaceSnapshot::refusesRejectAfterExternalConflict() {
     QVERIFY(error.contains(QStringLiteral("changed externally")));
     QVERIFY(file.open(QIODevice::ReadOnly));
     QCOMPARE(file.readAll(), QByteArray("external edit"));
+}
+
+void TestWorkspaceSnapshot::serializesWorkspaceWriteLeases() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    QString error;
+    snack::workspace::WorkspaceWriteLease first;
+    snack::workspace::WorkspaceWriteLease second;
+    QVERIFY(first.acquire(directory.path(), QStringLiteral("conversation-a"), &error));
+    QVERIFY(!second.acquire(QDir(directory.path()).filePath(QStringLiteral(".")),
+                            QStringLiteral("conversation-b"), &error));
+    QVERIFY(error.contains(QStringLiteral("Another session")));
+    QVERIFY(first.transfer(QStringLiteral("conversation-c"), &error));
+    QCOMPARE(first.ownerId(), QStringLiteral("conversation-c"));
+    first.release();
+    QVERIFY(second.acquire(directory.path(), QStringLiteral("conversation-b"), &error));
+    second.release();
+
+    {
+        snack::workspace::WorkspaceWriteLease scoped;
+        QVERIFY(scoped.acquire(directory.path(), QStringLiteral("crash-scope"), &error));
+    }
+    snack::workspace::WorkspaceWriteLease recovered;
+    QVERIFY(recovered.acquire(directory.path(), QStringLiteral("recovered"), &error));
 }
 
 QTEST_GUILESS_MAIN(TestWorkspaceSnapshot)

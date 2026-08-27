@@ -55,6 +55,8 @@ set(SNACK_CORE_SOURCES
     workspace/WorkspaceDiff.h
     workspace/WorkspaceChangeReview.cpp
     workspace/WorkspaceChangeReview.h
+    workspace/WorkspaceWriteLease.cpp
+    workspace/WorkspaceWriteLease.h
     app/WorkspaceFilePreview.cpp
     app/WorkspaceFilePreview.h
     app/WorkspaceExternalOpener.cpp
