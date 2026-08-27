@@ -1,5 +1,7 @@
+#include "terminal/NativeTerminalProcess.h"
 #include "terminal/TerminalSession.h"
 
+#include <QDir>
 #include <QSignalSpy>
 #include <QTest>
 
@@ -31,6 +33,7 @@ class TestTerminalSession final : public QObject {
   private slots:
     void delegatesToFakeWithoutAgentEvents();
     void boundsScrollback();
+    void runsNativePseudoTerminal();
 };
 
 void TestTerminalSession::delegatesToFakeWithoutAgentEvents() {
@@ -61,5 +64,31 @@ void TestTerminalSession::boundsScrollback() {
     QCOMPARE(session.scrollback().size(), 4 * 1024 * 1024);
 }
 
-QTEST_APPLESS_MAIN(TestTerminalSession)
+void TestTerminalSession::runsNativePseudoTerminal() {
+#if defined(Q_OS_WIN)
+    QCOMPARE(snack::terminal::nativeTerminalBackendName(), QStringLiteral("ConPTY"));
+#else
+    QCOMPARE(snack::terminal::nativeTerminalBackendName(), QStringLiteral("POSIX PTY"));
+#endif
+    snack::terminal::TerminalSession session(snack::terminal::createNativeTerminalProcess());
+    QSignalSpy output(&session, &snack::terminal::TerminalSession::outputReady);
+    QSignalSpy exited(&session, &snack::terminal::TerminalSession::exited);
+    QSignalSpy processErrors(&session, &snack::terminal::TerminalSession::processError);
+    QString error;
+    QVERIFY2(session.start(QDir::tempPath(), 80, 24, &error), qPrintable(error));
+#if defined(Q_OS_WIN)
+    session.writeInput("echo snack-native\r\nexit\r\n");
+#else
+    session.writeInput("echo snack-native\nexit\n");
+#endif
+    QTRY_VERIFY_WITH_TIMEOUT(!output.isEmpty() || !processErrors.isEmpty(), 10000);
+    QVERIFY2(processErrors.isEmpty(),
+             processErrors.isEmpty()
+                 ? ""
+                 : qPrintable(processErrors.constFirst().constFirst().toString()));
+    QTRY_VERIFY_WITH_TIMEOUT(session.scrollback().contains("snack-native"), 10000);
+    QTRY_COMPARE_WITH_TIMEOUT(exited.count(), 1, 10000);
+}
+
+QTEST_GUILESS_MAIN(TestTerminalSession)
 #include "TestTerminalSession.moc"

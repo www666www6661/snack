@@ -60,6 +60,7 @@ set(SNACK_CORE_SOURCES
     terminal/ITerminalProcess.h
     terminal/TerminalSession.cpp
     terminal/TerminalSession.h
+    terminal/NativeTerminalProcess.h
     app/WorkspaceFilePreview.cpp
     app/WorkspaceFilePreview.h
     app/WorkspaceExternalOpener.cpp
@@ -81,11 +82,20 @@ set(SNACK_CORE_SOURCES
     ui/ThemeDefinition.h
 )
 
+if(WIN32)
+    list(APPEND SNACK_CORE_SOURCES terminal/NativeTerminalProcess_win.cpp)
+else()
+    list(APPEND SNACK_CORE_SOURCES terminal/NativeTerminalProcess_posix.cpp)
+endif()
+
 add_library(snack_core STATIC ${SNACK_CORE_SOURCES})
 add_library(Snack::Core ALIAS snack_core)
 
 target_include_directories(snack_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(snack_core PUBLIC Qt6::Core Qt6::Gui Qt6::Network Qt6::Sql)
+if(UNIX AND NOT APPLE)
+    target_link_libraries(snack_core PUBLIC util)
+endif()
 target_compile_definitions(
     snack_core
     PUBLIC
