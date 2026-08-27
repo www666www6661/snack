@@ -31,6 +31,8 @@ GUI 提供稳定语义，适配器映射到各 CLI 官方策略：
 - Agent 进程继承最小必要环境，但不删除 CLI 认证所需环境。
 - Snack 不修改 Codex/Claude 的用户扩展配置。
 
+审查拒绝遵循“比较后写入”：文件哈希必须仍与用户看到的 Diff 哈希一致，替换使用原子写入；不一致即外部编辑冲突，绝不覆盖任一方。写租约使用 Canonical、大小写规范化的工作区身份，路径别名不能并行取得所有权；Owner 销毁会释放当前进程内租约，未来跨进程租约必须先增加操作系统支持的恢复记录，才能替换此边界。
+
 ## 5. WebEngine 与内容
 
 消息不是可信 HTML。Markdown 解析关闭 HTML 与图片，再由 DOMPurify 移除脚本、事件属性、iframe、用户任意样式、媒体/表单和资源属性。KaTeX 使用 `trust: false`；Mermaid 使用禁止 HTML Label 的严格模式，产出的 SVG 再清理一次。禁止联网的 CSP 与 C++ 请求拦截器分别独立拒绝远程子资源和本地文件 URL。外链必须回到 C++，且只允许校验后的 HTTP(S)/`mailto:`。自定义主题只能提供通过 Schema 校验的 JSON 颜色 Token，不能包含 QSS/CSS/JS。

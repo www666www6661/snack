@@ -31,6 +31,8 @@ Persistent rules are structured by operation, argv/pattern, canonical path scope
 - Inherit only necessary environment while retaining CLI authentication needs.
 - Never modify user Codex/Claude extension configuration.
 
+Review rejection is compare-before-write: the file hash must still equal the hash rendered to the user, and replacement is atomic. A mismatch is an external-edit conflict and never overwrites either side. Write leases use canonical, case-normalized workspace identity so path aliases cannot obtain parallel ownership; destruction releases an in-process lease, while a future cross-process lease must add an OS-backed recovery record before replacing this boundary.
+
 ## 5. Web content
 
 Messages are not trusted HTML. Markdown parsing disables HTML and images, then DOMPurify removes scripts, event handlers, iframes, arbitrary user style, media/forms, and source attributes. KaTeX runs with `trust: false`; Mermaid uses strict mode without HTML labels and its generated SVG is sanitized again. A no-network CSP and C++ request interceptor independently reject remote subresources and local-file URLs. External navigation returns to C++ and allows only validated HTTP(S)/`mailto:` targets. User themes are schema-validated JSON color tokens, never QSS/CSS/JS.

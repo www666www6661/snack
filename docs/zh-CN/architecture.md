@@ -84,6 +84,8 @@ M3 多会话所有权从不依赖 Widget 的 Registry 开始。应用入口现�
 
 M4-A 的所有文件操作都先经过 `WorkspacePathPolicy`：解析已存在的 Canonical Path，并在预览或外部打开前拒绝越界。文件浏览器最多索引 2,000 个非生成文件，最多预览 512 KiB 非二进制 UTF-8 文本，通过可注入的 Opener 边界委托已批准的本地文件 URL。`WorkspaceWatcher` 只监听有界目录集合并在突发事件去抖后重建浏览器；轻量符号索引对文件数、单文件字节数和结果数均有上限。大小写不敏感平台会折叠 Canonical Identity Key，路径别名不能生成独立安全身份。
 
+M4-B 捕获有界内容与 SHA-256 基线，并在原生只读 Diff Dock 中显示变化。接受修改只推进该文件基线；拒绝使用 `QSaveFile`，并先把当前哈希与用户实际审查的哈希精确比较，发生外部修改冲突时保留外部内容。当前行 Renderer 围绕文件变化中段生成一个有界 hunk，超过行数上限时明确不生成 Diff。`WorkspaceWriteLease` 在进程内按 Canonical Workspace Identity 串行化写入者，支持显式转移/释放，并在 Owner 销毁后通过 RAII 释放。Codex 工作区 Sandbox 与隔离 Checkout 分开报告；当前 app-server 未声明隔离 Checkout，因此零食不会声称支持。
+
 ## 4. 并发模型
 
 - GUI 线程：Widgets、WebEngine 导航与轻量 ViewModel 更新。
