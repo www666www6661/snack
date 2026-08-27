@@ -96,6 +96,24 @@ bool conversationMatchesQuery(const domain::Conversation& conversation, const QS
             }
             continue;
         }
+        if (term.left(6).compare(QStringLiteral("agent:"), Qt::CaseInsensitive) == 0) {
+            QString conversationAgent;
+            switch (conversation.agentKind) {
+            case domain::AgentKind::Codex:
+                conversationAgent = QStringLiteral("codex");
+                break;
+            case domain::AgentKind::Claude:
+                conversationAgent = QStringLiteral("claude");
+                break;
+            case domain::AgentKind::Mock:
+                conversationAgent = QStringLiteral("mock");
+                break;
+            }
+            if (conversationAgent.compare(term.sliced(6), Qt::CaseInsensitive) != 0) {
+                return false;
+            }
+            continue;
+        }
         if (!conversation.title.contains(term, Qt::CaseInsensitive) &&
             !conversation.workingDirectory.contains(term, Qt::CaseInsensitive) &&
             !agentName.contains(term, Qt::CaseInsensitive) &&
@@ -1024,6 +1042,7 @@ void MainWindow::buildUi() {
     conversationSearch_ = new QLineEdit(sidebar);
     conversationSearch_->setObjectName(QStringLiteral("conversationSearch"));
     conversationSearch_->setPlaceholderText(tr("Search conversations or tag:name"));
+    conversationSearch_->setToolTip(tr("Filters: tag:name, agent:codex|claude|mock"));
     conversationSearch_->setClearButtonEnabled(true);
     conversationSearch_->installEventFilter(this);
     sessionRow_ = new QLabel(

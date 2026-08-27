@@ -293,6 +293,7 @@ void TestMainWindow::filtersConversationRailLocally() {
     QVERIFY(search != nullptr);
     QVERIFY(list != nullptr);
     QCOMPARE(search->placeholderText(), QStringLiteral("Search conversations or tag:name"));
+    QCOMPARE(search->toolTip(), QStringLiteral("Filters: tag:name, agent:codex|claude|mock"));
     QCOMPARE(list->count(), 2);
 
     search->setText(QStringLiteral("parser"));
@@ -315,6 +316,21 @@ void TestMainWindow::filtersConversationRailLocally() {
     search->setText(QStringLiteral("tag:back"));
     QCOMPARE(list->count(), 0);
     search->setText(QStringLiteral("tag:"));
+    QCOMPARE(list->count(), 0);
+    search->setText(QStringLiteral("agent:CODEX"));
+    QCOMPARE(list->count(), 1);
+    QCOMPARE(list->item(0)->data(Qt::UserRole).toUuid(), codex.id);
+    search->setText(QStringLiteral("agent:mock"));
+    QCOMPARE(list->count(), 1);
+    QCOMPARE(list->item(0)->data(Qt::UserRole).toUuid(), mock.id);
+    search->setText(QStringLiteral("agent:codex tag:backend parser"));
+    QCOMPARE(list->count(), 1);
+    QCOMPARE(list->item(0)->data(Qt::UserRole).toUuid(), codex.id);
+    search->setText(QStringLiteral("agent:mock tag:backend"));
+    QCOMPARE(list->count(), 0);
+    search->setText(QStringLiteral("agent:code"));
+    QCOMPARE(list->count(), 0);
+    search->setText(QStringLiteral("agent:"));
     QCOMPARE(list->count(), 0);
     search->clear();
     QCOMPARE(list->count(), 2);
