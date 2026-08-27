@@ -81,6 +81,8 @@ struct Conversation {
     bool archived{false};
     bool pinned{false};
     QStringList tags;
+    QDateTime createdAt{QDateTime::currentDateTimeUtc()};
+    QDateTime lastActivityAt{createdAt};
 };
 
 struct AgentEvent {

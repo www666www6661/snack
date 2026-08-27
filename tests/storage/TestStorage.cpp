@@ -1,6 +1,7 @@
 #include "storage/ContentStore.h"
 #include "storage/EventStore.h"
 
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -9,6 +10,7 @@
 #include <QSqlQuery>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QTimeZone>
 
 namespace {
 
@@ -151,6 +153,8 @@ void TestStorage::eventStorePersistsOrderedEvents() {
     conversation.nativeSessionId = QStringLiteral("session-root-123");
     conversation.modelId = QStringLiteral("mock-fast");
     conversation.tags = {QStringLiteral("backend"), QStringLiteral("urgent")};
+    conversation.createdAt = QDateTime::fromMSecsSinceEpoch(1000, QTimeZone::UTC);
+    conversation.lastActivityAt = conversation.createdAt;
     QVERIFY2(store.saveConversation(conversation, &error), qPrintable(error));
 
     const auto restoredConversation = store.conversationById(conversation.id, &error);
@@ -161,6 +165,8 @@ void TestStorage::eventStorePersistsOrderedEvents() {
     QVERIFY(restoredConversation->titleIsPlaceholder);
     QCOMPARE(restoredConversation->tags,
              QStringList({QStringLiteral("backend"), QStringLiteral("urgent")}));
+    QCOMPARE(restoredConversation->createdAt, conversation.createdAt);
+    QCOMPARE(restoredConversation->lastActivityAt, conversation.lastActivityAt);
     QVERIFY(!store.conversationById(QUuid::createUuid(), &error).has_value());
 
     snack::domain::Conversation pinned = conversation;
@@ -188,6 +194,7 @@ void TestStorage::eventStorePersistsOrderedEvents() {
         event.type = sequence == 1 ? snack::domain::AgentEventType::UserMessage
                                    : snack::domain::AgentEventType::AgentMessageDelta;
         event.payload = {{QStringLiteral("text"), QString::number(sequence)}};
+        event.occurredAt = conversation.createdAt.addSecs(static_cast<qint64>(sequence));
         QVERIFY2(store.appendEvent(event, &error), qPrintable(error));
     }
 
@@ -195,6 +202,9 @@ void TestStorage::eventStorePersistsOrderedEvents() {
     QCOMPARE(events.size(), 2);
     QCOMPARE(events.at(0).sequence, quint64{1});
     QCOMPARE(events.at(1).payload.value(QStringLiteral("text")).toString(), QStringLiteral("2"));
+    const auto activeConversation = store.conversationById(conversation.id, &error);
+    QVERIFY(activeConversation.has_value());
+    QCOMPARE(activeConversation->lastActivityAt, conversation.createdAt.addSecs(2));
 
     snack::domain::QueuedMessage firstQueued;
     firstQueued.conversationId = conversation.id;
@@ -377,7 +387,7 @@ void TestStorage::eventStoreBacksUpAndMigratesLegacySchema() {
     QCOMPARE(queryScalar(databasePath, QStringLiteral("SELECT MAX(version) FROM schema_migrations"),
                          &error)
                  .toInt(),
-             9);
+             10);
     QCOMPARE(queryScalar(databasePath,
                          QStringLiteral("SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' "
                                         "AND name = 'conversations_working_directory'"),
@@ -403,6 +413,15 @@ void TestStorage::eventStoreBacksUpAndMigratesLegacySchema() {
     QCOMPARE(queryScalar(databasePath, QStringLiteral("SELECT COUNT(*) FROM saved_views"), &error)
                  .toInt(),
              0);
+    QVERIFY(queryScalar(databasePath,
+                        QStringLiteral("SELECT created_at FROM conversations WHERE id = 'legacy'"),
+                        &error)
+                .toLongLong() > 0);
+    QVERIFY(queryScalar(
+                databasePath,
+                QStringLiteral("SELECT last_activity_at FROM conversations WHERE id = 'legacy'"),
+                &error)
+                .toLongLong() > 0);
     QCOMPARE(queryScalar(databasePath,
                          QStringLiteral("SELECT COUNT(*) FROM pragma_table_info("
                                         "'conversations') WHERE name = 'native_thread_id'"),
@@ -429,7 +448,7 @@ void TestStorage::eventStoreMigratesV2NativeIdentity() {
     QCOMPARE(queryScalar(databasePath, QStringLiteral("SELECT MAX(version) FROM schema_migrations"),
                          &error)
                  .toInt(),
-             9);
+             10);
     const auto restored = store.conversationById(
         QUuid(QStringLiteral("11111111-1111-1111-1111-111111111111")), &error);
     QVERIFY2(restored.has_value(), qPrintable(error));
@@ -528,7 +547,7 @@ void TestStorage::eventStoreRejectsIncompleteCurrentSchema() {
     const QStringList incompleteSchema = {
         QStringLiteral("CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, "
                        "applied_at INTEGER NOT NULL, started_at INTEGER, completed_at INTEGER)"),
-        QStringLiteral("INSERT INTO schema_migrations VALUES (9, 1, 1, 1)")};
+        QStringLiteral("INSERT INTO schema_migrations VALUES (10, 1, 1, 1)")};
     QVERIFY2(executeSql(databasePath, incompleteSchema, &error), qPrintable(error));
 
     snack::storage::EventStore store;
