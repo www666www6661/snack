@@ -39,3 +39,5 @@ Sanitize paths, repository names, tokens, and source before committing fixtures.
 A requirement is complete only when implementation matches both language documents, success/failure/cancel/recovery paths have tests, coverage remains at least 80%, formatting and warnings pass, degradation UI is tested, and protocol fixtures/migrations are versioned.
 
 M3 responsiveness tests use a high-output fake Agent that emits thousands of text, tool, reasoning, and plan deltas in short batches. A separate GUI timer must continue advancing while the turn runs, and every rendered stream must remain within its documented presentation bound. This gate never starts Codex or Claude and never invokes a model.
+
+M4 terminal component tests inject a fake process for input, Unicode/ANSI projection, resize, exit, error, tab, detach, and close paths. An explicit temporary-SQLite test proves that terminal output changes the terminal screen while leaving the conversation's Agent event list empty. A platform smoke test may start only the local shell through ConPTY or PTY; it never starts Codex or Claude and never invokes a model.

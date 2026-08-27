@@ -80,7 +80,9 @@ M3 多会话所有权从不依赖 Widget 的 Registry 开始。应用入口现�
 
 ### 3.8 `terminal`
 
-终端与 Agent 完全分离。`TerminalManager` 管理标签元数据；平台后端实现 Windows ConPTY 和 POSIX PTY。终端输出仅驻留内存，不进入事件数据库。
+终端与 Agent 完全分离。`TerminalSession` 持有可注入的 `ITerminalProcess`，平台工厂在 Windows 选择 ConPTY、在 POSIX 选择 `forkpty`。原始回滚缓冲上限为 4 MiB，另有独立有界纯文本投影；流式 UTF-8 解码器会在输出到原生 `QPlainTextEdit` 前去除 CSI、OSC、DCS 等控制串，因此终端输出不会被解释成 HTML。
+
+M4-C 工作台提供可移动多标签、明确关闭按钮和真正的顶层独立终端窗口；输入、尺寸调整、进程退出、主题和界面缩放保持实时。终端模块没有通向 `SessionController`、`AgentEvent` 或 `IEventRepository` 的调用路径，关闭标签或独立窗口后内存输出随会话释放，绝不进入事件数据库。
 
 M4-A 的所有文件操作都先经过 `WorkspacePathPolicy`：解析已存在的 Canonical Path，并在预览或外部打开前拒绝越界。文件浏览器最多索引 2,000 个非生成文件，最多预览 512 KiB 非二进制 UTF-8 文本，通过可注入的 Opener 边界委托已批准的本地文件 URL。`WorkspaceWatcher` 只监听有界目录集合并在突发事件去抖后重建浏览器；轻量符号索引对文件数、单文件字节数和结果数均有上限。大小写不敏感平台会折叠 Canonical Identity Key，路径别名不能生成独立安全身份。
 
@@ -93,7 +95,7 @@ M4-B 捕获有界内容与 SHA-256 基线，并在原生只读 Diff Dock 中显�
 - 存储：单写入队列 + 独立只读连接，批量提交增量事件。
 - 工作区服务：受控线程池执行索引、哈希、Diff 和快照。
 - 文件监听：事件去抖后交给工作区串行器。
-- 终端：异步 I/O，输出使用有界缓冲和 UI 合帧刷新。
+- 终端：专用阻塞 I/O 线程通过 Qt queued signal 回报，原始与投影输出均使用有界缓冲。
 
 所有跨线程 Qt 对象通过 queued connection 或不可变值传递；禁止跨线程直接操作 Widget、`QSqlDatabase` 连接或 `QWebEnginePage`。
 

@@ -35,11 +35,13 @@ flowchart LR
 - `workspace`: canonical paths, ignore rules, symbol index, file watching, baselines, diffs, external-edit conflicts, and write leases.
 - `storage`: append-oriented transactional `EventStore`, SHA-256 `ContentStore`, versioned migrations, and Repository interfaces.
 - `ui`: `QMainWindow` and `QDockWidget`; at most one `QWebEnginePage` per visible conversation window; ViewModels own logic.
-- `terminal`: a separate `TerminalManager` with Windows ConPTY and POSIX PTY backends. Scrollback stays in memory.
+- `terminal`: injected process contracts, bounded in-memory sessions, a safe text projection, and platform-selected Windows ConPTY or POSIX PTY backends.
 
 M4-A routes every file operation through `WorkspacePathPolicy`, which resolves existing canonical paths and rejects escapes before preview or external launch. The file browser indexes at most 2,000 non-generated files, previews at most 512 KiB of non-binary UTF-8 text, and delegates an approved local-file URL through an injected opener boundary. `WorkspaceWatcher` observes a bounded directory set and coalesces bursts before rebuilding the browser; the lightweight symbol index has explicit file, byte, and result ceilings. Case-insensitive platforms fold canonical identity keys so aliases cannot create separate security identities.
 
 M4-B captures bounded content-and-SHA-256 baselines and renders changes in a native read-only diff dock. Accepting a reviewed change advances only that file's baseline; rejection uses `QSaveFile` and first compares the current hash with the exact reviewed hash, preserving external edits on conflict. The current line renderer emits one bounded hunk around a file's changed middle and intentionally returns no diff beyond its line ceiling. `WorkspaceWriteLease` serializes canonical workspace identities in-process, supports explicit transfer/release, and releases through RAII after owner destruction. Codex workspace sandbox support is reported separately from isolated checkout support; because app-server does not advertise an isolated checkout here, Snack does not claim one.
+
+M4-C keeps user shells outside the Agent and event-storage graph. `TerminalSession` owns an injected `ITerminalProcess`, retains at most 4 MiB of raw scrollback, and publishes a separately bounded plain-text projection. Its streaming UTF-8 decoder removes CSI, OSC, DCS, and related control strings before any Widget sees output; the native `QPlainTextEdit` terminal therefore never interprets HTML. Platform factories select ConPTY on Windows and `forkpty` on POSIX. The workbench hosts movable tabs, explicit close controls, and true top-level detached terminal windows; input, resize, process exit, theme, and interface scale remain live. Terminal output has no path to `SessionController`, `AgentEvent`, or `IEventRepository` and is discarded when its terminal is closed.
 
 The current M2 slices implement `IProcessTransport`/`QProcessTransport`, `CodexCliDiscovery`, `CodexProtocol`, `CodexAppServerClient`, `CodexAccountLifecycle`, `CodexModelCatalog`, `CodexThreadLifecycle`, `CodexTurnLifecycle`, `CodexApprovalLifecycle`, `CodexUserInputLifecycle`, and the text/activity/approval/input turn state machine. `AgentRuntimeFactory` connects adapter and transport lifetime to the main application, selects Codex by default, and provides an explicit Mock fallback. The adapter validates authentication and completes model discovery before starting or resuming the native thread, builds each request from an immutable settings snapshot, and maps text, tool, reasoning-summary, plan, approval, user-input, usage, error, interrupt, and terminal events into common persisted events. `SessionController` persists both native identity fields, normalizes next-turn settings, publishes dynamic capabilities, and owns pending approval/input UI state. The common UI restores activity cards, unanswered question cards, token/context usage, and the task-plan dock without inspecting Codex-specific event names.
 
@@ -50,7 +52,7 @@ The current M2 slices implement `IProcessTransport`/`QProcessTransport`, `CodexC
 - Storage: one serialized writer and independent read connections, batching event commits.
 - Workspace: a bounded pool for indexing, hashing, snapshots, and diff computation.
 - File watching: debounce into a per-workspace serial executor.
-- Terminal: asynchronous I/O and bounded scroll buffers.
+- Terminal: dedicated blocking-I/O threads report through queued Qt signals; raw and projected scroll buffers are bounded.
 
 Qt objects cross threads only through queued connections or immutable values. Widgets, `QSqlDatabase` connections, and `QWebEnginePage` never move across owning threads.
 

@@ -65,3 +65,5 @@ Windows ConPTY/Credential Manager/MSI，Linux PTY/Secret Service/.deb/Wayland/X1
 6. 相关协议 fixture 和迁移已版本化。
 
 M3 响应性测试使用高输出 Fake Agent，分批发送数千个文本、工具、推理和计划增量。Turn 执行期间独立 GUI 定时器必须持续推进，每种渲染流都必须保持在文档规定的展示上限内。该门禁绝不启动 Codex 或 Claude，也不调用模型。
+
+M4 终端组件测试注入 Fake Process，覆盖输入、Unicode/ANSI 投影、resize、退出、错误、标签、独立窗口和关闭路径。显式临时 SQLite 测试证明终端屏幕能够收到输出，而会话的 Agent 事件列表仍为空。平台冒烟测试只允许通过 ConPTY 或 PTY 启动本机 Shell；绝不启动 Codex 或 Claude，也不调用模型。
