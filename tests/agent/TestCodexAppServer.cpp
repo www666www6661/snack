@@ -99,6 +99,7 @@ class TestCodexAppServer final : public QObject {
     void adapterStreamsAndCompletesTurn();
     void adapterSteersActiveTurn();
     void adapterMapsToolReasoningAndPlanEvents();
+    void adapterClosesEveryTurnTerminalPath();
     void adapterHandlesTurnFailuresAndStaleEvents();
     void adapterPreservesUnknownProtocolEvents();
     void adapterInterruptsAndDeclinesServerRequests();
@@ -1496,6 +1497,95 @@ void TestCodexAppServer::adapterMapsToolReasoningAndPlanEvents() {
     QCOMPARE(eventSpy.constLast().constFirst().value<AgentEvent>().type,
              AgentEventType::TurnCompleted);
     QCOMPARE(finishedSpy.count(), 1);
+    adapter.closeAgent();
+}
+
+void TestCodexAppServer::adapterClosesEveryTurnTerminalPath() {
+    using namespace snack::agent::codex;
+    using snack::domain::AgentEvent;
+    using snack::domain::AgentEventType;
+
+    FakeProcessTransport transport;
+    CodexAdapter adapter({.status = CliStatus::Available,
+                          .executablePath = QStringLiteral("codex"),
+                          .version = QStringLiteral("0.149.0")},
+                         &transport);
+    connectAdapter(adapter, transport);
+    QSignalSpy eventSpy(&adapter, &CodexAdapter::eventReceived);
+    QSignalSpy finishedSpy(&adapter, &CodexAdapter::turnFinished);
+
+    const auto expectStartTerminal = [&](const QString& status, AgentEventType expectedType,
+                                         bool interrupted, bool completed) {
+        eventSpy.clear();
+        finishedSpy.clear();
+        const QUuid turnId = QUuid::createUuid();
+        adapter.startTurn(codexTurnRequest(turnId));
+        const qint64 requestId = lastRequest(transport).id.toInteger();
+        feedResult(transport, requestId,
+                   QJsonObject{{QStringLiteral("turn"),
+                                turnObject(QStringLiteral("start-terminal-%1").arg(status), status,
+                                           status == QLatin1String("failed")
+                                               ? QStringLiteral("provider failed")
+                                               : QString{})}});
+        QCOMPARE(eventSpy.count(), 1);
+        QCOMPARE(eventSpy.constFirst().constFirst().value<AgentEvent>().type, expectedType);
+        QCOMPARE(finishedSpy.count(), 1);
+        QCOMPARE(finishedSpy.constFirst().constFirst().toUuid(), turnId);
+        QCOMPARE(finishedSpy.constFirst().at(1).toBool(), interrupted);
+        QCOMPARE(finishedSpy.constFirst().at(2).toBool(), completed);
+    };
+    expectStartTerminal(QStringLiteral("completed"), AgentEventType::TurnCompleted, false, true);
+    expectStartTerminal(QStringLiteral("interrupted"), AgentEventType::TurnInterrupted, true,
+                        false);
+    expectStartTerminal(QStringLiteral("failed"), AgentEventType::TurnFailed, false, false);
+
+    eventSpy.clear();
+    finishedSpy.clear();
+    adapter.startTurn(codexTurnRequest(QUuid::createUuid()));
+    feedResult(transport, lastRequest(transport).id.toInteger(), QJsonObject{});
+    QCOMPARE(eventSpy.count(), 1);
+    QCOMPARE(eventSpy.constFirst().constFirst().value<AgentEvent>().type,
+             AgentEventType::TurnFailed);
+    QCOMPARE(finishedSpy.count(), 1);
+
+    eventSpy.clear();
+    finishedSpy.clear();
+    adapter.startTurn(codexTurnRequest(QUuid::createUuid()));
+    const qint64 startRequestId = lastRequest(transport).id.toInteger();
+    const QString nativeTurnId = QStringLiteral("turn-expected-id");
+    feedNotification(
+        transport, QStringLiteral("turn/started"),
+        {{QStringLiteral("threadId"), QStringLiteral("0198-thread-snack")},
+         {QStringLiteral("turn"), turnObject(nativeTurnId, QStringLiteral("inProgress"))}});
+    feedResult(transport, startRequestId,
+               QJsonObject{{QStringLiteral("turn"), turnObject(QStringLiteral("turn-unexpected-id"),
+                                                               QStringLiteral("inProgress"))}});
+    QCOMPARE(eventSpy.constLast().constFirst().value<AgentEvent>().type,
+             AgentEventType::TurnFailed);
+    QCOMPARE(finishedSpy.count(), 1);
+
+    const auto expectNotificationFailure = [&](const QJsonObject& params,
+                                               const QString& expectedMessage) {
+        eventSpy.clear();
+        finishedSpy.clear();
+        adapter.startTurn(codexTurnRequest(QUuid::createUuid()));
+        feedNotification(transport, QStringLiteral("turn/completed"), params);
+        QCOMPARE(eventSpy.count(), 1);
+        const AgentEvent event = eventSpy.constFirst().constFirst().value<AgentEvent>();
+        QCOMPARE(event.type, AgentEventType::TurnFailed);
+        QVERIFY2(
+            event.payload.value(QStringLiteral("message")).toString().contains(expectedMessage),
+            qPrintable(event.payload.value(QStringLiteral("message")).toString()));
+        QCOMPARE(finishedSpy.count(), 1);
+        QVERIFY(!finishedSpy.constFirst().at(2).toBool());
+    };
+    expectNotificationFailure(QJsonObject{}, QStringLiteral("Invalid Codex"));
+    expectNotificationFailure(
+        {{QStringLiteral("threadId"), QStringLiteral("0198-thread-snack")},
+         {QStringLiteral("turn"),
+          turnObject(QStringLiteral("turn-still-running"), QStringLiteral("inProgress"))}},
+        QStringLiteral("remained in progress"));
+
     adapter.closeAgent();
 }
 

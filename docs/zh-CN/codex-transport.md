@@ -31,7 +31,7 @@ app-server 进程断开时，活动 Turn 会先按失败收口，再把会话置
 
 主窗口把断线诊断保存在持久诊断条中，不依赖定时消失的状态栏消息。重连期间继续显示上一次失败原因，只有恢复的 app-server 连接报告成功后才清除。启动时回退 Mock 也使用同一诊断条，但只要该回退运行时仍绑定当前会话，说明就始终可见。
 
-每轮 `turn/start` 发送文本输入和 GUI Turn UUID，并按该轮不可变快照覆盖 `model`、`effort`、`cwd`、`approvalPolicy` 与 `sandboxPolicy`。`turn/started`、`item/started`、`item/agentMessage/delta`、`item/completed`、`error` 与 `turn/completed` 被映射为统一领域事件。适配器同时校验原生 Thread/Turn ID、合并最终消息缺失的尾部文本、忽略重复终态，并保证 `turnFinished` 只发送一次。用户可以在原生 Turn ID 返回前取消；请求会延迟到 ID 可用时发送。`turn/interrupt` 的响应不代表终态，仍由 `turn/completed` 的 `interrupted` 状态收口。
+每轮 `turn/start` 发送文本输入和 GUI Turn UUID，并按该轮不可变快照覆盖 `model`、`effort`、`cwd`、`approvalPolicy` 与 `sandboxPolicy`。`turn/started`、`item/started`、`item/agentMessage/delta`、`item/completed`、`error` 与 `turn/completed` 被映射为统一领域事件。若 `turn/start` 响应已经是 completed、interrupted 或 failed，GUI Turn 会立即收口。适配器同时校验原生 Thread/Turn ID、让畸形或自相矛盾的终态载荷安全失败、合并最终消息缺失的尾部文本、忽略重复终态，并保证 `turnFinished` 只发送一次。用户可以在原生 Turn ID 返回前取消；请求会延迟到 ID 可用时发送。`turn/interrupt` 的响应不代表终态，仍由 `turn/completed` 的 `interrupted` 状态收口。
 
 `turn/steer` 可以向同一活动 Turn 补充一条文本指令。零食把原生 ID 作为 `expectedTurnId`，为消息生成独立客户端 ID，并且每个会话同一时刻只允许一个 steer 请求等待响应。原生 Turn ID 返回前提交的 steer 只暂存在内存中，并在 `turn/start` 确认 Turn 仍在运行后立即发送；若启动结果已经终结则直接丢弃。拒绝或 Turn ID 不匹配只产生警告，不会结束活动 Turn，也不会重发。公共 Session API 把成功受理的 steer 持久化为用户消息，并携带原 Turn 的设置快照。Composer 在运行中分别显示“引导”和“停止”；审批或回答获得焦点时退化为只能排队。
 
@@ -77,7 +77,7 @@ Windows 优先探测 `codex.cmd`，并通过 `cmd.exe /c call` 启动 npm 包装
 codex app-server generate-json-schema --out <directory>
 ```
 
-普通 CI 只运行假传输与 fixture，不依赖已安装 CLI，也不调用模型。测试覆盖已认证、未认证、无需 OpenAI 认证、非法、失败和超时的账户发现；分页、Thread list/read 解析、创建/恢复身份、未连接/非法/并发 Turn 拒绝、不支持的逐轮模型与强度、工作区身份约束、动态逐轮设置、文本与工具流、同 Turn steer 成功/失败/ID 不匹配、最终 Item 权威覆盖、命令非零退出、文件/MCP 结果、推理摘要隐私、计划三态、有界历史输出、审批决策、等待请求的终态响应及写入失败、显式关闭的响应顺序、进程退出后的本地清理且不向失效传输写入、过期与重复事件、未知通知/Item 保留、Turn 终态后隔离、完整/未完成帧上限、分片 CRLF 边界、请求/通知错误与超时、计时器清理、迟到响应隔离、旧进程退出期间的重连拒绝与恢复、正常退出计时器取消、进程强制终止、中断竞态、未支持 server request 与进程断开。本机可选择执行 CLI 探测、初始化、认证状态、模型目录与临时 Thread 创建的烟雾测试，全程不调用模型；真实 `turn/start` 必须由开发者另行明确启用，避免测试意外产生模型调用：
+普通 CI 只运行假传输与 fixture，不依赖已安装 CLI，也不调用模型。测试覆盖已认证、未认证、无需 OpenAI 认证、非法、失败和超时的账户发现；分页、Thread list/read 解析、创建/恢复身份、未连接/非法/并发 Turn 拒绝、不支持的逐轮模型与强度、工作区身份约束、启动响应直接返回终态、畸形/矛盾的终态通知、动态逐轮设置、文本与工具流、同 Turn steer 成功/失败/ID 不匹配、最终 Item 权威覆盖、命令非零退出、文件/MCP 结果、推理摘要隐私、计划三态、有界历史输出、审批决策、等待请求的终态响应及写入失败、显式关闭的响应顺序、进程退出后的本地清理且不向失效传输写入、过期与重复事件、未知通知/Item 保留、Turn 终态后隔离、完整/未完成帧上限、分片 CRLF 边界、请求/通知错误与超时、计时器清理、迟到响应隔离、旧进程退出期间的重连拒绝与恢复、正常退出计时器取消、进程强制终止、中断竞态、未支持 server request 与进程断开。本机可选择执行 CLI 探测、初始化、认证状态、模型目录与临时 Thread 创建的烟雾测试，全程不调用模型；真实 `turn/start` 必须由开发者另行明确启用，避免测试意外产生模型调用：
 
 ```powershell
 $env:SNACK_RUN_LIVE_CODEX_TEST = '1'
