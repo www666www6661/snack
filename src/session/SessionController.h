@@ -53,6 +53,7 @@ class SessionController final : public QObject {
     void capabilitiesChanged(const snack::agent::CapabilitySet& capabilities);
     void connectionDetailChanged(const QString& detail);
     void nativeIdentityChanged(const QString& threadId, const QString& sessionId);
+    void conversationTitleChanged(const QString& title);
     void queuedMessagesChanged(const QList<snack::domain::QueuedMessage>& messages);
     void promptTemplatesChanged(const QList<snack::domain::PromptTemplate>& templates);
 
@@ -63,6 +64,7 @@ class SessionController final : public QObject {
     [[nodiscard]] domain::TurnSettingsSnapshot
     normalizeSettings(const domain::TurnSettingsSnapshot& settings) const;
     void recordEvent(domain::AgentEvent event);
+    void replacePlaceholderTitle(const QString& firstMessage);
     bool persistQueue(QList<domain::QueuedMessage>& messages, QString* error);
     void dispatchNextQueuedMessage();
     void recomputeActiveStatus();

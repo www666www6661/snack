@@ -9,7 +9,7 @@ GUI entities use random UUIDs. Native agent IDs are separate values, never datab
 | Entity | Important fields |
 |---|---|
 | `Workspace` | `id`, `canonicalPath`, `displayPath`, `gitState`, `lastOpenedAt` |
-| `Conversation` | `id`, `workspaceId`, `agentKind`, `title`, `nativeSessionId`, `status`, `archived`, `pinned` |
+| `Conversation` | `id`, `workspaceId`, `agentKind`, `title`, `titleIsPlaceholder`, `nativeSessionId`, `status`, `archived`, `pinned` |
 | `AgentRuntime` | `conversationId`, `cliPath`, `cliVersion`, `protocolVersion`, `capabilities` |
 | `Turn` | `id`, `nativeTurnId`, `conversationId`, `status`, `settingsSnapshot`, timestamps |
 | `AgentEvent` | `id`, `conversationId`, `turnId`, `sequence`, `type`, `payload`, `rawRef` |

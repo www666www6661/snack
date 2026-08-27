@@ -97,6 +97,8 @@ MainWindow::MainWindow(session::SessionController* controller, app::AppSettings*
             });
     connect(controller_, &session::SessionController::connectionDetailChanged, this,
             &MainWindow::updateConnectionDetail);
+    connect(controller_, &session::SessionController::conversationTitleChanged, this,
+            &MainWindow::updateConversationTitle);
     connect(controller_, &session::SessionController::queuedMessagesChanged, this,
             &MainWindow::updateQueuedMessages);
     connect(controller_, &session::SessionController::promptTemplatesChanged, this,
@@ -479,6 +481,7 @@ void MainWindow::buildUi() {
     auto* headerLayout = new QHBoxLayout(header);
     headerLayout->setContentsMargins(22, 12, 22, 12);
     titleLabel_ = new QLabel(controller_->conversation().title, header);
+    titleLabel_->setObjectName(QStringLiteral("conversationTitle"));
     statusLabel_ = new QLabel(tr("Dormant"), header);
     statusLabel_->setObjectName(QStringLiteral("statusLabel"));
     reconnectButton_ = new QPushButton(tr("Reconnect"), header);
@@ -1397,6 +1400,11 @@ void MainWindow::refreshConnectionNotice() {
     connectionNoticeFrame_->style()->unpolish(connectionNoticeFrame_);
     connectionNoticeFrame_->style()->polish(connectionNoticeFrame_);
     connectionNoticeFrame_->show();
+}
+
+void MainWindow::updateConversationTitle(const QString& title) {
+    titleLabel_->setText(title);
+    sessionRow_->setText(tr("●  %1\n    %2").arg(agentDisplayName(), title));
 }
 
 void MainWindow::persistComposerDraft() {

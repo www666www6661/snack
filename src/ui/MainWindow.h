@@ -88,6 +88,7 @@ class MainWindow final : public QMainWindow {
     void updateStatus(domain::ConversationStatus status);
     void updateConnectionDetail(const QString& detail);
     void refreshConnectionNotice();
+    void updateConversationTitle(const QString& title);
     void persistComposerDraft();
     void rebuildPromptTemplateMenu();
     void insertPromptTemplate(const QUuid& templateId);

@@ -26,6 +26,7 @@ prepareConversation(const std::optional<domain::Conversation>& storedConversatio
 
     domain::Conversation conversation;
     conversation.title = newConversationTitle;
+    conversation.titleIsPlaceholder = true;
     conversation.workingDirectory = workingDirectory;
     conversation.agentKind = selectedAgent;
     conversation.status = domain::ConversationStatus::Dormant;

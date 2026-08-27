@@ -14,7 +14,7 @@
 namespace snack::storage {
 namespace {
 
-constexpr int currentSchemaVersion = 5;
+constexpr int currentSchemaVersion = 6;
 
 struct Migration {
     int version;
@@ -91,7 +91,17 @@ QList<Migration> migrations() {
               QStringLiteral("UPDATE schema_migrations SET "
                              "applied_at = CAST(strftime('%s','now') AS INTEGER) * 1000, "
                              "completed_at = CAST(strftime('%s','now') AS INTEGER) * 1000 "
-                             "WHERE version = 5")}}};
+                             "WHERE version = 5")}},
+            {6,
+             {QStringLiteral("INSERT INTO schema_migrations "
+                             "(version, applied_at, started_at, completed_at) VALUES "
+                             "(6, 0, CAST(strftime('%s','now') AS INTEGER) * 1000, NULL)"),
+              QStringLiteral("ALTER TABLE conversations ADD COLUMN "
+                             "title_is_placeholder INTEGER NOT NULL DEFAULT 0"),
+              QStringLiteral("UPDATE schema_migrations SET "
+                             "applied_at = CAST(strftime('%s','now') AS INTEGER) * 1000, "
+                             "completed_at = CAST(strftime('%s','now') AS INTEGER) * 1000 "
+                             "WHERE version = 6")}}};
 }
 
 QString compactJson(const QJsonObject& object) {
@@ -207,15 +217,18 @@ bool EventStore::saveConversation(const domain::Conversation& conversation, QStr
     QSqlQuery query(database_);
     query.prepare(QStringLiteral(
         "INSERT INTO conversations "
-        "(id, title, working_directory, agent_kind, status, native_thread_id, native_session_id, "
-        "archived, pinned) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "
+        "(id, title, title_is_placeholder, working_directory, agent_kind, status, "
+        "native_thread_id, native_session_id, archived, pinned) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
         "ON CONFLICT(id) DO UPDATE SET title = excluded.title, "
+        "title_is_placeholder = excluded.title_is_placeholder, "
         "working_directory = excluded.working_directory, agent_kind = excluded.agent_kind, "
         "status = excluded.status, native_thread_id = excluded.native_thread_id, "
         "native_session_id = excluded.native_session_id, archived = excluded.archived, "
         "pinned = excluded.pinned"));
     query.addBindValue(conversation.id.toString(QUuid::WithoutBraces));
     query.addBindValue(conversation.title);
+    query.addBindValue(conversation.titleIsPlaceholder);
     query.addBindValue(conversation.workingDirectory);
     query.addBindValue(domain::enumName(conversation.agentKind));
     query.addBindValue(domain::enumName(conversation.status));
@@ -234,8 +247,9 @@ std::optional<domain::Conversation> EventStore::conversationById(const QUuid& co
                                                                  QString* error) const {
     QSqlQuery query(database_);
     query.prepare(
-        QStringLiteral("SELECT title, working_directory, agent_kind, status, native_thread_id, "
-                       "native_session_id, archived, pinned FROM conversations WHERE id = ?"));
+        QStringLiteral("SELECT title, title_is_placeholder, working_directory, agent_kind, "
+                       "status, native_thread_id, native_session_id, archived, pinned "
+                       "FROM conversations WHERE id = ?"));
     query.addBindValue(conversationId.toString(QUuid::WithoutBraces));
     if (!query.exec()) {
         setSqlError(error, QStringLiteral("Cannot load conversation"), query.lastError());
@@ -248,13 +262,14 @@ std::optional<domain::Conversation> EventStore::conversationById(const QUuid& co
     domain::Conversation conversation;
     conversation.id = conversationId;
     conversation.title = query.value(0).toString();
-    conversation.workingDirectory = query.value(1).toString();
-    conversation.agentKind = domain::agentKindFromString(query.value(2).toString());
-    conversation.status = domain::conversationStatusFromString(query.value(3).toString());
-    conversation.nativeThreadId = query.value(4).toString();
-    conversation.nativeSessionId = query.value(5).toString();
-    conversation.archived = query.value(6).toBool();
-    conversation.pinned = query.value(7).toBool();
+    conversation.titleIsPlaceholder = query.value(1).toBool();
+    conversation.workingDirectory = query.value(2).toString();
+    conversation.agentKind = domain::agentKindFromString(query.value(3).toString());
+    conversation.status = domain::conversationStatusFromString(query.value(4).toString());
+    conversation.nativeThreadId = query.value(5).toString();
+    conversation.nativeSessionId = query.value(6).toString();
+    conversation.archived = query.value(7).toBool();
+    conversation.pinned = query.value(8).toBool();
     return conversation;
 }
 
@@ -557,10 +572,10 @@ bool EventStore::validateSchema(bool checkIntegrity, QString* error) const {
     }
 
     QSqlQuery completionQuery(database_);
-    if (!completionQuery.exec(
-            QStringLiteral("SELECT COUNT(*) FROM schema_migrations WHERE version IN (2, 3, 4, 5) "
-                           "AND completed_at IS NOT NULL")) ||
-        !completionQuery.next() || completionQuery.value(0).toInt() != 4) {
+    if (!completionQuery.exec(QStringLiteral("SELECT COUNT(*) FROM schema_migrations "
+                                             "WHERE version IN (2, 3, 4, 5, 6) "
+                                             "AND completed_at IS NOT NULL")) ||
+        !completionQuery.next() || completionQuery.value(0).toInt() != 5) {
         if (error != nullptr) {
             *error = QStringLiteral("Database schema validation failed: migrations are incomplete");
         }
@@ -573,6 +588,17 @@ bool EventStore::validateSchema(bool checkIntegrity, QString* error) const {
         !identityColumnQuery.next() || identityColumnQuery.value(0).toInt() != 1) {
         if (error != nullptr) {
             *error = QStringLiteral("Database schema validation failed: native thread identity "
+                                    "column is missing");
+        }
+        return false;
+    }
+    QSqlQuery titleColumnQuery(database_);
+    if (!titleColumnQuery.exec(
+            QStringLiteral("SELECT COUNT(*) FROM pragma_table_info('conversations') "
+                           "WHERE name = 'title_is_placeholder' AND \"notnull\" = 1")) ||
+        !titleColumnQuery.next() || titleColumnQuery.value(0).toInt() != 1) {
+        if (error != nullptr) {
+            *error = QStringLiteral("Database schema validation failed: title placeholder "
                                     "column is missing");
         }
         return false;

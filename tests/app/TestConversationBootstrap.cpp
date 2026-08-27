@@ -31,6 +31,7 @@ void TestConversationBootstrap::restoresMatchingConversation() {
     QCOMPARE(result.conversation.id, stored.id);
     QCOMPARE(result.conversation.nativeThreadId, QStringLiteral("thread-existing"));
     QCOMPARE(result.conversation.status, snack::domain::ConversationStatus::Dormant);
+    QVERIFY(!result.conversation.titleIsPlaceholder);
 }
 
 void TestConversationBootstrap::isolatesDifferentAgents() {
@@ -43,6 +44,7 @@ void TestConversationBootstrap::isolatesDifferentAgents() {
     QVERIFY(result.conversation.id != stored.id);
     QCOMPARE(result.conversation.agentKind, snack::domain::AgentKind::Mock);
     QVERIFY(result.conversation.nativeThreadId.isEmpty());
+    QVERIFY(result.conversation.titleIsPlaceholder);
 }
 
 void TestConversationBootstrap::isolatesDifferentWorkspaces() {
@@ -54,6 +56,7 @@ void TestConversationBootstrap::isolatesDifferentWorkspaces() {
     QVERIFY(!result.restored);
     QCOMPARE(result.conversation.workingDirectory, QStringLiteral("C:/other"));
     QCOMPARE(result.conversation.title, QStringLiteral("Codex conversation"));
+    QVERIFY(result.conversation.titleIsPlaceholder);
 }
 
 QTEST_GUILESS_MAIN(TestConversationBootstrap)

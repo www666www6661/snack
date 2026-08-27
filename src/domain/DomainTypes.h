@@ -68,6 +68,7 @@ struct TurnSettingsSnapshot {
 struct Conversation {
     QUuid id{QUuid::createUuid()};
     QString title;
+    bool titleIsPlaceholder{false};
     QString workingDirectory;
     AgentKind agentKind{AgentKind::Mock};
     ConversationStatus status{ConversationStatus::Dormant};
@@ -124,6 +125,7 @@ struct PromptTemplate {
 [[nodiscard]] QueuedMessageState queuedMessageStateFromString(const QString& value);
 [[nodiscard]] ConversationStatus conversationStatusFromString(const QString& value);
 [[nodiscard]] AgentEventType agentEventTypeFromString(const QString& value);
+[[nodiscard]] QString fallbackConversationTitle(const QString& prompt);
 
 } // namespace snack::domain
 

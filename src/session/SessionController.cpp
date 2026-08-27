@@ -224,6 +224,7 @@ bool SessionController::sendMessage(const QString& message, QString* error) {
         return false;
     }
 
+    replacePlaceholderTitle(trimmed);
     activeTurnId_ = QUuid::createUuid();
     activeTurnSettings_ = nextTurnSettings_;
     domain::AgentEvent userEvent;
@@ -615,6 +616,27 @@ void SessionController::recordEvent(domain::AgentEvent event) {
         emit persistenceError(error);
     }
     emit eventRecorded(event);
+}
+
+void SessionController::replacePlaceholderTitle(const QString& firstMessage) {
+    if (!conversation_.titleIsPlaceholder) {
+        return;
+    }
+    const QString title = domain::fallbackConversationTitle(firstMessage);
+    if (title.isEmpty()) {
+        return;
+    }
+
+    domain::Conversation updated = conversation_;
+    updated.title = title;
+    updated.titleIsPlaceholder = false;
+    QString error;
+    if (!repository_->saveConversation(updated, &error)) {
+        emit persistenceError(error);
+        return;
+    }
+    conversation_ = std::move(updated);
+    emit conversationTitleChanged(conversation_.title);
 }
 
 bool SessionController::persistQueue(QList<domain::QueuedMessage>& messages, QString* error) {

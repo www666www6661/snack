@@ -14,6 +14,7 @@ class TestDomainTypes final : public QObject {
     void eventTypeNamesRoundTrip();
     void approvalDecisionNamesRoundTrip();
     void queuedMessageStateNamesRoundTrip();
+    void createsSafeFallbackConversationTitles();
     void validatesAndRendersPromptTemplates();
     void rejectsInvalidPromptTemplates();
 };
@@ -92,6 +93,21 @@ void TestDomainTypes::queuedMessageStateNamesRoundTrip() {
     QCOMPARE(snack::domain::enumName(pending), QStringLiteral("pending"));
     QCOMPARE(snack::domain::queuedMessageStateFromString(QStringLiteral("pending")), pending);
     QCOMPARE(snack::domain::queuedMessageStateFromString(QStringLiteral("future")), pending);
+}
+
+void TestDomainTypes::createsSafeFallbackConversationTitles() {
+    QCOMPARE(snack::domain::fallbackConversationTitle(
+                 QStringLiteral("  Build\n\tthe   conversation sidebar  ")),
+             QStringLiteral("Build the conversation sidebar"));
+    const QString unsafe = QStringLiteral("safe") + QChar(0x202E) + QStringLiteral(" hidden") +
+                           QChar(0x0007) + QStringLiteral(" title");
+    QCOMPARE(snack::domain::fallbackConversationTitle(unsafe), QStringLiteral("safe hidden title"));
+    QCOMPARE(snack::domain::fallbackConversationTitle(QString(80, QLatin1Char('a'))),
+             QString(69, QLatin1Char('a')) + QStringLiteral("..."));
+    const QString whale = QString::fromUcs4(U"\U0001F40B");
+    const QString emojiTitle = snack::domain::fallbackConversationTitle(
+        QStringLiteral("Keep emoji ") + whale + QStringLiteral(" in the title"));
+    QVERIFY(emojiTitle.contains(whale));
 }
 
 void TestDomainTypes::validatesAndRendersPromptTemplates() {

@@ -9,7 +9,7 @@
 | 实体 | 关键字段 |
 |---|---|
 | `Workspace` | `id`, `canonicalPath`, `displayPath`, `gitState`, `lastOpenedAt` |
-| `Conversation` | `id`, `workspaceId`, `agentKind`, `title`, `nativeSessionId`, `status`, `archived`, `pinned` |
+| `Conversation` | `id`, `workspaceId`, `agentKind`, `title`, `titleIsPlaceholder`, `nativeSessionId`, `status`, `archived`, `pinned` |
 | `AgentRuntime` | `conversationId`, `cliPath`, `cliVersion`, `protocolVersion`, `capabilities` |
 | `Turn` | `id`, `nativeTurnId`, `conversationId`, `status`, `settingsSnapshot`, `startedAt`, `finishedAt` |
 | `AgentEvent` | `id`, `conversationId`, `turnId`, `sequence`, `type`, `payload`, `rawRef` |

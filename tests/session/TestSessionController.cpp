@@ -94,6 +94,7 @@ class TestSessionController final : public QObject {
 
   private slots:
     void streamsAndPersistsTurn();
+    void replacesPlaceholderTitleFromFirstMessage();
     void snapshotsSettingsPerTurn();
     void steersActiveTurn();
     void persistsEditsAndDispatchesQueuedMessages();
@@ -128,6 +129,7 @@ void TestSessionController::streamsAndPersistsTurn() {
     QTRY_COMPARE(controller.status(), snack::domain::ConversationStatus::Idle);
     QVERIFY(controller.sendMessage(QStringLiteral("hello")));
     QTRY_COMPARE_WITH_TIMEOUT(controller.status(), snack::domain::ConversationStatus::Idle, 1000);
+    QCOMPARE(controller.conversation().title, QStringLiteral("Test session"));
 
     QVERIFY(eventSpy.count() >= 8);
     QCOMPARE(repository.events_.constFirst().type, snack::domain::AgentEventType::UserMessage);
@@ -135,6 +137,29 @@ void TestSessionController::streamsAndPersistsTurn() {
     for (qsizetype index = 0; index < repository.events_.size(); ++index) {
         QCOMPARE(repository.events_.at(index).sequence, static_cast<quint64>(index + 1));
     }
+}
+
+void TestSessionController::replacesPlaceholderTitleFromFirstMessage() {
+    MemoryEventRepository repository;
+    snack::agent::FakeAgentAdapter adapter(nullptr, 1);
+    auto value = conversation();
+    value.title = QStringLiteral("Mock conversation");
+    value.titleIsPlaceholder = true;
+    snack::session::SessionController controller(value, &adapter, &repository);
+    QSignalSpy titleSpy(&controller, &snack::session::SessionController::conversationTitleChanged);
+
+    controller.open();
+    QTRY_COMPARE(controller.status(), snack::domain::ConversationStatus::Idle);
+    QVERIFY(controller.sendMessage(QStringLiteral("  Build\n a useful conversation rail  ")));
+    QCOMPARE(controller.conversation().title, QStringLiteral("Build a useful conversation rail"));
+    QVERIFY(!controller.conversation().titleIsPlaceholder);
+    QCOMPARE(repository.conversation_.title, controller.conversation().title);
+    QCOMPARE(titleSpy.count(), 1);
+
+    QTRY_COMPARE_WITH_TIMEOUT(controller.status(), snack::domain::ConversationStatus::Idle, 1000);
+    QVERIFY(controller.sendMessage(QStringLiteral("Do not replace the established title")));
+    QCOMPARE(controller.conversation().title, QStringLiteral("Build a useful conversation rail"));
+    QCOMPARE(titleSpy.count(), 1);
 }
 
 void TestSessionController::snapshotsSettingsPerTurn() {

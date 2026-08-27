@@ -89,6 +89,7 @@ class TestMainWindow final : public QObject {
 
   private slots:
     void sendsAndRendersStreamingTurn();
+    void updatesPlaceholderTitleAfterFirstSend();
     void restoresPersistedTimeline();
     void restoresToolReasoningAndPlanViews();
     void hidesToTrayWithoutClosingSession();
@@ -199,6 +200,35 @@ void TestMainWindow::sendsAndRendersStreamingTurn() {
     QCOMPARE(savedSettings.themeMode, snack::app::ThemeMode::Dark);
     QCOMPARE(savedSettings.interfaceScale, 1.1);
     QCOMPARE(savedSettings.preferredAgentKind, snack::domain::AgentKind::Mock);
+}
+
+void TestMainWindow::updatesPlaceholderTitleAfterFirstSend() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::app::AppSettings settings(directory.filePath(QStringLiteral("settings.ini")));
+    UiMemoryEventRepository repository;
+    snack::agent::FakeAgentAdapter adapter(nullptr, 1);
+    snack::domain::Conversation conversation;
+    conversation.title = QStringLiteral("Mock conversation");
+    conversation.titleIsPlaceholder = true;
+    conversation.workingDirectory = directory.path();
+    snack::session::SessionController controller(conversation, &adapter, &repository);
+    snack::ui::MainWindow window(&controller, &settings, false);
+
+    auto* composer = window.findChild<QPlainTextEdit*>(QStringLiteral("composer"));
+    auto* sendButton = window.findChild<QPushButton*>(QStringLiteral("sendButton"));
+    auto* title = window.findChild<QLabel*>(QStringLiteral("conversationTitle"));
+    auto* sessionRow = window.findChild<QLabel*>(QStringLiteral("sessionRow"));
+    QVERIFY(composer != nullptr);
+    QVERIFY(sendButton != nullptr);
+    QVERIFY(title != nullptr);
+    QVERIFY(sessionRow != nullptr);
+    QTRY_VERIFY(sendButton->isEnabled());
+
+    composer->setPlainText(QStringLiteral("Name this conversation from its first prompt"));
+    sendButton->click();
+    QCOMPARE(title->text(), QStringLiteral("Name this conversation from its first prompt"));
+    QVERIFY(sessionRow->text().contains(title->text()));
 }
 
 void TestMainWindow::restoresPersistedTimeline() {

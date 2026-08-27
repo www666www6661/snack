@@ -1,7 +1,11 @@
 #include "domain/DomainTypes.h"
 
+#include <QRegularExpression>
+
 namespace snack::domain {
 namespace {
+
+constexpr qsizetype maximumConversationTitleLength = 72;
 
 template <typename Enum> struct EnumName {
     Enum value;
@@ -182,6 +186,27 @@ ConversationStatus conversationStatusFromString(const QString& value) {
 
 AgentEventType agentEventTypeFromString(const QString& value) {
     return enumFromString(value, eventTypes, AgentEventType::RawProtocolObserved);
+}
+
+QString fallbackConversationTitle(const QString& prompt) {
+    static const QRegularExpression unsafeCharacters(QStringLiteral("[\\p{Cc}\\p{Cf}]"));
+    QString normalized = prompt;
+    normalized.replace(unsafeCharacters, QStringLiteral(" "));
+    normalized = normalized.simplified();
+
+    QList<char32_t> codePoints;
+    const QList<uint> utf32 = normalized.toUcs4();
+    codePoints.reserve(utf32.size());
+    for (uint codePoint : utf32) {
+        codePoints.append(static_cast<char32_t>(codePoint));
+    }
+    if (codePoints.size() <= maximumConversationTitleLength) {
+        return normalized;
+    }
+    constexpr qsizetype suffixLength = 3;
+    const qsizetype prefixLength = maximumConversationTitleLength - suffixLength;
+    return QString::fromUcs4(codePoints.constData(), prefixLength).trimmed() +
+           QStringLiteral("...");
 }
 
 } // namespace snack::domain

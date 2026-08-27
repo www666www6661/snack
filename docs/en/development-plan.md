@@ -20,6 +20,8 @@ Acceptance evidence includes fixture coverage for normal, failure, cancellation,
 
 ## M3: daily conversation UX (`0.1.0-beta.1`)
 
+Status: in progress. The existing composer foundation includes bounded auto-growth, per-conversation drafts, steer/queue controls, editable persistent queues, parameterized prompt templates, fixed shortcuts, and interface zoom. The first conversation-identity slice now persists placeholder-title state and replaces it once with a safe first-prompt fallback, preparing stable labels for the conversation rail without overwriting established titles.
+
 Navigation/search/groups/tags/views, detached chat, attachments and `@`, templates and `/`, steer/queue, safe WebEngine Markdown/LaTeX/Mermaid, themes, tray, private notifications, shortcuts, zoom, and layouts. Acceptance: daily multi-session Codex use remains responsive under heavy output.
 
 ## M4: workspace, diff, terminal (`0.2.0`)
