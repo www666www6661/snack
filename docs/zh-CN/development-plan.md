@@ -8,7 +8,7 @@
 
 ## M1：工程骨架与测试基础（目标 `0.1.0-alpha.1`）
 
-状态：进行中。首个垂直切片已经建立应用壳、设置与主题、单实例 IPC、托盘生命周期、窗口/布局恢复、带备份/只读恢复的版本化 SQLite 迁移、事件仓库、内容寻址存储、统一 Agent 接口、模拟流式会话和 Qt Test。Windows Qt 6.8.3/LLVM-MinGW 已完成严格警告构建、9/9 Debug 测试、30 次 IPC 重复和 84.89% 第一方代码行覆盖率；这不替代正式 `clang-cl + MSVC ABI` 验证。完成 M1 验收前仍需完成三个正式平台工具链的构建。
+状态：实现完成，正式跨工具链验收仍待完成。首个垂直切片已经建立应用壳、设置与主题、单实例 IPC、托盘生命周期、窗口/布局恢复、带备份/只读恢复的版本化 SQLite 迁移、事件仓库、内容寻址存储、统一 Agent 接口、模拟流式会话和 Qt Test。2026-08-27 的 Windows Qt 6.8.3/LLVM-MinGW 严格警告基线通过 11/11 项 Debug 测试、10/10 项覆盖率测试、30 次 IPC 重复和 84.59% 第一方代码行覆盖率；这不替代 Windows `clang-cl + MSVC ABI`、Ubuntu、Debian 或 macOS 验证。
 
 - CMake/Qt 6.8/C++20 项目、Clang Presets、Qt Test、LLVM coverage。
 - 应用元数据、国际化、主题 Schema、日志、单实例、设置和模拟 Agent。
@@ -19,14 +19,14 @@
 
 ## M2：Codex 协议垂直链路（`0.1.0-alpha.2`）
 
-状态：进行中。带有冻结最低版本 `0.149.0` 的 CLI 探测、可注入 `QProcess` 传输、JSONL 分帧、初始化握手、请求 ID 关联、有界诊断、分页 `model/list`、逐模型能力、`thread/start`/`thread/resume`/`thread/list`/`thread/read`、Thread/Session 身份持久化、逐轮模型/推理强度/访问层级覆盖、`turn/steer`/`turn/interrupt`、文本与工具流、推理摘要、行内/任务 Dock 计划、错误收口、命令/文件审批、`tool/requestUserInput`、Thread Token/上下文用量、主应用 Codex/Mock 选择与 Codex CLI `0.149.0` 版本化 Schema/fixture 已完成。M2 剩余最终验收加固。
+状态：截至 2026-08-27，自动化契约与本机无模型验收完成。带有冻结最低版本 `0.149.0` 的 CLI 探测、可注入 `QProcess` 传输、有界 JSONL 分帧、初始化握手、`account/read`、请求 ID 关联与超时、分页 `model/list`、逐模型能力、`thread/start`/`thread/resume`/`thread/list`/`thread/read`、Thread/Session 身份持久化、逐轮模型/推理强度/访问层级覆盖、`turn/steer`/`turn/interrupt`、文本与工具流、推理摘要、行内/任务 Dock 计划、错误收口、命令/文件审批、`tool/requestUserInput`、Thread Token/上下文用量、重连/进程丢失清理、主应用 Codex/Mock 选择与 Codex CLI `0.149.0` 版本化 Schema/fixture 均已完成。
 
 - `codex app-server` stdio transport、Schema生成与握手。
 - model/list、thread start/resume/read/list、turn start/steer/interrupt。
 - 流式消息、工具、推理、计划、错误、使用量和审批。
 - CLI 检测、原生会话 ID、能力禁用与原始协议诊断。
 
-验收：本机真实 Codex完成创建、执行、审批、取消、恢复；模拟 fixture覆盖全部失败路径。
+验收证据：fixture 覆盖正常、失败、取消、中断、恢复、过期事件、畸形终态和等待请求清理路径；本机真实 CLI 已完成探测、初始化、认证状态读取、模型发现和临时 Thread 创建，全程不调用模型。真实 `turn/start`、审批、取消与恢复可能产生模型用量，因此保留为显式 opt-in 的人工检查；本次里程碑收口未执行这些检查，它们不属于默认安全测试门禁。
 
 ## M3：日常会话体验（`0.1.0-beta.1`）
 

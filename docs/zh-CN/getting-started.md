@@ -2,7 +2,7 @@
 
 ## 当前垂直切片
 
-`0.1.0-alpha.1` 工程骨架包含 Qt Widgets 主窗口、单实例 IPC、设置、声明式主题校验、SQLite 事件仓库、SHA-256 内容存储、统一 Agent 接口、模拟 Agent、会话状态机和 Qt Test 测试。M2 已加入真实 Codex 的 CLI 探测、stdio JSONL 传输、初始化握手、分页模型能力、带身份持久化的原生 Thread 创建/恢复、文本 Turn 流与中断、工具与推理摘要卡片、行内及停靠计划、命令/文件审批卡片，并将 Codex 作为主应用默认 Agent。CLI 不可用时界面明确回退 Mock；普通测试仍不调用真实模型。
+`0.1.0-alpha.1` 工程骨架包含 Qt Widgets 主窗口、单实例 IPC、设置、声明式主题校验、SQLite 事件仓库、SHA-256 内容存储、统一 Agent 接口、模拟 Agent、会话状态机和 Qt Test 测试。M2 的自动化契约与本机无模型验收已完成：真实 Codex 的 CLI 探测、stdio JSONL 传输、初始化及认证状态校验、分页模型能力、带身份持久化的原生 Thread 创建/恢复、文本 Turn 流与中断、工具与推理摘要卡片、行内及停靠计划、命令/文件审批卡片、用户提问、用量报告，以及将 Codex 作为主应用默认 Agent。CLI 不可用时界面明确回退 Mock；普通测试仍不调用真实模型。
 
 Agent 菜单中的偏好只影响下一会话。重启后，如果偏好 Agent 或工作目录与最后会话不同，零食会创建新的隔离会话，不会把现有原生 Thread ID切换给另一个 Agent。Codex CLI 的自定义路径可预先写入设置键 `agent/codexExecutable`；空值表示从系统 `PATH` 自动探测。
 
@@ -82,4 +82,4 @@ ctest --test-dir build/macos-debug --output-on-failure
 
 新增行为必须同步添加 Qt Test。CI 在三个桌面平台构建并运行测试，Linux 使用 LLVM source-based coverage 执行第一方代码 80% 行覆盖率门禁。CI 不调用真实 Agent。
 
-2026-08-26 的 Windows LLVM-MinGW 基线：9/9 Debug 测试通过（包含运行库部署布局检查）；单实例 IPC 连续重复 30 次通过；第一方代码行覆盖率为 84.89%；本机真实 Codex CLI 初始化、`model/list` 与临时 `thread/start` 烟雾测试也通过，全程不调用模型。正式 M1 验收仍需完成 Windows `clang-cl`、Linux 和 macOS 构建。
+2026-08-27 的 Windows Qt 6.8.3/LLVM-MinGW 基线：11/11 项 Debug 测试通过（包含运行库部署布局检查）；10/10 项插桩测试通过；单实例 IPC 连续重复 30 次通过；119 条简体中文源文本全部完成翻译；第一方代码行覆盖率为 84.59%。本机真实 Codex CLI 探测、初始化、`account/read`、`model/list` 与临时 `thread/start` 烟雾测试也通过，全程不调用模型；真实模型 Turn 保持 opt-in，本次未执行。该本机结果不代表已经通过 Windows `clang-cl`、Ubuntu、Debian 或 macOS 工具链验证。
