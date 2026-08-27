@@ -1,6 +1,7 @@
 #pragma once
 
 #include "agent/IAgentAdapter.h"
+#include "agent/codex/CodexAccountLifecycle.h"
 #include "agent/codex/CodexAppServerClient.h"
 #include "agent/codex/CodexApprovalLifecycle.h"
 #include "agent/codex/CodexCliDiscovery.h"
@@ -40,6 +41,7 @@ class CodexAdapter final : public IAgentAdapter {
     void nativeThreadQueryFailed(const QString& method, const QString& detail);
 
   private:
+    void requestAccountState();
     void requestModelPage(const QString& cursor = {});
     void handleResponse(qint64 id, const QString& method, const QJsonValue& result);
     void handleRequestFailure(qint64 id, const QString& method, int code, const QString& message);
@@ -91,6 +93,7 @@ class CodexAdapter final : public IAgentAdapter {
     QHash<QString, CodexUserInputRequest> pendingUserInputs_;
     QHash<QString, QString> userInputTokenByNativeKey_;
     QString threadRequestMethod_;
+    qint64 accountRequestId_{0};
     qint64 modelRequestId_{0};
     qint64 threadRequestId_{0};
     qint64 threadListRequestId_{0};

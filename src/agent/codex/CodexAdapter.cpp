@@ -53,7 +53,7 @@ CodexAdapter::CodexAdapter(CliInstallation installation, process::IProcessTransp
     capabilities_.supportsInterrupt = true;
 
     connect(&client_, &CodexAppServerClient::handshakeCompleted, this,
-            [this](const ServerInfo&) { requestModelPage(); });
+            [this](const ServerInfo&) { requestAccountState(); });
     connect(&client_, &CodexAppServerClient::responseReceived, this, &CodexAdapter::handleResponse);
     connect(&client_, &CodexAppServerClient::requestFailed, this,
             &CodexAdapter::handleRequestFailure);
@@ -299,6 +299,14 @@ void CodexAdapter::closeAgent() {
     client_.stop();
 }
 
+void CodexAdapter::requestAccountState() {
+    accountRequestId_ =
+        client_.sendRequest(QStringLiteral("account/read"), accountReadParameters());
+    if (accountRequestId_ == 0) {
+        failConnection(QStringLiteral("Failed to request Codex authentication status"));
+    }
+}
+
 void CodexAdapter::requestModelPage(const QString& cursor) {
     if (requestedCursors_.contains(cursor)) {
         failConnection(QStringLiteral("Codex model catalog returned a repeated cursor"));
@@ -317,6 +325,22 @@ void CodexAdapter::requestModelPage(const QString& cursor) {
 
 void CodexAdapter::handleResponse(qint64 id, const QString& method, const QJsonValue& result) {
     if (connecting_) {
+        if (id == accountRequestId_ && method == QLatin1String("account/read")) {
+            accountRequestId_ = 0;
+            QString error;
+            const auto account = parseAccountReadResponse(result, &error);
+            if (!account.has_value()) {
+                failConnection(
+                    QStringLiteral("Invalid Codex authentication status: %1").arg(error));
+                return;
+            }
+            if (!account->canRun()) {
+                failConnection(QStringLiteral("Codex is not authenticated; run codex login"));
+                return;
+            }
+            requestModelPage();
+            return;
+        }
         if (id == threadRequestId_ && method == threadRequestMethod_) {
             finishThreadLifecycle(result);
             return;
@@ -391,6 +415,13 @@ void CodexAdapter::handleResponse(qint64 id, const QString& method, const QJsonV
 
 void CodexAdapter::handleRequestFailure(qint64 id, const QString& method, int code,
                                         const QString& message) {
+    if (connecting_ && id == accountRequestId_ && method == QLatin1String("account/read")) {
+        accountRequestId_ = 0;
+        failConnection(QStringLiteral("Codex authentication status request failed (%1): %2")
+                           .arg(code)
+                           .arg(message));
+        return;
+    }
     if (connecting_ && id == modelRequestId_ && method == QLatin1String("model/list")) {
         failConnection(
             QStringLiteral("Codex model catalog request failed (%1): %2").arg(code).arg(message));

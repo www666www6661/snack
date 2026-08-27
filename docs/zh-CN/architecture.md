@@ -50,7 +50,7 @@ flowchart LR
 
 适配器必须返回 `UnsupportedCapability`，不能让 UI 猜测 Agent 类型或降级方式。
 
-M2 当前已实现 `IProcessTransport`/`QProcessTransport`、`CodexCliDiscovery`、`CodexProtocol`、`CodexAppServerClient`、`CodexModelCatalog`、`CodexThreadLifecycle`、`CodexTurnLifecycle`、`CodexApprovalLifecycle`、`CodexUserInputLifecycle` 和文本/活动/审批/提问 Turn 状态机。`AgentRuntimeFactory` 把适配器与传输的生命周期接入主应用，默认选择 Codex并提供显式 Mock 回退。适配器完成全部模型分页后发布能力，再创建或恢复服务端 Thread；每轮从不可变设置快照构造原生请求，并把文本、工具、推理摘要、计划、审批、用户提问、用量、错误、中断和终态映射为可持久化的统一事件。`SessionController` 分别持久化两个原生身份字段、归一化下一轮设置、向 UI 发布动态能力，并拥有待审批与待回答 UI 状态。公共 UI 无需识别 Codex 特有事件名，即可恢复活动卡片、未回答问题卡片、Token/上下文用量和任务计划 Dock。
+M2 当前已实现 `IProcessTransport`/`QProcessTransport`、`CodexCliDiscovery`、`CodexProtocol`、`CodexAppServerClient`、`CodexAccountLifecycle`、`CodexModelCatalog`、`CodexThreadLifecycle`、`CodexTurnLifecycle`、`CodexApprovalLifecycle`、`CodexUserInputLifecycle` 和文本/活动/审批/提问 Turn 状态机。`AgentRuntimeFactory` 把适配器与传输的生命周期接入主应用，默认选择 Codex并提供显式 Mock 回退。适配器先校验认证状态，再完成全部模型分页并发布能力，然后创建或恢复服务端 Thread；每轮从不可变设置快照构造原生请求，并把文本、工具、推理摘要、计划、审批、用户提问、用量、错误、中断和终态映射为可持久化的统一事件。`SessionController` 分别持久化两个原生身份字段、归一化下一轮设置、向 UI 发布动态能力，并拥有待审批与待回答 UI 状态。公共 UI 无需识别 Codex 特有事件名，即可恢复活动卡片、未回答问题卡片、Token/上下文用量和任务计划 Dock。
 
 ### 3.4 `session`
 

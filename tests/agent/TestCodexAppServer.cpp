@@ -1,3 +1,4 @@
+#include "agent/codex/CodexAccountLifecycle.h"
 #include "agent/codex/CodexAdapter.h"
 #include "agent/codex/CodexAppServerClient.h"
 #include "agent/codex/CodexApprovalLifecycle.h"
@@ -85,6 +86,7 @@ class TestCodexAppServer final : public QObject {
     void reportsMissingAndUnsupportedCli();
     void buildsPlatformLaunchSpec();
     void loadsVersionedSchemaContract();
+    void parsesAccountState();
     void parsesModelCatalogFixtures();
     void rejectsInvalidModelCatalog();
     void parsesThreadLifecycleResponses();
@@ -407,12 +409,14 @@ void TestCodexAppServer::loadsVersionedSchemaContract() {
     QVERIFY(manifestFile.open(QIODevice::ReadOnly));
     const QJsonObject manifest = QJsonDocument::fromJson(manifestFile.readAll()).object();
     QCOMPARE(manifest.value(QStringLiteral("cliVersion")).toString(), QStringLiteral("0.149.0"));
-    QCOMPARE(manifest.value(QStringLiteral("schemas")).toArray().size(), 42);
-    QCOMPARE(manifest.value(QStringLiteral("fixtures")).toArray().size(), 11);
+    QCOMPARE(manifest.value(QStringLiteral("schemas")).toArray().size(), 44);
+    QCOMPARE(manifest.value(QStringLiteral("fixtures")).toArray().size(), 12);
 
     const QStringList schemaNames = {QStringLiteral("JSONRPCMessage.json"),
                                      QStringLiteral("InitializeParams.json"),
                                      QStringLiteral("InitializeResponse.json"),
+                                     QStringLiteral("GetAccountParams.json"),
+                                     QStringLiteral("GetAccountResponse.json"),
                                      QStringLiteral("ModelListParams.json"),
                                      QStringLiteral("ModelListResponse.json"),
                                      QStringLiteral("ThreadStartParams.json"),
@@ -504,6 +508,15 @@ static void feedResult(FakeProcessTransport& transport, qint64 id, const QJsonOb
     transport.feedStandardOutput(QJsonDocument(response).toJson(QJsonDocument::Compact) + '\n');
 }
 
+static void completeAdapterHandshake(FakeProcessTransport& transport) {
+    completeHandshake(transport);
+    const auto accountRequest = lastRequest(transport);
+    QCOMPARE(accountRequest.method, QStringLiteral("account/read"));
+    QVERIFY(!accountRequest.params.toObject().value(QStringLiteral("refreshToken")).toBool(true));
+    feedResult(transport, accountRequest.id.toInteger(),
+               loadObjectFixture(QStringLiteral("account-read-chatgpt.json")));
+}
+
 static void feedNotification(FakeProcessTransport& transport, const QString& method,
                              const QJsonObject& params) {
     const QJsonObject notification{{QStringLiteral("method"), method},
@@ -560,11 +573,52 @@ static void connectAdapter(snack::agent::codex::CodexAdapter& adapter,
     adapter.connectAgent({.workingDirectory = QStringLiteral("C:/workspace"),
                           .settings = codexTurnRequest(QUuid::createUuid()).settings});
     QTRY_COMPARE(transport.writes.size(), 1);
-    completeHandshake(transport);
+    completeAdapterHandshake(transport);
     QJsonObject page = loadObjectFixture(QStringLiteral("model-list-page-1.json"));
     page.insert(QStringLiteral("nextCursor"), QJsonValue::Null);
     feedResult(transport, lastRequest(transport).id.toInteger(), page);
     feedResult(transport, lastRequest(transport).id.toInteger(), threadResult());
+}
+
+void TestCodexAppServer::parsesAccountState() {
+    using namespace snack::agent::codex;
+
+    const QJsonObject expectedParameters{{QStringLiteral("refreshToken"), false}};
+    QCOMPARE(accountReadParameters(), expectedParameters);
+    QString error;
+    const auto chatgpt = parseAccountReadResponse(
+        loadObjectFixture(QStringLiteral("account-read-chatgpt.json")), &error);
+    QVERIFY2(chatgpt.has_value(), qPrintable(error));
+    QCOMPARE(chatgpt->type, QStringLiteral("chatgpt"));
+    QCOMPARE(chatgpt->planType, QStringLiteral("plus"));
+    QVERIFY(chatgpt->hasAccount);
+    QVERIFY(chatgpt->requiresOpenaiAuth);
+    QVERIFY(chatgpt->canRun());
+
+    const auto localProvider =
+        parseAccountReadResponse(QJsonObject{{QStringLiteral("account"), QJsonValue::Null},
+                                             {QStringLiteral("requiresOpenaiAuth"), false}},
+                                 &error);
+    QVERIFY2(localProvider.has_value(), qPrintable(error));
+    QVERIFY(!localProvider->hasAccount);
+    QVERIFY(localProvider->canRun());
+
+    const auto loggedOut =
+        parseAccountReadResponse(QJsonObject{{QStringLiteral("account"), QJsonValue::Null},
+                                             {QStringLiteral("requiresOpenaiAuth"), true}},
+                                 &error);
+    QVERIFY2(loggedOut.has_value(), qPrintable(error));
+    QVERIFY(!loggedOut->canRun());
+
+    QVERIFY(!parseAccountReadResponse(QJsonObject{}, &error).has_value());
+    QVERIFY(!parseAccountReadResponse(QJsonObject{{QStringLiteral("account"), true},
+                                                  {QStringLiteral("requiresOpenaiAuth"), true}},
+                                      &error)
+                 .has_value());
+    QVERIFY(!parseAccountReadResponse(QJsonObject{{QStringLiteral("account"), QJsonObject{}},
+                                                  {QStringLiteral("requiresOpenaiAuth"), true}},
+                                      &error)
+                 .has_value());
 }
 
 void TestCodexAppServer::parsesModelCatalogFixtures() {
@@ -964,7 +1018,7 @@ void TestCodexAppServer::adapterPublishesPaginatedCapabilities() {
     QTRY_COMPARE(transport.writes.size(), 1);
     QCOMPARE(transport.launchSpec.workingDirectory, QStringLiteral("C:/workspace"));
 
-    completeHandshake(transport);
+    completeAdapterHandshake(transport);
     QCOMPARE(lastRequest(transport).method, QStringLiteral("model/list"));
     QCOMPARE(lastRequest(transport).params.toObject().value(QStringLiteral("limit")).toInt(), 100);
     QCOMPARE(capabilitySpy.count(), 0);
@@ -1061,7 +1115,7 @@ void TestCodexAppServer::adapterPublishesPaginatedCapabilities() {
     adapter.connectAgent({.workingDirectory = QStringLiteral("C:/second-workspace")});
     QTRY_COMPARE(transport.writes.size(), writesBeforeReconnect + 1);
     QCOMPARE(transport.launchSpec.workingDirectory, QStringLiteral("C:/second-workspace"));
-    completeHandshake(transport);
+    completeAdapterHandshake(transport);
     QJsonObject singlePage = loadObjectFixture(QStringLiteral("model-list-page-1.json"));
     singlePage.insert(QStringLiteral("nextCursor"), QJsonValue::Null);
     feedResult(transport, lastRequest(transport).id.toInteger(), singlePage);
@@ -2148,7 +2202,7 @@ void TestCodexAppServer::adapterRejectsReconnectWhileProcessStops() {
     adapter.connectAgent({.workingDirectory = QStringLiteral("C:/workspace")});
     QTRY_COMPARE(transport.startCalls, 2);
     QTRY_COMPARE(transport.writes.size(), 2);
-    completeHandshake(transport);
+    completeAdapterHandshake(transport);
     QJsonObject page = loadObjectFixture(QStringLiteral("model-list-page-1.json"));
     page.insert(QStringLiteral("nextCursor"), QJsonValue::Null);
     feedResult(transport, lastRequest(transport).id.toInteger(), page);
@@ -2163,6 +2217,19 @@ void TestCodexAppServer::adapterScopesRequestTimeouts() {
     using snack::domain::AgentEvent;
     using snack::domain::AgentEventType;
 
+    FakeProcessTransport accountTransport;
+    CodexAdapter account({.status = CliStatus::Available,
+                          .executablePath = QStringLiteral("codex"),
+                          .version = QStringLiteral("0.149.0")},
+                         &accountTransport, nullptr, 5);
+    QSignalSpy accountSpy(&account, &CodexAdapter::connectionChanged);
+    account.connectAgent({.workingDirectory = QStringLiteral("C:/workspace")});
+    QTRY_COMPARE(accountTransport.writes.size(), 1);
+    completeHandshake(accountTransport);
+    QCOMPARE(lastRequest(accountTransport).method, QStringLiteral("account/read"));
+    QTRY_COMPARE(accountSpy.count(), 1);
+    QVERIFY(accountSpy.constFirst().at(1).toString().contains(QStringLiteral("timed out")));
+
     FakeProcessTransport connectingTransport;
     CodexAdapter connecting({.status = CliStatus::Available,
                              .executablePath = QStringLiteral("codex"),
@@ -2171,7 +2238,7 @@ void TestCodexAppServer::adapterScopesRequestTimeouts() {
     QSignalSpy connectingSpy(&connecting, &CodexAdapter::connectionChanged);
     connecting.connectAgent({.workingDirectory = QStringLiteral("C:/workspace")});
     QTRY_COMPARE(connectingTransport.writes.size(), 1);
-    completeHandshake(connectingTransport);
+    completeAdapterHandshake(connectingTransport);
     QTRY_COMPARE(connectingSpy.count(), 1);
     QVERIFY(!connectingSpy.constFirst().constFirst().toBool());
     QVERIFY(connectingSpy.constFirst().at(1).toString().contains(QStringLiteral("timed out")));
@@ -2223,6 +2290,67 @@ void TestCodexAppServer::adapterHandlesCatalogFailures() {
     QVERIFY(missingCwdSpy.constFirst().at(1).toString().contains(QStringLiteral("directory")));
     QCOMPARE(missingCwdTransport.writes.size(), 0);
 
+    FakeProcessTransport loggedOutTransport;
+    CodexAdapter loggedOut(
+        {.status = CliStatus::Available, .executablePath = QStringLiteral("codex")},
+        &loggedOutTransport);
+    QSignalSpy loggedOutSpy(&loggedOut, &CodexAdapter::connectionChanged);
+    loggedOut.connectAgent({.workingDirectory = QStringLiteral("/workspace")});
+    QTRY_COMPARE(loggedOutTransport.writes.size(), 1);
+    completeHandshake(loggedOutTransport);
+    QCOMPARE(lastRequest(loggedOutTransport).method, QStringLiteral("account/read"));
+    feedResult(loggedOutTransport, lastRequest(loggedOutTransport).id.toInteger(),
+               QJsonObject{{QStringLiteral("account"), QJsonValue::Null},
+                           {QStringLiteral("requiresOpenaiAuth"), true}});
+    QCOMPARE(loggedOutSpy.count(), 1);
+    QVERIFY(!loggedOutSpy.constFirst().constFirst().toBool());
+    QVERIFY(loggedOutSpy.constFirst().at(1).toString().contains(QStringLiteral("codex login")));
+
+    FakeProcessTransport localProviderTransport;
+    CodexAdapter localProvider(
+        {.status = CliStatus::Available, .executablePath = QStringLiteral("codex")},
+        &localProviderTransport);
+    localProvider.connectAgent({.workingDirectory = QStringLiteral("/workspace")});
+    QTRY_COMPARE(localProviderTransport.writes.size(), 1);
+    completeHandshake(localProviderTransport);
+    feedResult(localProviderTransport, lastRequest(localProviderTransport).id.toInteger(),
+               QJsonObject{{QStringLiteral("account"), QJsonValue::Null},
+                           {QStringLiteral("requiresOpenaiAuth"), false}});
+    QCOMPARE(lastRequest(localProviderTransport).method, QStringLiteral("model/list"));
+    localProvider.closeAgent();
+
+    FakeProcessTransport invalidAccountTransport;
+    CodexAdapter invalidAccount(
+        {.status = CliStatus::Available, .executablePath = QStringLiteral("codex")},
+        &invalidAccountTransport);
+    QSignalSpy invalidAccountSpy(&invalidAccount, &CodexAdapter::connectionChanged);
+    invalidAccount.connectAgent({.workingDirectory = QStringLiteral("/workspace")});
+    QTRY_COMPARE(invalidAccountTransport.writes.size(), 1);
+    completeHandshake(invalidAccountTransport);
+    feedResult(invalidAccountTransport, lastRequest(invalidAccountTransport).id.toInteger(),
+               QJsonObject{});
+    QCOMPARE(invalidAccountSpy.count(), 1);
+    QVERIFY(invalidAccountSpy.constFirst().at(1).toString().contains(
+        QStringLiteral("authentication status")));
+
+    FakeProcessTransport accountErrorTransport;
+    CodexAdapter accountError(
+        {.status = CliStatus::Available, .executablePath = QStringLiteral("codex")},
+        &accountErrorTransport);
+    QSignalSpy accountErrorSpy(&accountError, &CodexAdapter::connectionChanged);
+    accountError.connectAgent({.workingDirectory = QStringLiteral("/workspace")});
+    QTRY_COMPARE(accountErrorTransport.writes.size(), 1);
+    completeHandshake(accountErrorTransport);
+    const qint64 accountRequestId = lastRequest(accountErrorTransport).id.toInteger();
+    accountErrorTransport.feedStandardOutput(
+        (QStringLiteral(R"({"id":%1,"error":{"code":-32001,"message":"account denied"}})")
+             .arg(accountRequestId) +
+         QLatin1Char('\n'))
+            .toUtf8());
+    QCOMPARE(accountErrorSpy.count(), 1);
+    QVERIFY(
+        accountErrorSpy.constFirst().at(1).toString().contains(QStringLiteral("account denied")));
+
     FakeProcessTransport errorTransport;
     CodexAdapter requestError(
         {.status = CliStatus::Available, .executablePath = QStringLiteral("codex")},
@@ -2230,7 +2358,7 @@ void TestCodexAppServer::adapterHandlesCatalogFailures() {
     QSignalSpy requestErrorSpy(&requestError, &CodexAdapter::connectionChanged);
     requestError.connectAgent({.workingDirectory = QStringLiteral("/workspace")});
     QTRY_COMPARE(errorTransport.writes.size(), 1);
-    completeHandshake(errorTransport);
+    completeAdapterHandshake(errorTransport);
     const qint64 requestId = lastRequest(errorTransport).id.toInteger();
     errorTransport.feedStandardOutput(
         (QStringLiteral(R"({"id":%1,"error":{"code":-32001,"message":"catalog denied"}})")
@@ -2246,7 +2374,7 @@ void TestCodexAppServer::adapterHandlesCatalogFailures() {
     QSignalSpy emptySpy(&empty, &CodexAdapter::connectionChanged);
     empty.connectAgent({.workingDirectory = QStringLiteral("/workspace")});
     QTRY_COMPARE(emptyTransport.writes.size(), 1);
-    completeHandshake(emptyTransport);
+    completeAdapterHandshake(emptyTransport);
     feedResult(emptyTransport, lastRequest(emptyTransport).id.toInteger(),
                QJsonObject{{QStringLiteral("data"), QJsonArray{}},
                            {QStringLiteral("nextCursor"), QJsonValue::Null}});
@@ -2260,7 +2388,7 @@ void TestCodexAppServer::adapterHandlesCatalogFailures() {
     QSignalSpy cursorSpy(&repeatedCursor, &CodexAdapter::connectionChanged);
     repeatedCursor.connectAgent({.workingDirectory = QStringLiteral("/workspace")});
     QTRY_COMPARE(cursorTransport.writes.size(), 1);
-    completeHandshake(cursorTransport);
+    completeAdapterHandshake(cursorTransport);
     const QJsonObject firstPage = loadObjectFixture(QStringLiteral("model-list-page-1.json"));
     feedResult(cursorTransport, lastRequest(cursorTransport).id.toInteger(), firstPage);
     feedResult(cursorTransport, lastRequest(cursorTransport).id.toInteger(), firstPage);
@@ -2274,7 +2402,7 @@ void TestCodexAppServer::adapterHandlesCatalogFailures() {
     QSignalSpy threadErrorSpy(&threadError, &CodexAdapter::connectionChanged);
     threadError.connectAgent({.workingDirectory = QStringLiteral("/workspace")});
     QTRY_COMPARE(threadTransport.writes.size(), 1);
-    completeHandshake(threadTransport);
+    completeAdapterHandshake(threadTransport);
     QJsonObject singlePage = firstPage;
     singlePage.insert(QStringLiteral("nextCursor"), QJsonValue::Null);
     feedResult(threadTransport, lastRequest(threadTransport).id.toInteger(), singlePage);
@@ -2296,7 +2424,7 @@ void TestCodexAppServer::adapterHandlesCatalogFailures() {
     mismatch.connectAgent({.workingDirectory = QStringLiteral("/workspace"),
                            .nativeThreadId = QStringLiteral("expected-thread")});
     QTRY_COMPARE(mismatchTransport.writes.size(), 1);
-    completeHandshake(mismatchTransport);
+    completeAdapterHandshake(mismatchTransport);
     feedResult(mismatchTransport, lastRequest(mismatchTransport).id.toInteger(), singlePage);
     QCOMPARE(lastRequest(mismatchTransport).method, QStringLiteral("thread/resume"));
     feedResult(mismatchTransport, lastRequest(mismatchTransport).id.toInteger(),
@@ -2311,7 +2439,7 @@ void TestCodexAppServer::adapterHandlesCatalogFailures() {
     cwdMismatch.connectAgent({.workingDirectory = QStringLiteral("/expected"),
                               .nativeThreadId = QStringLiteral("expected-thread")});
     QTRY_COMPARE(cwdTransport.writes.size(), 1);
-    completeHandshake(cwdTransport);
+    completeAdapterHandshake(cwdTransport);
     feedResult(cwdTransport, lastRequest(cwdTransport).id.toInteger(), singlePage);
     feedResult(cwdTransport, lastRequest(cwdTransport).id.toInteger(),
                threadResult(QStringLiteral("expected-thread"), QStringLiteral("session-root"),
@@ -2620,12 +2748,21 @@ void TestCodexAppServer::liveLocalHandshakeWhenEnabled() {
     client.start(CodexCliDiscovery::appServerLaunchSpec(installation, QDir::currentPath()));
     QTRY_COMPARE_WITH_TIMEOUT(client.state(), ConnectionState::Ready, 5000);
     QCOMPARE(handshakeSpy.count(), 1);
+    const qint64 accountRequestId =
+        client.sendRequest(QStringLiteral("account/read"), accountReadParameters());
+    QVERIFY(accountRequestId > 0);
+    QTRY_COMPARE_WITH_TIMEOUT(responseSpy.count(), 1, 5000);
+    QString parseError;
+    const auto account =
+        parseAccountReadResponse(responseSpy.constFirst().at(2).toJsonValue(), &parseError);
+    QVERIFY2(account.has_value(), qPrintable(parseError));
+    QVERIFY2(account->canRun(), "Installed Codex CLI requires authentication; run codex login");
+    responseSpy.clear();
     const qint64 requestId = client.sendRequest(
         QStringLiteral("model/list"),
         {{QStringLiteral("limit"), 20}, {QStringLiteral("includeHidden"), false}});
-    QVERIFY(requestId > 0);
+    QVERIFY(requestId > accountRequestId);
     QTRY_COMPARE_WITH_TIMEOUT(responseSpy.count(), 1, 5000);
-    QString parseError;
     const auto page = parseModelPage(responseSpy.constFirst().at(2).toJsonValue(), &parseError);
     QVERIFY2(page.has_value(), qPrintable(parseError));
     QVERIFY(!page->models.isEmpty());

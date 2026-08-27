@@ -6,6 +6,8 @@
     "schema/JSONRPCMessage.json",
     "schema/InitializeParams.json",
     "schema/InitializeResponse.json",
+    "schema/GetAccountParams.json",
+    "schema/GetAccountResponse.json",
     "schema/ModelListParams.json",
     "schema/ModelListResponse.json",
     "schema/ThreadStartParams.json",
@@ -48,6 +50,7 @@
   ],
   "fixtures": [
     "initialize-success.jsonl",
+    "account-read-chatgpt.json",
     "model-list-page-1.json",
     "model-list-page-2.json",
     "thread-start-success.json",

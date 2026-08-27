@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-M2 的连接、Thread、文本 Turn、审批、用户提问、用量与活动事件垂直链路已在 Codex CLI `0.149.0` 上完成 fixture 验证，该版本也是当前最低支持版本。当前代码已经建立独立的 CLI 探测、子进程传输、JSONL 协议解析、初始化握手、分页 `model/list`、原生 `thread/start`/`thread/resume`、`turn/start`、文本流、工具执行、推理摘要、计划、`turn/interrupt`、命令/文件审批响应、问题回答和 Token/上下文显示。主应用默认探测并启动 Codex；CLI 不可用或版本过旧时明确回退到 Mock Agent。
+M2 的连接、认证、Thread、文本 Turn、审批、用户提问、用量与活动事件垂直链路已在 Codex CLI `0.149.0` 上完成 fixture 验证，该版本也是当前最低支持版本。当前代码已经建立独立的 CLI 探测、子进程传输、JSONL 协议解析、初始化握手、`account/read`、分页 `model/list`、原生 `thread/start`/`thread/resume`、`turn/start`、文本流、工具执行、推理摘要、计划、`turn/interrupt`、命令/文件审批响应、问题回答和 Token/上下文显示。主应用默认探测并启动 Codex；CLI 不可用或版本过旧时明确回退到 Mock Agent。
 
 官方协议依据：[OpenAI Docs - Codex App Server](https://developers.openai.com/codex/app-server)。默认传输是 stdio 上逐行 JSON；线上消息省略 `jsonrpc: "2.0"`。每个连接必须先发送 `initialize` 请求，收到成功响应后再发送 `initialized` 通知。
 
@@ -13,6 +13,7 @@ M2 的连接、Thread、文本 Turn、审批、用户提问、用量与活动事
 - `CodexCliDiscovery` 查找 CLI，验证版本与 `app-server --help`，并生成平台启动参数。
 - `CodexProtocol` 分类请求、响应、通知和非法消息，保留完整原始对象。
 - `CodexAppServerClient` 负责 JSONL 分帧、初始化、请求 ID 关联、通知和 server request 转发。
+- `CodexAccountLifecycle` 校验账户响应，但不保留凭据或账户身份。
 - `CodexModelCatalog` 校验模型分页，并保留模型的推理强度说明、输入模态、人格支持和默认标记。
 - `CodexThreadLifecycle` 校验 `thread.id`、`thread.sessionId` 与 cwd，并定义经过审计的访问层级映射。
 - `CodexTurnLifecycle` 构造逐轮设置覆盖，严格解析 Turn、Item、文本 Delta 与 Error 通知。
@@ -20,7 +21,9 @@ M2 的连接、Thread、文本 Turn、审批、用户提问、用量与活动事
 - `CodexUserInputLifecycle` 校验一至三个问题及其回答映射，并严格解析 Thread Token 用量通知。
 - `CodexAdapter` 读取全部分页、发布完整 `CapabilitySet`，创建或恢复原生 Thread，并将一个 GUI Turn 串行关联到一个原生 Turn。
 
-`model/list` 默认排除隐藏条目，并使用不透明 `nextCursor` 翻页；重复模型 ID 采用最后一条。缺少 `inputModalities` 时按官方兼容规则使用 `text` 与 `image`。未知的新推理强度 ID 保留在模型元数据中，但不映射为领域枚举。能力刷新后，如果当前模型或强度已失效，`SessionController` 会为下一轮切换到服务端声明的模型和强度默认值。
+初始化后，零食会先使用 `refreshToken: false` 调用 `account/read`，再发现能力。若当前提供方要求 OpenAI 认证但没有账户，连接会失败并明确提示运行 `codex login`；`requiresOpenaiAuth` 为 false 的提供方即使没有账户对象也可继续使用。零食不会请求、读取或持久化凭据、邮箱或令牌。
+
+随后调用的 `model/list` 默认排除隐藏条目，并使用不透明 `nextCursor` 翻页；重复模型 ID 采用最后一条。缺少 `inputModalities` 时按官方兼容规则使用 `text` 与 `image`。未知的新推理强度 ID 保留在模型元数据中，但不映射为领域枚举。能力刷新后，如果当前模型或强度已失效，`SessionController` 会为下一轮切换到服务端声明的模型和强度默认值。
 
 新会话调用 `thread/start`；持久化记录已有 `nativeThreadId` 时调用 `thread/resume`。Snack 在 SQLite Schema v3 中分别保存响应的 `thread.id` 和 `thread.sessionId`，绝不相互推导。恢复响应返回不同 Thread ID 时安全失败。访问映射为：严格 = `untrusted` + `read-only`，工作区 = `on-request` + `workspace-write`，完全 = `never` + `danger-full-access`。
 
@@ -56,6 +59,7 @@ Windows 优先探测 `codex.cmd`，并通过 `cmd.exe /c call` 启动 npm 包装
 
 - 初始化默认 5 秒超时；进程提前退出、写失败或非法 JSON 都进入 `Failed`。
 - 初始化后的每个请求都有 15 秒响应上限。模型目录和 Thread 生命周期请求超时会让连接失败；`turn/start` 只让当前 GUI Turn 失败；历史查询、steer 与 interrupt 只报告局部失败并释放请求槽位。成功、协议错误、关闭、进程失败和重启都会取消对应计时器。超时后的迟到响应按未知 ID 隔离，不能满足后续请求。
+- `account/read` 非法、失败或超时时会在模型与 Thread 发现前让连接失败，避免认证状态不明时产生半连接会话。
 - JSONL payload 无论分隔符是否已经到达都以 4 MiB 为上限。分隔符中的 LF 与可选 CR 始终不计入长度，包括 CRLF 跨读取分片的情况；恰好达到上限的 payload 可以通过，再多一个 payload 字节则安全失败。
 - stderr 诊断只保留最近 64 KiB，同时继续发出增量诊断信号。
 - 未知通知不会让连接失败。活动 Turn 内合法但未知的通知或未来 Item 类型会先校验身份，再持久化为 `RawProtocolObserved`；Turn 终态后的通知直接忽略。原始 `reasoning/textDelta` 仍明确排除。未支持的 server request 会收到 JSON-RPC `-32601`；格式错误的审批请求收到 `-32602`。两条请求路径都会产生警告，避免 app-server 请求静默悬挂。
@@ -73,7 +77,7 @@ Windows 优先探测 `codex.cmd`，并通过 `cmd.exe /c call` 启动 npm 包装
 codex app-server generate-json-schema --out <directory>
 ```
 
-普通 CI 只运行假传输与 fixture，不依赖已安装 CLI，也不调用模型。测试覆盖分页、Thread list/read 解析、创建/恢复身份、动态逐轮设置、文本与工具流、同 Turn steer 成功/失败/ID 不匹配、最终 Item 权威覆盖、命令非零退出、文件/MCP 结果、推理摘要隐私、计划三态、有界历史输出、审批决策、等待请求的终态响应及写入失败、显式关闭的响应顺序、进程退出后的本地清理且不向失效传输写入、过期与重复事件、未知通知/Item 保留、Turn 终态后隔离、完整/未完成帧上限、分片 CRLF 边界、请求/通知错误与超时、计时器清理、迟到响应隔离、旧进程退出期间的重连拒绝与恢复、正常退出计时器取消、进程强制终止、中断竞态、未支持 server request 与进程断开。本机可选择执行 CLI 探测、初始化、模型目录与临时 Thread 创建的烟雾测试，全程不调用模型；真实 `turn/start` 必须由开发者另行明确启用，避免测试意外产生模型调用：
+普通 CI 只运行假传输与 fixture，不依赖已安装 CLI，也不调用模型。测试覆盖已认证、未认证、无需 OpenAI 认证、非法、失败和超时的账户发现；分页、Thread list/read 解析、创建/恢复身份、动态逐轮设置、文本与工具流、同 Turn steer 成功/失败/ID 不匹配、最终 Item 权威覆盖、命令非零退出、文件/MCP 结果、推理摘要隐私、计划三态、有界历史输出、审批决策、等待请求的终态响应及写入失败、显式关闭的响应顺序、进程退出后的本地清理且不向失效传输写入、过期与重复事件、未知通知/Item 保留、Turn 终态后隔离、完整/未完成帧上限、分片 CRLF 边界、请求/通知错误与超时、计时器清理、迟到响应隔离、旧进程退出期间的重连拒绝与恢复、正常退出计时器取消、进程强制终止、中断竞态、未支持 server request 与进程断开。本机可选择执行 CLI 探测、初始化、认证状态、模型目录与临时 Thread 创建的烟雾测试，全程不调用模型；真实 `turn/start` 必须由开发者另行明确启用，避免测试意外产生模型调用：
 
 ```powershell
 $env:SNACK_RUN_LIVE_CODEX_TEST = '1'
