@@ -3,6 +3,7 @@
 #include "app/WorkspaceExternalOpener.h"
 #include "app/WorkspaceFileIndex.h"
 #include "app/WorkspaceFilePreview.h"
+#include "app/WorkspaceWatcher.h"
 #include "domain/PromptTemplateEngine.h"
 #include "ui/ComposerTextEdit.h"
 #include "ui/RichTextView.h"
@@ -2108,6 +2109,9 @@ void MainWindow::buildUi() {
             &MainWindow::previewSelectedWorkspaceFile);
     connect(openWorkspaceFileButton_, &QPushButton::clicked, this,
             &MainWindow::openSelectedWorkspaceFileExternally);
+    workspaceWatcher_ = new app::WorkspaceWatcher(this);
+    connect(workspaceWatcher_, &app::WorkspaceWatcher::workspaceChanged, this,
+            &MainWindow::refreshWorkspaceBrowser);
 
     terminalDock_ = new QDockWidget(tr("Terminal"), this);
     terminalDock_->setObjectName(QStringLiteral("terminalDock"));
@@ -3295,6 +3299,7 @@ QString MainWindow::agentDisplayName() const {
 }
 
 void MainWindow::refreshWorkspaceBrowser() {
+    workspaceWatcher_->setWorkspace(controller_->conversation().workingDirectory);
     workspaceFileList_->clear();
     workspaceFilePreview_->clear();
     workspaceFileList_->addItems(

@@ -33,6 +33,14 @@ namespace snack::ui {
 class ComposerTextEdit;
 class RichTextView;
 
+} // namespace snack::ui
+
+namespace snack::app {
+class WorkspaceWatcher;
+}
+
+namespace snack::ui {
+
 class MainWindow final : public QMainWindow {
     Q_OBJECT
 
@@ -235,6 +243,7 @@ class MainWindow final : public QMainWindow {
     QListWidget* workspaceFileList_{nullptr};
     QPlainTextEdit* workspaceFilePreview_{nullptr};
     QPushButton* openWorkspaceFileButton_{nullptr};
+    app::WorkspaceWatcher* workspaceWatcher_{nullptr};
     QLabel* planExplanation_{nullptr};
     QLabel* planItemText_{nullptr};
     QListWidget* planList_{nullptr};
