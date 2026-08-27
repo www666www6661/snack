@@ -26,6 +26,10 @@ Navigation/search/groups/tags/views, detached chat, attachments and `@`, templat
 
 ## M4: workspace, diff, terminal (`0.2.0`)
 
+Status: complete for local Windows implementation and automated acceptance as of 2026-08-27. M4-A provides bounded canonical workspace browsing, safe previews/external opening, watching, and symbol indexing. M4-B provides bounded baselines and native diffs, compare-before-write rejection, external-conflict preservation, honest official-isolation reporting, and canonical write leases. M4-C provides injected terminal sessions, a streaming UTF-8/ANSI-safe plain-text projection, Windows ConPTY and POSIX `forkpty` backends, interactive movable tabs, detached terminal windows, theme/zoom integration, and an executable SQLite isolation check proving shell output never becomes an Agent event.
+
+The official Qt 6.8.3 LLVM-MinGW fallback build and official Qt 6.8.3 `msvc2022_64` WebEngine build each pass 20/20 strict-warning Debug tests on the local Windows 11 machine. The instrumented LLVM-MinGW build passes 19/19 tests with 83.00% first-party line coverage; translations are complete at 247/247 and all 124 C++ source/header files pass the format gate. ConPTY is exercised by a real local-shell smoke test. The POSIX backend is implemented and contract-covered but has not run on Ubuntu 22.04 or Debian 13 here; this status also makes no Windows 10, macOS, packaging, or long-running production-validation claim.
+
 Read-only files and external editors, watching/indexing, snapshots and official-isolation detection, hunk review and conflicts, write leases, multi-tab ConPTY/POSIX shells, and detached terminal windows. Acceptance: direct edits and external conflicts recover safely and terminal output never enters agent events.
 
 ## M5: Claude protocol spike

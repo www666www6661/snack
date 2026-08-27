@@ -41,6 +41,10 @@
 
 ## M4：工作区、Diff 与终端（`0.2.0`）
 
+状态：截至 2026-08-27，本机 Windows 实现与自动化验收完成。M4-A 已实现有界 Canonical 工作区浏览、安全预览/外部打开、文件监听和符号索引；M4-B 已实现有界基线与原生 Diff、写入前比较的拒绝修改、外部冲突保护、诚实的官方隔离能力报告和 Canonical 写租约；M4-C 已实现可注入终端会话、流式 UTF-8/ANSI 安全纯文本投影、Windows ConPTY 与 POSIX `forkpty` 后端、可交互移动标签、独立终端窗口、主题/缩放接入，以及证明 Shell 输出绝不成为 Agent 事件的可执行 SQLite 隔离测试。
+
+Qt 官方 6.8.3 LLVM-MinGW 降级构建与 Qt 官方 6.8.3 `msvc2022_64` WebEngine 构建在本机 Windows 11 上均通过 20/20 项严格警告 Debug 测试；LLVM-MinGW 插桩构建通过 19/19 项测试，第一方行覆盖率为 83.00%；翻译完成 247/247，124 个 C++ 源文件/头文件全部通过格式门禁。ConPTY 已通过真实本机 Shell 冒烟测试。POSIX 后端已实现并通过契约测试，但尚未在 Ubuntu 22.04 或 Debian 13 实机运行；以上状态也不代表 Windows 10、macOS、安装包或长期生产验证完成。
+
 - 文件树/只读预览、外部编辑器、文件监听与符号索引。
 - 基线快照、原生隔离能力探测、逐 hunk Diff、冲突处理。
 - WorkspaceWriteLease。
