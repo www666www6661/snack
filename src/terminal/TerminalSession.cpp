@@ -11,6 +11,11 @@ TerminalSession::TerminalSession(std::unique_ptr<ITerminalProcess> process, QObj
         if (scrollback_.size() > maximumScrollback) {
             scrollback_ = scrollback_.last(maximumScrollback);
         }
+        const QString plainText = outputDecoder_.decode(QByteArrayView(bytes));
+        if (!plainText.isEmpty()) {
+            textBuffer_.append(plainText);
+            emit screenChanged(textBuffer_.text());
+        }
         emit outputReady(bytes);
     });
     connect(process_.get(), &ITerminalProcess::exited, this, &TerminalSession::exited);
@@ -19,9 +24,10 @@ TerminalSession::TerminalSession(std::unique_ptr<ITerminalProcess> process, QObj
 
 bool TerminalSession::start(const QString& workingDirectory, int columns, int rows,
                             QString* error) {
-    if (columns <= 0 || rows <= 0) {
+    constexpr int maximumDimension = 32767;
+    if (columns <= 0 || rows <= 0 || columns > maximumDimension || rows > maximumDimension) {
         if (error != nullptr) {
-            *error = QStringLiteral("Terminal dimensions must be positive");
+            *error = QStringLiteral("Terminal dimensions must be between 1 and 32767");
         }
         return false;
     }
@@ -31,7 +37,8 @@ bool TerminalSession::start(const QString& workingDirectory, int columns, int ro
 void TerminalSession::writeInput(const QByteArray& bytes) { process_->writeInput(bytes); }
 
 void TerminalSession::resizeTerminal(int columns, int rows) {
-    if (columns > 0 && rows > 0) {
+    constexpr int maximumDimension = 32767;
+    if (columns > 0 && rows > 0 && columns <= maximumDimension && rows <= maximumDimension) {
         process_->resizeTerminal(columns, rows);
     }
 }

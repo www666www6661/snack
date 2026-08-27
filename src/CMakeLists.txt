@@ -61,6 +61,10 @@ set(SNACK_CORE_SOURCES
     terminal/TerminalSession.cpp
     terminal/TerminalSession.h
     terminal/NativeTerminalProcess.h
+    terminal/TerminalOutputDecoder.cpp
+    terminal/TerminalOutputDecoder.h
+    terminal/TerminalTextBuffer.cpp
+    terminal/TerminalTextBuffer.h
     app/WorkspaceFilePreview.cpp
     app/WorkspaceFilePreview.h
     app/WorkspaceExternalOpener.cpp
