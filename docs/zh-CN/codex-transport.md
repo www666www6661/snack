@@ -40,7 +40,7 @@ M3 Composer 把有序、可编辑的消息队列持久化到 SQLite。当前进�
 
 当前切片只展示协议提供的推理摘要。`summaryTextDelta` 流入推理卡片，最终 summary 数组覆盖草稿；`reasoning/textDelta` 不会作为可见推理渲染或持久化。Plan Item Delta 可填充行内计划文本，完成 Item 覆盖草稿；`turn/plan/updated` 驱动可停靠任务列表，并显示 `pending`、`inProgress` 与 `completed` 三态。
 
-命令与文件审批以 app-server 主动发起的 `item/commandExecution/requestApproval` 和 `item/fileChange/requestApproval` 请求到达。适配器校验原生 Thread、Turn、Item 和 JSON-RPC 请求身份后，才产生持久化的 `ApprovalRequested` 事件。界面展示命令、cwd、原因、文件授权根目录或网络 host/protocol，并提供 `accept`、`acceptForSession`、`decline` 与 `cancel`。成功响应会记录 `ApprovalResolved`；`serverRequest/resolved`、Turn 结束、中断、断连与显式关闭也会清理等待状态。在发布 Turn 终态前，每个仍未处理的原生审批都会自动回复 `decline`；GUI 已回答或服务端已解决的请求不会重复响应。恢复出来但未回答的历史卡片保持禁用，因为其来源 app-server 进程已经不存在。并发请求分别寻址，重复原生请求 ID 不会产生重复卡片或重复响应。
+命令与文件审批以 app-server 主动发起的 `item/commandExecution/requestApproval` 和 `item/fileChange/requestApproval` 请求到达。适配器校验原生 Thread、Turn、Item 和 JSON-RPC 请求身份后，才产生持久化的 `ApprovalRequested` 事件。界面展示命令、cwd、原因、文件授权根目录或网络 host/protocol，并提供 `accept`、`acceptForSession`、`decline` 与 `cancel`。成功响应会记录 `ApprovalResolved`；`serverRequest/resolved`、Turn 结束、中断、断连与显式关闭也会清理等待状态。传输仍可写时，每个尚未处理的原生审批都会在发布 Turn 终态前自动回复 `decline`；GUI 已回答或服务端已解决的请求不会重复响应。若进程已经退出，零食只清理本地等待状态，不会向失效传输写入。恢复出来但未回答的历史卡片保持禁用，因为其来源 app-server 进程已经不存在。并发请求分别寻址，重复原生请求 ID 不会产生重复卡片或重复响应。
 
 `tool/requestUserInput` 会转为统一问题卡片，支持选项、Other、自由文本和密码输入。阻塞请求使会话进入 `WaitingInput`，非阻塞请求保持运行；可见状态优先级依次为阻塞提问、审批、运行。回答只返回原生请求来源；Turn 结束时仍在等待的问题会收到空 `answers` 对象，已回答或已由服务端解决的请求不会重复响应。持久化的解决事件仅含请求身份和结果，绝不包含回答值，密码控件提交后立即清空。恢复出来的未回答卡片标记过期并只读。
 
@@ -73,7 +73,7 @@ Windows 优先探测 `codex.cmd`，并通过 `cmd.exe /c call` 启动 npm 包装
 codex app-server generate-json-schema --out <directory>
 ```
 
-普通 CI 只运行假传输与 fixture，不依赖已安装 CLI，也不调用模型。测试覆盖分页、Thread list/read 解析、创建/恢复身份、动态逐轮设置、文本与工具流、同 Turn steer 成功/失败/ID 不匹配、最终 Item 权威覆盖、命令非零退出、文件/MCP 结果、推理摘要隐私、计划三态、有界历史输出、审批决策、等待请求的终态响应及写入失败、过期与重复事件、未知通知/Item 保留、Turn 终态后隔离、完整/未完成帧上限、分片 CRLF 边界、请求/通知错误与超时、计时器清理、迟到响应隔离、旧进程退出期间的重连拒绝与恢复、正常退出计时器取消、进程强制终止、中断竞态、未支持 server request 与进程断开。本机可选择执行 CLI 探测、初始化、模型目录与临时 Thread 创建的烟雾测试，全程不调用模型；真实 `turn/start` 必须由开发者另行明确启用，避免测试意外产生模型调用：
+普通 CI 只运行假传输与 fixture，不依赖已安装 CLI，也不调用模型。测试覆盖分页、Thread list/read 解析、创建/恢复身份、动态逐轮设置、文本与工具流、同 Turn steer 成功/失败/ID 不匹配、最终 Item 权威覆盖、命令非零退出、文件/MCP 结果、推理摘要隐私、计划三态、有界历史输出、审批决策、等待请求的终态响应及写入失败、显式关闭的响应顺序、进程退出后的本地清理且不向失效传输写入、过期与重复事件、未知通知/Item 保留、Turn 终态后隔离、完整/未完成帧上限、分片 CRLF 边界、请求/通知错误与超时、计时器清理、迟到响应隔离、旧进程退出期间的重连拒绝与恢复、正常退出计时器取消、进程强制终止、中断竞态、未支持 server request 与进程断开。本机可选择执行 CLI 探测、初始化、模型目录与临时 Thread 创建的烟雾测试，全程不调用模型；真实 `turn/start` 必须由开发者另行明确启用，避免测试意外产生模型调用：
 
 ```powershell
 $env:SNACK_RUN_LIVE_CODEX_TEST = '1'
