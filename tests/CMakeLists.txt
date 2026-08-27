@@ -23,6 +23,17 @@ target_link_libraries(snack_rich_text_policy_tests PRIVATE Snack::Ui Qt6::Test)
 snack_set_project_warnings(snack_rich_text_policy_tests)
 add_test(NAME snack_rich_text_policy_tests COMMAND snack_rich_text_policy_tests)
 set_tests_properties(snack_rich_text_policy_tests PROPERTIES TIMEOUT 20)
+
+add_executable(snack_terminal_view_tests ui/TestTerminalView.cpp)
+target_link_libraries(snack_terminal_view_tests PRIVATE Snack::Ui Qt6::Test)
+snack_set_project_warnings(snack_terminal_view_tests)
+add_test(NAME snack_terminal_view_tests COMMAND snack_terminal_view_tests)
+set_tests_properties(
+    snack_terminal_view_tests
+    PROPERTIES
+        TIMEOUT 20
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+)
 snack_add_test(snack_storage_tests storage/TestStorage.cpp)
 snack_add_test(snack_session_tests session/TestSessionController.cpp)
 snack_add_test(snack_session_runtime_tests session/TestSessionRuntimeRegistry.cpp)

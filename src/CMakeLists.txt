@@ -121,6 +121,8 @@ add_library(
     ui/RichTextPolicy.h
     ui/RichTextView.cpp
     ui/RichTextView.h
+    ui/TerminalView.cpp
+    ui/TerminalView.h
 )
 add_library(Snack::Ui ALIAS snack_ui)
 target_include_directories(snack_ui PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
