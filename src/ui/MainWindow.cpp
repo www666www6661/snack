@@ -1095,6 +1095,53 @@ void MainWindow::renameConversationView() {
     rebuildConversationViews(viewId);
 }
 
+void MainWindow::updateConversationView() {
+    QString error;
+    const auto views = controller_->conversationViews(&error);
+    if (!error.isEmpty() || views.isEmpty()) {
+        statusBar()->showMessage(error.isEmpty() ? tr("No saved conversation views") : error, 8000);
+        rebuildConversationViews();
+        return;
+    }
+    QUuid viewId = conversationViewCombo_->currentData().toUuid();
+    if (viewId.isNull()) {
+        QStringList names;
+        names.reserve(views.size());
+        for (const auto& view : views) {
+            names.append(view.name);
+        }
+        bool accepted = false;
+        const QString selectedName = QInputDialog::getItem(
+            this, tr("Update conversation view"), tr("Saved view"), names, 0, false, &accepted);
+        if (!accepted) {
+            return;
+        }
+        const auto selectedByName =
+            std::find_if(views.cbegin(), views.cend(), [&selectedName](const auto& view) {
+                return view.name.compare(selectedName, Qt::CaseSensitive) == 0;
+            });
+        if (selectedByName == views.cend()) {
+            return;
+        }
+        viewId = selectedByName->id;
+    }
+    const auto selected = std::find_if(views.cbegin(), views.cend(),
+                                       [&viewId](const auto& view) { return view.id == viewId; });
+    if (selected == views.cend()) {
+        statusBar()->showMessage(tr("Conversation view no longer exists"), 8000);
+        rebuildConversationViews();
+        return;
+    }
+    domain::SavedConversationView updated = *selected;
+    updated.query = conversationSearch_->text();
+    updated.showArchived = settingsSnapshot_.showArchivedConversations;
+    if (!controller_->saveConversationView(updated, &error)) {
+        statusBar()->showMessage(tr("Cannot update conversation view: %1").arg(error), 8000);
+        return;
+    }
+    rebuildConversationViews(viewId);
+}
+
 void MainWindow::saveConversationView() {
     bool accepted = false;
     const QString name = QInputDialog::getText(this, tr("Save conversation view"), tr("View name"),
@@ -1157,6 +1204,7 @@ void MainWindow::rebuildConversationViews(const QUuid& selectedViewId) {
     conversationViewCombo_->setCurrentIndex(std::max(0, selectedIndex));
     deleteConversationViewButton_->setEnabled(selectedIndex > 0);
     renameConversationViewAction_->setEnabled(selectedIndex > 0);
+    updateConversationViewAction_->setEnabled(!views.isEmpty());
     if (!error.isEmpty()) {
         statusBar()->showMessage(error, 8000);
     }
@@ -1233,6 +1281,10 @@ void MainWindow::buildUi() {
         manageConversationViewMenu->addAction(tr("Rename saved view..."));
     renameConversationViewAction_->setObjectName(QStringLiteral("renameConversationViewAction"));
     renameConversationViewAction_->setEnabled(false);
+    updateConversationViewAction_ =
+        manageConversationViewMenu->addAction(tr("Update saved view with current filter..."));
+    updateConversationViewAction_->setObjectName(QStringLiteral("updateConversationViewAction"));
+    updateConversationViewAction_->setEnabled(false);
     manageConversationViewButton->setMenu(manageConversationViewMenu);
     deleteConversationViewButton_ = new QPushButton(tr("Delete"), viewRow);
     deleteConversationViewButton_->setObjectName(QStringLiteral("deleteConversationViewButton"));
@@ -1436,6 +1488,8 @@ void MainWindow::buildUi() {
             &MainWindow::saveConversationView);
     connect(renameConversationViewAction_, &QAction::triggered, this,
             &MainWindow::renameConversationView);
+    connect(updateConversationViewAction_, &QAction::triggered, this,
+            &MainWindow::updateConversationView);
     connect(deleteConversationViewButton_, &QPushButton::clicked, this,
             &MainWindow::deleteConversationView);
     connect(conversationViewCombo_, &QComboBox::currentIndexChanged, this,

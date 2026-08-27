@@ -52,6 +52,8 @@ Deleting the selected saved view requires explicit confirmation. The definition 
 
 The selected saved view can be renamed from the Manage menu. Renaming changes only the view name while preserving its query, archived-row visibility, and position. A name conflict or persistence failure keeps the original definition and current selection without touching any conversation runtime.
 
+The Manage menu can also overwrite a saved view with the current query and archived-row visibility. When the selector shows Current filter, the user first chooses the target view explicitly. Updating preserves the name and position, reselects the target definition after success, and never opens or reconnects a conversation.
+
 `Ctrl+Tab` and `Ctrl+Shift+Tab` cycle forward and backward through active conversations in repository order, wrap at either end, skip archived rows, and save the outgoing draft before opening the target through the normal strict Agent boundary.
 
 A persistent notice directly below the header reports an Agent fallback, connection loss, or reconnect attempt. Fallback notices remain visible while the fallback Agent is active. Connection failures preserve the original diagnostic and expose Reconnect in the notice; retrying keeps the previous cause visible until the native handshake succeeds. The status bar may echo the message but is never its only location. `Closed` is terminal: delayed connection, capability, native-identity, or event signals from an asynchronously exiting Agent cannot reopen the conversation, replace its diagnostic, or append timeline data.

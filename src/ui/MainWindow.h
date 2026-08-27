@@ -71,6 +71,7 @@ class MainWindow final : public QMainWindow {
     void focusConversationSearch();
     void saveConversationView();
     void renameConversationView();
+    void updateConversationView();
     void deleteConversationView();
     void applyConversationView(int index);
     void activateFirstSearchResult();
@@ -194,6 +195,7 @@ class MainWindow final : public QMainWindow {
     QAction* markAllConversationsReadAction_{nullptr};
     QAction* nextUnreadConversationAction_{nullptr};
     QAction* renameConversationViewAction_{nullptr};
+    QAction* updateConversationViewAction_{nullptr};
     QMenu* conversationContextMenu_{nullptr};
     QAction* contextOpenAction_{nullptr};
     QAction* contextPinAction_{nullptr};

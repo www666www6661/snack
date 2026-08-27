@@ -149,6 +149,7 @@ class TestMainWindow final : public QObject {
     void editsDisplaysAndSearchesConversationTags();
     void savesAndAppliesConversationViews();
     void renamesConversationViews();
+    void updatesConversationViewsFromCurrentFilter();
     void editsArchivedConversationTagsFromContextMenu();
     void restoresPersistedTimeline();
     void restoresToolReasoningAndPlanViews();
@@ -1578,6 +1579,55 @@ void TestMainWindow::renamesConversationViews() {
     QVERIFY(!repository.views.value(view.id).showArchived);
     QCOMPARE(views->currentData().toUuid(), view.id);
     QCOMPARE(views->currentText(), QStringLiteral("Renamed view"));
+}
+
+void TestMainWindow::updatesConversationViewsFromCurrentFilter() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::app::AppSettings settings(directory.filePath(QStringLiteral("settings.ini")));
+    UiMemoryEventRepository repository;
+    snack::domain::Conversation conversation;
+    conversation.title = QStringLiteral("Saved view update");
+    conversation.workingDirectory = directory.path();
+    snack::domain::SavedConversationView view;
+    view.name = QStringLiteral("Backend view");
+    view.query = QStringLiteral("tag:old");
+    view.showArchived = false;
+    repository.views.insert(view.id, view);
+    snack::agent::FakeAgentAdapter adapter(nullptr, 1);
+    snack::session::SessionController controller(conversation, &adapter, &repository);
+    snack::ui::MainWindow window(&controller, &settings, false);
+
+    auto* views = window.findChild<QComboBox*>(QStringLiteral("conversationViewCombo"));
+    auto* search = window.findChild<QLineEdit*>(QStringLiteral("conversationSearch"));
+    auto* showArchived =
+        window.findChild<QAction*>(QStringLiteral("showArchivedConversationsAction"));
+    auto* update = window.findChild<QAction*>(QStringLiteral("updateConversationViewAction"));
+    QVERIFY(views != nullptr);
+    QVERIFY(search != nullptr);
+    QVERIFY(showArchived != nullptr);
+    QVERIFY(update != nullptr);
+    QVERIFY(update->isEnabled());
+
+    search->setText(QStringLiteral("agent:codex status:running"));
+    showArchived->setChecked(true);
+    QCOMPARE(views->currentIndex(), 0);
+    QTimer::singleShot(0, [] {
+        auto* dialog = qobject_cast<QInputDialog*>(QApplication::activeModalWidget());
+        QVERIFY(dialog != nullptr);
+        auto* choices = dialog->findChild<QComboBox*>();
+        QVERIFY(choices != nullptr);
+        QCOMPARE(choices->currentText(), QStringLiteral("Backend view"));
+        dialog->accept();
+    });
+    update->trigger();
+
+    const auto updated = repository.views.value(view.id);
+    QCOMPARE(updated.name, QStringLiteral("Backend view"));
+    QCOMPARE(updated.query, QStringLiteral("agent:codex status:running"));
+    QVERIFY(updated.showArchived);
+    QCOMPARE(updated.position, view.position);
+    QCOMPARE(views->currentData().toUuid(), view.id);
 }
 
 void TestMainWindow::restoresPersistedTimeline() {
