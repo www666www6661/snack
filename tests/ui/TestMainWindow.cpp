@@ -148,6 +148,7 @@ class TestMainWindow final : public QObject {
     void updatesConversationRailForBackgroundRuntimeStatus();
     void persistsArchivedConversationVisibility();
     void cyclesActiveConversationsInRepositoryOrder();
+    void activatesSearchResultsFromKeyboard();
 };
 
 void TestMainWindow::opensAndSwitchesConversationFromRail() {
@@ -721,6 +722,66 @@ void TestMainWindow::cyclesActiveConversationsInRepositoryOrder() {
     QCOMPARE(title->text(), QStringLiteral("Gamma"));
     QVERIFY(title->text() != archived.title);
     QCOMPARE(sessions.size(), qsizetype{3});
+}
+
+void TestMainWindow::activatesSearchResultsFromKeyboard() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::app::AppSettings settings(directory.filePath(QStringLiteral("settings.ini")));
+    UiMemoryEventRepository repository;
+    snack::domain::Conversation current;
+    current.title = QStringLiteral("Current");
+    current.workingDirectory = directory.path();
+    snack::domain::Conversation target;
+    target.title = QStringLiteral("Target active");
+    target.workingDirectory = directory.path();
+    snack::domain::Conversation archived;
+    archived.title = QStringLiteral("Target archived");
+    archived.workingDirectory = directory.path();
+    archived.archived = true;
+    repository.catalog = {current, archived, target};
+
+    const auto makeRuntime = [](snack::domain::AgentKind kind) {
+        snack::agent::AgentRuntime runtime;
+        runtime.requestedKind = kind;
+        runtime.selectedKind = kind;
+        runtime.adapter = std::make_unique<snack::agent::FakeAgentAdapter>(nullptr, 1);
+        return runtime;
+    };
+    snack::app::SessionManager sessions(&repository, makeRuntime);
+    QString error;
+    auto* controller = sessions.addPrepared(current, makeRuntime(current.agentKind), &error);
+    QVERIFY2(controller != nullptr, qPrintable(error));
+    snack::ui::MainWindow window(controller, &settings, &sessions, false);
+    auto* search = window.findChild<QLineEdit*>(QStringLiteral("conversationSearch"));
+    auto* list = window.findChild<QListWidget*>(QStringLiteral("conversationList"));
+    auto* title = window.findChild<QLabel*>(QStringLiteral("conversationTitle"));
+    auto* composer = window.findChild<QPlainTextEdit*>(QStringLiteral("composer"));
+    QVERIFY(search != nullptr);
+    QVERIFY(list != nullptr);
+    QVERIFY(title != nullptr);
+    QVERIFY(composer != nullptr);
+
+    composer->setPlainText(QStringLiteral("Current draft"));
+    search->setText(QStringLiteral("Target"));
+    QCOMPARE(list->count(), 2);
+    search->setFocus();
+    QTest::keyClick(search, Qt::Key_Return);
+    QCOMPARE(title->text(), QStringLiteral("Target active"));
+    QCOMPARE(settings.composerDraft(current.id), QStringLiteral("Current draft"));
+    QCOMPARE(window.focusWidget(), composer);
+    QVERIFY(search->text().isEmpty());
+
+    search->setText(QStringLiteral("archived"));
+    QCOMPARE(list->count(), 1);
+    search->setFocus();
+    QTest::keyClick(search, Qt::Key_Return);
+    QCOMPARE(title->text(), QStringLiteral("Target active"));
+    QCOMPARE(window.focusWidget(), search);
+    search->setText(QStringLiteral("anything"));
+    QTest::keyClick(search, Qt::Key_Escape);
+    QVERIFY(search->text().isEmpty());
+    QCOMPARE(window.focusWidget(), composer);
 }
 
 void TestMainWindow::sendsAndRendersStreamingTurn() {

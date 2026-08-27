@@ -43,6 +43,7 @@ class MainWindow final : public QMainWindow {
 
   protected:
     void closeEvent(QCloseEvent* event) override;
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
   private slots:
     void sendMessage();
@@ -64,6 +65,8 @@ class MainWindow final : public QMainWindow {
     void applyLightTheme();
     void applyDarkTheme();
     void focusConversationSearch();
+    void activateFirstSearchResult();
+    void leaveConversationSearch();
     void setShowArchivedConversations(bool visible);
     void activatePreviousConversation();
     void activateNextConversation();

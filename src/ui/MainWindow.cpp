@@ -17,6 +17,7 @@
 #include <QInputDialog>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
@@ -782,6 +783,31 @@ void MainWindow::focusConversationSearch() {
     conversationSearch_->setFocus();
 }
 
+void MainWindow::activateFirstSearchResult() {
+    for (int row = 0; row < conversationList_->count(); ++row) {
+        auto* item = conversationList_->item(row);
+        if (item->data(Qt::UserRole + 1).toBool()) {
+            continue;
+        }
+        const QUuid targetId = item->data(Qt::UserRole).toUuid();
+        if (targetId == controller_->conversation().id) {
+            conversationSearch_->clear();
+            composer_->setFocus();
+            return;
+        }
+        activateConversation(item);
+        if (controller_->conversation().id == targetId) {
+            composer_->setFocus();
+        }
+        return;
+    }
+}
+
+void MainWindow::leaveConversationSearch() {
+    conversationSearch_->clear();
+    composer_->setFocus();
+}
+
 void MainWindow::activatePreviousConversation() { activateRelativeConversation(-1); }
 
 void MainWindow::activateNextConversation() { activateRelativeConversation(1); }
@@ -812,6 +838,21 @@ void MainWindow::requestQuit() {
     qApp->quit();
 }
 
+bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
+    if (watched == conversationSearch_ && event->type() == QEvent::KeyPress) {
+        const auto* keyEvent = static_cast<QKeyEvent*>(event);
+        if (keyEvent->key() == Qt::Key_Escape) {
+            leaveConversationSearch();
+            return true;
+        }
+        if (keyEvent->key() == Qt::Key_Return || keyEvent->key() == Qt::Key_Enter) {
+            activateFirstSearchResult();
+            return true;
+        }
+    }
+    return QMainWindow::eventFilter(watched, event);
+}
+
 void MainWindow::buildUi() {
     setWindowTitle(tr("Snack"));
     setMinimumSize(1280, 800);
@@ -836,6 +877,7 @@ void MainWindow::buildUi() {
     conversationSearch_->setObjectName(QStringLiteral("conversationSearch"));
     conversationSearch_->setPlaceholderText(tr("Search conversations"));
     conversationSearch_->setClearButtonEnabled(true);
+    conversationSearch_->installEventFilter(this);
     sessionRow_ = new QLabel(
         tr("●  %1\n    %2").arg(agentDisplayName(), controller_->conversation().title), sidebar);
     sessionRow_->setObjectName(QStringLiteral("sessionRow"));
