@@ -140,6 +140,7 @@ class TestMainWindow final : public QObject {
     void opensAndSwitchesConversationFromRail();
     void keepsCurrentConversationWhenRailOpenFails();
     void filtersConversationRailLocally();
+    void focusesConversationSearchWithShortcut();
     void createsConversationFromRail();
     void archivesAndRestoresConversation();
     void pinsAndReordersConversationRail();
@@ -290,6 +291,40 @@ void TestMainWindow::filtersConversationRailLocally() {
     QCOMPARE(list->count(), 1);
     QCOMPARE(list->item(0)->data(Qt::UserRole).toUuid(), codex.id);
     search->clear();
+    QCOMPARE(list->count(), 2);
+    QTRY_COMPARE(controller.status(), snack::domain::ConversationStatus::Idle);
+}
+
+void TestMainWindow::focusesConversationSearchWithShortcut() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::app::AppSettings settings(directory.filePath(QStringLiteral("settings.ini")));
+    UiMemoryEventRepository repository;
+    snack::domain::Conversation first;
+    first.title = QStringLiteral("First session");
+    first.workingDirectory = directory.path();
+    snack::domain::Conversation second;
+    second.title = QStringLiteral("Second session");
+    second.workingDirectory = directory.path();
+    repository.catalog = {first, second};
+
+    snack::agent::FakeAgentAdapter adapter(nullptr, 1);
+    snack::session::SessionController controller(first, &adapter, &repository);
+    snack::ui::MainWindow window(&controller, &settings, false);
+    auto* search = window.findChild<QLineEdit*>(QStringLiteral("conversationSearch"));
+    auto* list = window.findChild<QListWidget*>(QStringLiteral("conversationList"));
+    auto* action = window.findChild<QAction*>(QStringLiteral("searchConversationsAction"));
+    QVERIFY(search != nullptr);
+    QVERIFY(list != nullptr);
+    QVERIFY(action != nullptr);
+    QCOMPARE(action->shortcut(), QKeySequence(Qt::CTRL | Qt::Key_K));
+    search->setText(QStringLiteral("Second"));
+    QCOMPARE(list->count(), 1);
+
+    action->trigger();
+
+    QCOMPARE(window.focusWidget(), search);
+    QVERIFY(search->text().isEmpty());
     QCOMPARE(list->count(), 2);
     QTRY_COMPARE(controller.status(), snack::domain::ConversationStatus::Idle);
 }

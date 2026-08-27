@@ -18,6 +18,8 @@ The M3 conversation rail is backed by the repository catalog rather than placeho
 
 Conversation search filters the already-loaded catalog locally and case-insensitively across title, workspace path, and Agent type. Filtering never opens, closes, reconnects, or otherwise mutates a session; clearing the query restores the repository-defined order.
 
+`Ctrl/Cmd+K` clears the current rail filter and focuses the conversation search field without touching any session runtime.
+
 The rail button and `Ctrl/Cmd+N` create a new conversation in the current workspace using the saved preferred Agent. Creation switches through the same view-binding path as navigation, focuses the composer, and records the actual selected Agent. A new conversation may visibly fall back to Mock when its preferred Agent is unavailable because no historical native identity exists yet.
 
 Archiving the current idle conversation closes its runtime and selects the next active catalog entry; when none exists, a replacement conversation is created first. Active Agent work cannot be archived. Archived rows remain visible, cannot be opened directly, and can be restored through the File menu without losing history.

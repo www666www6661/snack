@@ -678,6 +678,11 @@ void MainWindow::applyDarkTheme() {
     applyTheme(ThemeDefinition::dark());
 }
 
+void MainWindow::focusConversationSearch() {
+    conversationSearch_->clear();
+    conversationSearch_->setFocus();
+}
+
 void MainWindow::increaseScale() { applyInterfaceScale(settingsSnapshot_.interfaceScale + 0.1); }
 void MainWindow::decreaseScale() { applyInterfaceScale(settingsSnapshot_.interfaceScale - 0.1); }
 void MainWindow::resetScale() { applyInterfaceScale(1.0); }
@@ -986,6 +991,10 @@ void MainWindow::buildMenus() {
     lightAction->setChecked(settingsSnapshot_.themeMode == app::ThemeMode::Light);
     darkAction->setChecked(settingsSnapshot_.themeMode == app::ThemeMode::Dark);
     viewMenu->addSeparator();
+    auto* searchConversations = viewMenu->addAction(tr("Search conversations"));
+    searchConversations->setObjectName(QStringLiteral("searchConversationsAction"));
+    searchConversations->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_K));
+    connect(searchConversations, &QAction::triggered, this, &MainWindow::focusConversationSearch);
     auto* focusComposer = viewMenu->addAction(tr("Focus composer"));
     focusComposer->setObjectName(QStringLiteral("focusComposerAction"));
     focusComposer->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_L));

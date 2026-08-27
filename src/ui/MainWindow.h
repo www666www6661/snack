@@ -63,6 +63,7 @@ class MainWindow final : public QMainWindow {
     void applySystemTheme();
     void applyLightTheme();
     void applyDarkTheme();
+    void focusConversationSearch();
     void increaseScale();
     void decreaseScale();
     void resetScale();
