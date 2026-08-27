@@ -126,6 +126,7 @@ class TestMainWindow final : public QObject {
     void cancelsQuitWhileAgentIsRunning();
     void opensAndSwitchesConversationFromRail();
     void keepsCurrentConversationWhenRailOpenFails();
+    void filtersConversationRailLocally();
 };
 
 void TestMainWindow::opensAndSwitchesConversationFromRail() {
@@ -238,6 +239,43 @@ void TestMainWindow::keepsCurrentConversationWhenRailOpenFails() {
     QCOMPARE(sessions.size(), qsizetype{1});
     QCOMPARE(list->currentItem()->data(Qt::UserRole).toUuid(), current.id);
     QVERIFY(window.statusBar()->currentMessage().contains(QStringLiteral("Codex unavailable")));
+}
+
+void TestMainWindow::filtersConversationRailLocally() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::app::AppSettings settings(directory.filePath(QStringLiteral("settings.ini")));
+    UiMemoryEventRepository repository;
+    snack::domain::Conversation codex;
+    codex.title = QStringLiteral("Review parser");
+    codex.workingDirectory = QStringLiteral("C:/projects/compiler");
+    codex.agentKind = snack::domain::AgentKind::Codex;
+    snack::domain::Conversation mock;
+    mock.title = QStringLiteral("Prototype UI");
+    mock.workingDirectory = QStringLiteral("C:/projects/snack");
+    repository.catalog = {codex, mock};
+
+    snack::agent::FakeAgentAdapter adapter(nullptr, 1);
+    snack::session::SessionController controller(mock, &adapter, &repository);
+    snack::ui::MainWindow window(&controller, &settings, false);
+    auto* search = window.findChild<QLineEdit*>(QStringLiteral("conversationSearch"));
+    auto* list = window.findChild<QListWidget*>(QStringLiteral("conversationList"));
+    QVERIFY(search != nullptr);
+    QVERIFY(list != nullptr);
+    QCOMPARE(list->count(), 2);
+
+    search->setText(QStringLiteral("parser"));
+    QCOMPARE(list->count(), 1);
+    QCOMPARE(list->item(0)->data(Qt::UserRole).toUuid(), codex.id);
+    search->setText(QStringLiteral("SNACK"));
+    QCOMPARE(list->count(), 1);
+    QCOMPARE(list->item(0)->data(Qt::UserRole).toUuid(), mock.id);
+    search->setText(QStringLiteral("codex"));
+    QCOMPARE(list->count(), 1);
+    QCOMPARE(list->item(0)->data(Qt::UserRole).toUuid(), codex.id);
+    search->clear();
+    QCOMPARE(list->count(), 2);
+    QTRY_COMPARE(controller.status(), snack::domain::ConversationStatus::Idle);
 }
 
 void TestMainWindow::sendsAndRendersStreamingTurn() {

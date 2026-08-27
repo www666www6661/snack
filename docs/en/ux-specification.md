@@ -16,6 +16,8 @@ A new conversation begins with a localized placeholder title. After the first ac
 
 The M3 conversation rail is backed by the repository catalog rather than placeholder rows. Selecting another entry persists the outgoing draft, opens or reuses that conversation through `SessionManager`, disconnects the previous view binding, restores the selected timeline, queue, draft, capabilities, and connection state, and persists the new active conversation. If its original Agent runtime is unavailable, the current conversation remains selected and the interface reports the failure instead of crossing Agent types.
 
+Conversation search filters the already-loaded catalog locally and case-insensitively across title, workspace path, and Agent type. Filtering never opens, closes, reconnects, or otherwise mutates a session; clearing the query restores the repository-defined order.
+
 A persistent notice directly below the header reports an Agent fallback, connection loss, or reconnect attempt. Fallback notices remain visible while the fallback Agent is active. Connection failures preserve the original diagnostic and expose Reconnect in the notice; retrying keeps the previous cause visible until the native handshake succeeds. The status bar may echo the message but is never its only location. `Closed` is terminal: delayed connection, capability, native-identity, or event signals from an asynchronously exiting Agent cannot reopen the conversation, replace its diagnostic, or append timeline data.
 
 ## 4. Timeline

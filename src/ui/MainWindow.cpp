@@ -153,9 +153,28 @@ void MainWindow::refreshConversationList() {
     const QSignalBlocker blocker(conversationList_);
     conversationList_->clear();
     int currentRow = -1;
+    const QString query = conversationSearch_->text().trimmed();
     for (const auto& conversation : conversationCatalog_) {
+        QString agentName;
+        switch (conversation.agentKind) {
+        case domain::AgentKind::Codex:
+            agentName = QStringLiteral("Codex");
+            break;
+        case domain::AgentKind::Claude:
+            agentName = QStringLiteral("Claude");
+            break;
+        case domain::AgentKind::Mock:
+            agentName = tr("Mock Agent");
+            break;
+        }
+        if (!query.isEmpty() && !conversation.title.contains(query, Qt::CaseInsensitive) &&
+            !conversation.workingDirectory.contains(query, Qt::CaseInsensitive) &&
+            !agentName.contains(query, Qt::CaseInsensitive)) {
+            continue;
+        }
         auto* item = new QListWidgetItem(
-            QStringLiteral("%1\n%2").arg(conversation.title, conversation.workingDirectory),
+            QStringLiteral("%1  ·  %2\n%3")
+                .arg(conversation.title, agentName, conversation.workingDirectory),
             conversationList_);
         item->setData(Qt::UserRole, conversation.id);
         item->setToolTip(conversation.workingDirectory);
@@ -590,9 +609,10 @@ void MainWindow::buildUi() {
     auto* brand = new QLabel(tr("SNACK  /  零食"), sidebar);
     auto* newConversation = new QPushButton(tr("New conversation"), sidebar);
     newConversation->setEnabled(false);
-    auto* search = new QPlainTextEdit(sidebar);
-    search->setPlaceholderText(tr("Search conversations"));
-    search->setMaximumHeight(42);
+    conversationSearch_ = new QLineEdit(sidebar);
+    conversationSearch_->setObjectName(QStringLiteral("conversationSearch"));
+    conversationSearch_->setPlaceholderText(tr("Search conversations"));
+    conversationSearch_->setClearButtonEnabled(true);
     sessionRow_ = new QLabel(
         tr("●  %1\n    %2").arg(agentDisplayName(), controller_->conversation().title), sidebar);
     sessionRow_->setObjectName(QStringLiteral("sessionRow"));
@@ -602,7 +622,7 @@ void MainWindow::buildUi() {
     sidebarLayout->addWidget(brand);
     sidebarLayout->addSpacing(10);
     sidebarLayout->addWidget(newConversation);
-    sidebarLayout->addWidget(search);
+    sidebarLayout->addWidget(conversationSearch_);
     sidebarLayout->addWidget(sessionRow_);
     sidebarLayout->addWidget(conversationList_, 1);
 
@@ -762,6 +782,8 @@ void MainWindow::buildUi() {
     connect(stopButton_, &QPushButton::clicked, this, &MainWindow::stopTurn);
     connect(reconnectButton_, &QPushButton::clicked, this, &MainWindow::reconnectSession);
     connect(conversationList_, &QListWidget::itemClicked, this, &MainWindow::activateConversation);
+    connect(conversationSearch_, &QLineEdit::textChanged, this,
+            [this] { refreshConversationList(); });
     connect(composer_, &ComposerTextEdit::sendRequested, this, &MainWindow::sendMessage);
     connect(composer_, &ComposerTextEdit::queueRequested, this, &MainWindow::queueComposerMessage);
     connect(composer_, &ComposerTextEdit::stopRequested, this, &MainWindow::stopTurn);

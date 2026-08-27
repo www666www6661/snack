@@ -141,6 +141,7 @@ class MainWindow final : public QMainWindow {
     QLabel* titleLabel_{nullptr};
     QLabel* usageLabel_{nullptr};
     QLabel* sessionRow_{nullptr};
+    QLineEdit* conversationSearch_{nullptr};
     QListWidget* conversationList_{nullptr};
     QComboBox* modelCombo_{nullptr};
     QComboBox* effortCombo_{nullptr};
