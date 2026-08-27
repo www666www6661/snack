@@ -32,6 +32,8 @@ Pinning is a metadata-only toggle available for the current conversation. It doe
 
 Conversation tags are edited as a comma-separated metadata list from the File menu. Tags are trimmed, control characters are removed, duplicates collapse case-insensitively, and the result sorts deterministically; each conversation accepts at most eight tags of at most 32 Unicode code points each. Invalid edits preserve the previous list. Tags appear on rail rows and participate in local case-insensitive search without reconnecting a runtime.
 
+A conversation may have one group name of at most 64 Unicode code points; an empty value means ungrouped. The File menu and row context menu edit the group for current, background, or archived conversations. The group appears in the rail and `group:"exact group name"` filters it case-insensitively. This is repository-only metadata and never opens or reconnects a runtime.
+
 Each rail row exposes a context menu for opening, pinning, archiving, or restoring that selected conversation. Actions operate on the row rather than silently switching first; archiving a background conversation leaves the current chat bound and uses the same active-work guard as the File menu.
 
 The rail context menu applies the same tag editor to the selected background or archived row. Editing a closed row updates repository metadata directly and does not open, restore, or switch to that conversation.

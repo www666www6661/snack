@@ -133,6 +133,14 @@ bool conversationMatchesQuery(const domain::Conversation& conversation, const QS
             }
             continue;
         }
+        if (term.left(6).compare(QStringLiteral("group:"), Qt::CaseInsensitive) == 0) {
+            const QString requestedGroup = term.sliced(6);
+            if (requestedGroup.isEmpty() ||
+                conversation.groupName.compare(requestedGroup, Qt::CaseInsensitive) != 0) {
+                return false;
+            }
+            continue;
+        }
         if (term.left(6).compare(QStringLiteral("agent:"), Qt::CaseInsensitive) == 0) {
             QString conversationAgent;
             switch (conversation.agentKind) {
@@ -338,13 +346,17 @@ void MainWindow::refreshConversationList() {
             conversation.tags.isEmpty()
                 ? displayTitle
                 : QStringLiteral("%1  [%2]").arg(displayTitle, conversation.tags.join(" · "));
+        const QString groupedTitle =
+            conversation.groupName.isEmpty()
+                ? taggedTitle
+                : tr("%1  {Group: %2}").arg(taggedTitle, conversation.groupName);
         const QString status = conversationStatusText(conversation.status);
         auto* item = new QListWidgetItem(
             conversation.archived
                 ? tr("Archived · %1 · %2\n%3")
-                      .arg(taggedTitle, agentName, conversation.workingDirectory)
+                      .arg(groupedTitle, agentName, conversation.workingDirectory)
                 : tr("%1 · %2 · %3\n%4")
-                      .arg(taggedTitle, agentName, status, conversation.workingDirectory),
+                      .arg(groupedTitle, agentName, status, conversation.workingDirectory),
             conversationList_);
         item->setData(Qt::UserRole, conversation.id);
         item->setData(Qt::UserRole + 1, conversation.archived);
@@ -598,6 +610,7 @@ void MainWindow::prepareConversationContextMenu() {
     contextPinAction_->setEnabled(hasSelection);
     contextPinAction_->setText(pinned ? tr("Unpin conversation") : tr("Pin conversation"));
     contextEditTagsAction_->setEnabled(hasSelection && (isCurrent || sessions_ != nullptr));
+    contextEditGroupAction_->setEnabled(hasSelection && (isCurrent || sessions_ != nullptr));
     contextArchiveAction_->setEnabled(hasSelection && !archived);
     contextRestoreAction_->setEnabled(hasSelection && archived);
 }
@@ -976,6 +989,45 @@ void MainWindow::editConversationTagsFor(const QUuid& conversationId, const QStr
             error = QStringLiteral("Conversation is unavailable");
         }
         statusBar()->showMessage(tr("Cannot update conversation tags: %1").arg(error), 8000);
+        return;
+    }
+    refreshConversationList();
+}
+
+void MainWindow::editConversationGroup() {
+    editConversationGroupFor(controller_->conversation().id, controller_->conversation().groupName);
+}
+
+void MainWindow::editSelectedConversationGroup() {
+    if (conversationList_->currentItem() == nullptr) {
+        return;
+    }
+    const QUuid conversationId = conversationList_->currentItem()->data(Qt::UserRole).toUuid();
+    const auto selected =
+        std::find_if(conversationCatalog_.cbegin(), conversationCatalog_.cend(),
+                     [&conversationId](const auto& value) { return value.id == conversationId; });
+    if (selected == conversationCatalog_.cend()) {
+        refreshConversationList();
+        return;
+    }
+    editConversationGroupFor(conversationId, selected->groupName);
+}
+
+void MainWindow::editConversationGroupFor(const QUuid& conversationId, const QString& groupName) {
+    bool accepted = false;
+    const QString value = QInputDialog::getText(this, tr("Edit conversation group"),
+                                                tr("Group name (empty removes group)"),
+                                                QLineEdit::Normal, groupName, &accepted);
+    if (!accepted) {
+        return;
+    }
+    QString error;
+    const bool saved =
+        conversationId == controller_->conversation().id
+            ? controller_->setGroup(value, &error)
+            : sessions_ != nullptr && sessions_->setGroup(conversationId, value, &error);
+    if (!saved) {
+        statusBar()->showMessage(tr("Cannot update conversation group: %1").arg(error), 8000);
         return;
     }
     refreshConversationList();
@@ -1398,7 +1450,7 @@ void MainWindow::buildUi() {
     conversationSearch_->setObjectName(QStringLiteral("conversationSearch"));
     conversationSearch_->setPlaceholderText(tr("Search conversations or tag:name"));
     conversationSearch_->setToolTip(
-        tr("Filters: tag:name, agent:name, model:id, status:name, path:\"directory\", "
+        tr("Filters: tag:name, group:name, agent:name, model:id, status:name, path:\"directory\", "
            "after:YYYY-MM-DD, before:YYYY-MM-DD, time:today|7d|30d"));
     conversationSearch_->setClearButtonEnabled(true);
     conversationSearch_->installEventFilter(this);
@@ -1417,6 +1469,8 @@ void MainWindow::buildUi() {
     contextPinAction_->setObjectName(QStringLiteral("contextPinConversationAction"));
     contextEditTagsAction_ = conversationContextMenu_->addAction(tr("Edit conversation tags..."));
     contextEditTagsAction_->setObjectName(QStringLiteral("contextEditConversationTagsAction"));
+    contextEditGroupAction_ = conversationContextMenu_->addAction(tr("Edit conversation group..."));
+    contextEditGroupAction_->setObjectName(QStringLiteral("contextEditConversationGroupAction"));
     conversationContextMenu_->addSeparator();
     contextArchiveAction_ = conversationContextMenu_->addAction(tr("Archive conversation"));
     contextArchiveAction_->setObjectName(QStringLiteral("contextArchiveConversationAction"));
@@ -1619,6 +1673,8 @@ void MainWindow::buildUi() {
             &MainWindow::toggleSelectedPinnedConversation);
     connect(contextEditTagsAction_, &QAction::triggered, this,
             &MainWindow::editSelectedConversationTags);
+    connect(contextEditGroupAction_, &QAction::triggered, this,
+            &MainWindow::editSelectedConversationGroup);
     connect(contextArchiveAction_, &QAction::triggered, this,
             &MainWindow::archiveSelectedConversation);
     connect(contextRestoreAction_, &QAction::triggered, this,
@@ -1671,6 +1727,9 @@ void MainWindow::buildMenus() {
     auto* editTagsAction = fileMenu->addAction(tr("Edit conversation tags..."));
     editTagsAction->setObjectName(QStringLiteral("editConversationTagsAction"));
     connect(editTagsAction, &QAction::triggered, this, &MainWindow::editConversationTags);
+    auto* editGroupAction = fileMenu->addAction(tr("Edit conversation group..."));
+    editGroupAction->setObjectName(QStringLiteral("editConversationGroupAction"));
+    connect(editGroupAction, &QAction::triggered, this, &MainWindow::editConversationGroup);
     auto* archiveAction = fileMenu->addAction(tr("Archive conversation"));
     archiveAction->setObjectName(QStringLiteral("archiveConversationAction"));
     archiveAction->setEnabled(sessions_ != nullptr);

@@ -161,6 +161,7 @@ class TestMainWindow final : public QObject {
     void updatesPlaceholderTitleAfterFirstSend();
     void renamesCurrentConversation();
     void editsDisplaysAndSearchesConversationTags();
+    void editsDisplaysAndSearchesConversationGroups();
     void savesAndAppliesConversationViews();
     void renamesConversationViews();
     void updatesConversationViewsFromCurrentFilter();
@@ -338,10 +339,10 @@ void TestMainWindow::filtersConversationRailLocally() {
     QVERIFY(search != nullptr);
     QVERIFY(list != nullptr);
     QCOMPARE(search->placeholderText(), QStringLiteral("Search conversations or tag:name"));
-    QCOMPARE(
-        search->toolTip(),
-        QStringLiteral("Filters: tag:name, agent:name, model:id, status:name, path:\"directory\", "
-                       "after:YYYY-MM-DD, before:YYYY-MM-DD, time:today|7d|30d"));
+    QCOMPARE(search->toolTip(),
+             QStringLiteral("Filters: tag:name, group:name, agent:name, model:id, status:name, "
+                            "path:\"directory\", "
+                            "after:YYYY-MM-DD, before:YYYY-MM-DD, time:today|7d|30d"));
     QCOMPARE(list->count(), 2);
 
     search->setText(QStringLiteral("parser"));
@@ -1485,6 +1486,41 @@ void TestMainWindow::editsDisplaysAndSearchesConversationTags() {
     QCOMPARE(controller.conversation().tags,
              QStringList({QStringLiteral("Backend"), QStringLiteral("urgent")}));
     QVERIFY(window.statusBar()->currentMessage().contains(QStringLiteral("Cannot update")));
+}
+
+void TestMainWindow::editsDisplaysAndSearchesConversationGroups() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::app::AppSettings settings(directory.filePath(QStringLiteral("settings.ini")));
+    UiMemoryEventRepository repository;
+    snack::agent::FakeAgentAdapter adapter(nullptr, 1);
+    snack::domain::Conversation conversation;
+    conversation.title = QStringLiteral("Grouped conversation");
+    conversation.workingDirectory = directory.path();
+    repository.catalog = {conversation};
+    snack::session::SessionController controller(conversation, &adapter, &repository);
+    snack::ui::MainWindow window(&controller, &settings, false);
+
+    auto* editGroup = window.findChild<QAction*>(QStringLiteral("editConversationGroupAction"));
+    auto* list = window.findChild<QListWidget*>(QStringLiteral("conversationList"));
+    auto* search = window.findChild<QLineEdit*>(QStringLiteral("conversationSearch"));
+    QVERIFY(editGroup != nullptr);
+    QVERIFY(list != nullptr);
+    QVERIFY(search != nullptr);
+    QTimer::singleShot(0, [] {
+        auto* dialog = qobject_cast<QInputDialog*>(QApplication::activeModalWidget());
+        QVERIFY(dialog != nullptr);
+        dialog->setTextValue(QStringLiteral("  Backend Work  "));
+        dialog->accept();
+    });
+    editGroup->trigger();
+
+    QCOMPARE(controller.conversation().groupName, QStringLiteral("Backend Work"));
+    QVERIFY(list->item(0)->text().contains(QStringLiteral("Group: Backend Work")));
+    search->setText(QStringLiteral("group:\"backend work\""));
+    QCOMPARE(list->count(), 1);
+    search->setText(QStringLiteral("group:backend"));
+    QCOMPARE(list->count(), 0);
 }
 
 void TestMainWindow::savesAndAppliesConversationViews() {
