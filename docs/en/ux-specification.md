@@ -96,6 +96,8 @@ The `+` button selects one or more local files and shows removable preview rows 
 
 Dockable surfaces: conversations, files, diff, tasks, permissions, raw protocol, terminal, and details. Built-in layouts: Focus, Review, Terminal Debug, and Multi-session Monitor. Detached chat and terminal windows restore safely to visible screens.
 
+The M4 file dock lists the bounded workspace index above a read-only text preview. Selecting a binary, missing, oversized, or escaped path shows a specific non-editing result. “Open in external editor” revalidates the selection immediately before delegating to the operating system. Filesystem changes are coalesced and refresh the list without creating Agent events or reconnecting the session.
+
 M3 exposes the four built-in workbench layouts as deterministic View-menu actions. Focus hides the rail and docks; Review shows the task dock on the right; Terminal Debug shows the task and M4 terminal placeholder docks; Multi-session Monitor restores the rail with the task dock. Applying a preset immediately persists the normal Qt dock state, while missing future M4 panels remain placeholders rather than simulated functionality.
 
 The current conversation or a selected active rail row may open in one detached chat window per conversation. A detached window shares the owning `SessionController`, so timeline events and next-turn model, reasoning effort, and access-level changes stay live across windows without creating or reconnecting a second Runtime. Closing it persists geometry by conversation UUID and never closes the Agent; missing-screen geometry is moved back into the visible desktop. Archiving or deleting closes the corresponding detached view before its Controller lifecycle changes.

@@ -82,6 +82,8 @@ M3 多会话所有权从不依赖 Widget 的 Registry 开始。应用入口现�
 
 终端与 Agent 完全分离。`TerminalManager` 管理标签元数据；平台后端实现 Windows ConPTY 和 POSIX PTY。终端输出仅驻留内存，不进入事件数据库。
 
+M4-A 的所有文件操作都先经过 `WorkspacePathPolicy`：解析已存在的 Canonical Path，并在预览或外部打开前拒绝越界。文件浏览器最多索引 2,000 个非生成文件，最多预览 512 KiB 非二进制 UTF-8 文本，通过可注入的 Opener 边界委托已批准的本地文件 URL。`WorkspaceWatcher` 只监听有界目录集合并在突发事件去抖后重建浏览器；轻量符号索引对文件数、单文件字节数和结果数均有上限。大小写不敏感平台会折叠 Canonical Identity Key，路径别名不能生成独立安全身份。
+
 ## 4. 并发模型
 
 - GUI 线程：Widgets、WebEngine 导航与轻量 ViewModel 更新。
