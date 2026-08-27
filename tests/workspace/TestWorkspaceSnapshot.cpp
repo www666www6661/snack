@@ -1,3 +1,4 @@
+#include "workspace/IsolationCapability.h"
 #include "workspace/WorkspaceSnapshot.h"
 
 #include <QFile>
@@ -10,6 +11,7 @@ class TestWorkspaceSnapshot final : public QObject {
   private slots:
     void capturesContentAndDetectsChanges();
     void failsClosedAtBounds();
+    void reportsOnlyAdvertisedIsolation();
 };
 
 void TestWorkspaceSnapshot::capturesContentAndDetectsChanges() {
@@ -45,6 +47,20 @@ void TestWorkspaceSnapshot::failsClosedAtBounds() {
     QVERIFY(!snack::workspace::WorkspaceSnapshot::capture(directory.path(), 10, 2, &error)
                  .isComplete());
     QVERIFY(error.contains(QStringLiteral("byte limit")));
+}
+
+void TestWorkspaceSnapshot::reportsOnlyAdvertisedIsolation() {
+    snack::agent::CapabilitySet codex;
+    codex.accessLevels = {snack::domain::AccessLevel::Strict,
+                          snack::domain::AccessLevel::Workspace};
+    const auto sandbox = snack::workspace::IsolationCapabilityDetector::detect(
+        snack::domain::AgentKind::Codex, codex);
+    QCOMPARE(sandbox.mode, snack::workspace::IsolationMode::AgentSandbox);
+    QVERIFY(sandbox.detail.contains(QStringLiteral("no isolated checkout")));
+
+    const auto mock = snack::workspace::IsolationCapabilityDetector::detect(
+        snack::domain::AgentKind::Mock, codex);
+    QCOMPARE(mock.mode, snack::workspace::IsolationMode::None);
 }
 
 QTEST_GUILESS_MAIN(TestWorkspaceSnapshot)
