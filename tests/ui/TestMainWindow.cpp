@@ -150,6 +150,7 @@ class TestMainWindow final : public QObject {
     void cyclesActiveConversationsInRepositoryOrder();
     void activatesSearchResultsFromKeyboard();
     void marksBackgroundConversationUnreadUntilOpened();
+    void marksAllBackgroundConversationsRead();
 };
 
 void TestMainWindow::opensAndSwitchesConversationFromRail() {
@@ -861,6 +862,78 @@ void TestMainWindow::marksBackgroundConversationUnreadUntilOpened() {
              qPrintable(sendError));
     QTRY_VERIFY(itemText().contains(QStringLiteral("Unread")));
     backgroundController->interrupt();
+}
+
+void TestMainWindow::marksAllBackgroundConversationsRead() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::app::AppSettings settings(directory.filePath(QStringLiteral("settings.ini")));
+    UiMemoryEventRepository repository;
+    snack::domain::Conversation current;
+    current.title = QStringLiteral("Current");
+    current.workingDirectory = directory.path();
+    snack::domain::Conversation firstBackground;
+    firstBackground.title = QStringLiteral("First background");
+    firstBackground.workingDirectory = directory.path();
+    snack::domain::Conversation secondBackground;
+    secondBackground.title = QStringLiteral("Second background");
+    secondBackground.workingDirectory = directory.path();
+    repository.catalog = {current, firstBackground, secondBackground};
+
+    const auto makeRuntime = [](snack::domain::AgentKind kind) {
+        snack::agent::AgentRuntime runtime;
+        runtime.requestedKind = kind;
+        runtime.selectedKind = kind;
+        runtime.adapter = std::make_unique<snack::agent::FakeAgentAdapter>(nullptr, 100);
+        return runtime;
+    };
+    snack::app::SessionManager sessions(&repository, makeRuntime);
+    QString error;
+    auto* currentController = sessions.addPrepared(current, makeRuntime(current.agentKind), &error);
+    auto* firstController =
+        sessions.addPrepared(firstBackground, makeRuntime(firstBackground.agentKind), &error);
+    auto* secondController =
+        sessions.addPrepared(secondBackground, makeRuntime(secondBackground.agentKind), &error);
+    QVERIFY2(currentController != nullptr, qPrintable(error));
+    QVERIFY2(firstController != nullptr, qPrintable(error));
+    QVERIFY2(secondController != nullptr, qPrintable(error));
+    snack::ui::MainWindow window(currentController, &settings, &sessions, false);
+    auto* list = window.findChild<QListWidget*>(QStringLiteral("conversationList"));
+    auto* markAll = window.findChild<QAction*>(QStringLiteral("markAllConversationsReadAction"));
+    QVERIFY(list != nullptr);
+    QVERIFY(markAll != nullptr);
+    QVERIFY(!markAll->isEnabled());
+    firstController->open();
+    secondController->open();
+    QTRY_COMPARE(firstController->status(), snack::domain::ConversationStatus::Idle);
+    QTRY_COMPARE(secondController->status(), snack::domain::ConversationStatus::Idle);
+
+    QString sendError;
+    QVERIFY2(firstController->sendMessage(QStringLiteral("First work"), &sendError),
+             qPrintable(sendError));
+    QVERIFY2(secondController->sendMessage(QStringLiteral("Second work"), &sendError),
+             qPrintable(sendError));
+    QTRY_VERIFY(markAll->isEnabled());
+    const auto unreadCount = [list] {
+        int count = 0;
+        for (int row = 0; row < list->count(); ++row) {
+            if (list->item(row)->text().contains(QStringLiteral("Unread"))) {
+                ++count;
+            }
+        }
+        return count;
+    };
+    QTRY_COMPARE(unreadCount(), 2);
+
+    markAll->trigger();
+    QCOMPARE(unreadCount(), 0);
+    QVERIFY(!markAll->isEnabled());
+    QCOMPARE(window.findChild<QLabel*>(QStringLiteral("conversationTitle"))->text(),
+             QStringLiteral("Current"));
+    QCOMPARE(firstController->status(), snack::domain::ConversationStatus::Running);
+    QCOMPARE(secondController->status(), snack::domain::ConversationStatus::Running);
+    firstController->interrupt();
+    secondController->interrupt();
 }
 
 void TestMainWindow::sendsAndRendersStreamingTurn() {

@@ -237,6 +237,9 @@ void MainWindow::refreshConversationList() {
         pinConversationAction_->setText(
             controller_->conversation().pinned ? tr("Unpin conversation") : tr("Pin conversation"));
     }
+    if (markAllConversationsReadAction_ != nullptr) {
+        markAllConversationsReadAction_->setEnabled(!unreadConversationIds_.isEmpty());
+    }
     if (!error.isEmpty()) {
         statusBar()->showMessage(error, 8000);
     }
@@ -842,6 +845,14 @@ void MainWindow::leaveConversationSearch() {
     composer_->setFocus();
 }
 
+void MainWindow::markAllConversationsRead() {
+    if (unreadConversationIds_.isEmpty()) {
+        return;
+    }
+    unreadConversationIds_.clear();
+    refreshConversationList();
+}
+
 void MainWindow::activatePreviousConversation() { activateRelativeConversation(-1); }
 
 void MainWindow::activateNextConversation() { activateRelativeConversation(1); }
@@ -1217,6 +1228,12 @@ void MainWindow::buildMenus() {
     showArchivedConversationsAction_->setChecked(settingsSnapshot_.showArchivedConversations);
     connect(showArchivedConversationsAction_, &QAction::toggled, this,
             &MainWindow::setShowArchivedConversations);
+    markAllConversationsReadAction_ = viewMenu->addAction(tr("Mark all conversations read"));
+    markAllConversationsReadAction_->setObjectName(
+        QStringLiteral("markAllConversationsReadAction"));
+    markAllConversationsReadAction_->setEnabled(false);
+    connect(markAllConversationsReadAction_, &QAction::triggered, this,
+            &MainWindow::markAllConversationsRead);
     auto* previousConversation = viewMenu->addAction(tr("Previous conversation"));
     previousConversation->setObjectName(QStringLiteral("previousConversationAction"));
     previousConversation->setShortcut(QKeySequence::PreviousChild);
