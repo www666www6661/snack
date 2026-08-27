@@ -278,11 +278,13 @@ void TestMainWindow::filtersConversationRailLocally() {
     codex.title = QStringLiteral("Review parser");
     codex.workingDirectory = QStringLiteral("C:/projects/compiler tools");
     codex.agentKind = snack::domain::AgentKind::Codex;
+    codex.modelId = QStringLiteral("gpt-5.6-sol");
     codex.status = snack::domain::ConversationStatus::WaitingApproval;
     codex.tags = {QStringLiteral("Backend"), QStringLiteral("urgent")};
     snack::domain::Conversation mock;
     mock.title = QStringLiteral("Prototype UI");
     mock.workingDirectory = QStringLiteral("C:/projects/snack");
+    mock.modelId = QStringLiteral("mock-balanced");
     mock.tags = {QStringLiteral("frontend")};
     repository.catalog = {codex, mock};
 
@@ -294,8 +296,9 @@ void TestMainWindow::filtersConversationRailLocally() {
     QVERIFY(search != nullptr);
     QVERIFY(list != nullptr);
     QCOMPARE(search->placeholderText(), QStringLiteral("Search conversations or tag:name"));
-    QCOMPARE(search->toolTip(),
-             QStringLiteral("Filters: tag:name, agent:name, status:name, path:\"directory\""));
+    QCOMPARE(
+        search->toolTip(),
+        QStringLiteral("Filters: tag:name, agent:name, model:id, status:name, path:\"directory\""));
     QCOMPARE(list->count(), 2);
 
     search->setText(QStringLiteral("parser"));
@@ -333,6 +336,18 @@ void TestMainWindow::filtersConversationRailLocally() {
     search->setText(QStringLiteral("agent:code"));
     QCOMPARE(list->count(), 0);
     search->setText(QStringLiteral("agent:"));
+    QCOMPARE(list->count(), 0);
+    search->setText(QStringLiteral("model:GPT-5.6-SOL"));
+    QCOMPARE(list->count(), 1);
+    QCOMPARE(list->item(0)->data(Qt::UserRole).toUuid(), codex.id);
+    search->setText(QStringLiteral("model:gpt-5.6-sol agent:codex tag:backend"));
+    QCOMPARE(list->count(), 1);
+    QCOMPARE(list->item(0)->data(Qt::UserRole).toUuid(), codex.id);
+    search->setText(QStringLiteral("model:gpt-5.6-sol agent:mock"));
+    QCOMPARE(list->count(), 0);
+    search->setText(QStringLiteral("model:gpt-5.6"));
+    QCOMPARE(list->count(), 0);
+    search->setText(QStringLiteral("model:"));
     QCOMPARE(list->count(), 0);
     search->setText(QStringLiteral("status:WAITING-APPROVAL"));
     QCOMPARE(list->count(), 1);

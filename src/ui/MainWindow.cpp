@@ -138,6 +138,14 @@ bool conversationMatchesQuery(const domain::Conversation& conversation, const QS
             }
             continue;
         }
+        if (term.left(6).compare(QStringLiteral("model:"), Qt::CaseInsensitive) == 0) {
+            const QString requestedModel = term.sliced(6);
+            if (requestedModel.isEmpty() ||
+                conversation.modelId.compare(requestedModel, Qt::CaseInsensitive) != 0) {
+                return false;
+            }
+            continue;
+        }
         if (term.left(7).compare(QStringLiteral("status:"), Qt::CaseInsensitive) == 0) {
             if (domain::enumName(conversation.status)
                     .compare(term.sliced(7), Qt::CaseInsensitive) != 0) {
@@ -1087,7 +1095,7 @@ void MainWindow::buildUi() {
     conversationSearch_->setObjectName(QStringLiteral("conversationSearch"));
     conversationSearch_->setPlaceholderText(tr("Search conversations or tag:name"));
     conversationSearch_->setToolTip(
-        tr("Filters: tag:name, agent:name, status:name, path:\"directory\""));
+        tr("Filters: tag:name, agent:name, model:id, status:name, path:\"directory\""));
     conversationSearch_->setClearButtonEnabled(true);
     conversationSearch_->installEventFilter(this);
     sessionRow_ = new QLabel(
