@@ -709,7 +709,7 @@ void SessionController::handleAdapterEvent(domain::AgentEvent event) {
         recomputeActiveStatus();
     } else if (event.type == domain::AgentEventType::ApprovalResolved) {
         const QString requestId = event.payload.value(QStringLiteral("requestId")).toString();
-        if (pendingApprovals_.remove(requestId) > 0) {
+        if (pendingApprovals_.remove(requestId)) {
             recomputeActiveStatus();
         }
     } else if (event.type == domain::AgentEventType::UserInputRequested) {
@@ -728,7 +728,7 @@ void SessionController::handleAdapterEvent(domain::AgentEvent event) {
         recomputeActiveStatus();
     } else if (event.type == domain::AgentEventType::UserInputResolved) {
         const QString requestId = event.payload.value(QStringLiteral("requestId")).toString();
-        if (pendingUserInputs_.remove(requestId) > 0) {
+        if (pendingUserInputs_.remove(requestId)) {
             recomputeActiveStatus();
         }
     }
