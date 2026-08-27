@@ -102,6 +102,7 @@ class TestSessionController final : public QObject {
     void replacesPlaceholderTitleFromFirstMessage();
     void renamesCurrentConversation();
     void archivesConversationMetadata();
+    void pinsConversationMetadata();
     void exposesConversationCatalog();
     void snapshotsSettingsPerTurn();
     void steersActiveTurn();
@@ -207,6 +208,20 @@ void TestSessionController::archivesConversationMetadata() {
     QVERIFY(controller.setArchived(false, &error));
     QVERIFY(!controller.conversation().archived);
     QVERIFY(!repository.conversation_.archived);
+}
+
+void TestSessionController::pinsConversationMetadata() {
+    MemoryEventRepository repository;
+    snack::agent::FakeAgentAdapter adapter(nullptr, 1);
+    snack::session::SessionController controller(conversation(), &adapter, &repository);
+    QString error;
+
+    QVERIFY(controller.setPinned(true, &error));
+    QVERIFY(controller.conversation().pinned);
+    QVERIFY(repository.conversation_.pinned);
+    QVERIFY(controller.setPinned(false, &error));
+    QVERIFY(!controller.conversation().pinned);
+    QVERIFY(!repository.conversation_.pinned);
 }
 
 void TestSessionController::exposesConversationCatalog() {

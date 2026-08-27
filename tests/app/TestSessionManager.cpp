@@ -61,6 +61,7 @@ class TestSessionManager final : public QObject {
     void rejectsArchivingActiveConversation();
     void restoresArchivedConversationMetadata();
     void keepsConversationArchivedWhenRestoreRuntimeIsUnavailable();
+    void pinsOpenAndClosedConversations();
 };
 
 void TestSessionManager::adoptsPreparedRuntimeAndReusesOpenSession() {
@@ -282,6 +283,29 @@ void TestSessionManager::keepsConversationArchivedWhenRestoreRuntimeIsUnavailabl
     QVERIFY(stored.has_value());
     QVERIFY(stored->archived);
     QCOMPARE(manager.size(), qsizetype{0});
+}
+
+void TestSessionManager::pinsOpenAndClosedConversations() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::storage::EventStore repository;
+    QString error;
+    QVERIFY(repository.open(directory.filePath(QStringLiteral("events.sqlite3")), &error));
+    snack::app::SessionManager manager(&repository,
+                                       [](snack::domain::AgentKind kind) { return runtime(kind); });
+    auto open = conversation(snack::domain::AgentKind::Mock);
+    open.title = QStringLiteral("Open");
+    auto closed = conversation(snack::domain::AgentKind::Mock);
+    closed.title = QStringLiteral("Closed");
+    QVERIFY(manager.addPrepared(open, runtime(open.agentKind), &error) != nullptr);
+    QVERIFY(repository.saveConversation(closed, &error));
+
+    QVERIFY(manager.setPinned(open.id, true, &error));
+    QVERIFY(manager.setPinned(closed.id, true, &error));
+    const auto catalog = manager.catalog(&error);
+    QCOMPARE(catalog.size(), 2);
+    QVERIFY(catalog.at(0).pinned);
+    QVERIFY(catalog.at(1).pinned);
 }
 
 QTEST_GUILESS_MAIN(TestSessionManager)

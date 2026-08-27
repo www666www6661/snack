@@ -72,6 +72,7 @@ class MainWindow final : public QMainWindow {
     void createConversation();
     void archiveConversation();
     void restoreSelectedConversation();
+    void togglePinnedConversation();
     void activateConversation(QListWidgetItem* item);
 
   private:
@@ -157,6 +158,7 @@ class MainWindow final : public QMainWindow {
     QListWidget* planList_{nullptr};
     QString startupNotice_;
     QList<domain::Conversation> conversationCatalog_;
+    QAction* pinConversationAction_{nullptr};
     struct ApprovalCardState {
         QLabel* status{nullptr};
         QList<QPushButton*> buttons;

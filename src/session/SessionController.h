@@ -31,6 +31,7 @@ class SessionController final : public QObject {
     bool sendMessage(const QString& message, QString* error = nullptr);
     bool renameConversation(const QString& title, QString* error = nullptr);
     bool setArchived(bool archived, QString* error = nullptr);
+    bool setPinned(bool pinned, QString* error = nullptr);
     bool steerMessage(const QString& message, QString* error = nullptr);
     bool queueMessage(const QString& message, QString* error = nullptr);
     bool updateQueuedMessage(const QUuid& messageId, const QString& message,

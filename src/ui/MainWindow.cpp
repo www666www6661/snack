@@ -172,12 +172,13 @@ void MainWindow::refreshConversationList() {
             !agentName.contains(query, Qt::CaseInsensitive)) {
             continue;
         }
+        const QString title =
+            conversation.pinned ? tr("Pinned · %1").arg(conversation.title) : conversation.title;
         auto* item = new QListWidgetItem(
             conversation.archived
-                ? tr("Archived · %1 · %2\n%3")
-                      .arg(conversation.title, agentName, conversation.workingDirectory)
+                ? tr("Archived · %1 · %2\n%3").arg(title, agentName, conversation.workingDirectory)
                 : QStringLiteral("%1  ·  %2\n%3")
-                      .arg(conversation.title, agentName, conversation.workingDirectory),
+                      .arg(title, agentName, conversation.workingDirectory),
             conversationList_);
         item->setData(Qt::UserRole, conversation.id);
         item->setData(Qt::UserRole + 1, conversation.archived);
@@ -187,6 +188,10 @@ void MainWindow::refreshConversationList() {
         }
     }
     conversationList_->setCurrentRow(currentRow);
+    if (pinConversationAction_ != nullptr) {
+        pinConversationAction_->setText(
+            controller_->conversation().pinned ? tr("Unpin conversation") : tr("Pin conversation"));
+    }
     if (!error.isEmpty()) {
         statusBar()->showMessage(error, 8000);
     }
@@ -295,6 +300,19 @@ void MainWindow::restoreSelectedConversation() {
     }
     persistComposerDraft();
     bindConversation(restoredController);
+}
+
+void MainWindow::togglePinnedConversation() {
+    if (sessions_ == nullptr) {
+        return;
+    }
+    QString error;
+    if (!sessions_->setPinned(controller_->conversation().id, !controller_->conversation().pinned,
+                              &error)) {
+        statusBar()->showMessage(tr("Cannot update pinned state: %1").arg(error), 8000);
+        return;
+    }
+    refreshConversationList();
 }
 
 void MainWindow::bindConversation(session::SessionController* controller) {
@@ -924,6 +942,11 @@ void MainWindow::buildMenus() {
     restoreAction->setObjectName(QStringLiteral("restoreConversationAction"));
     restoreAction->setEnabled(sessions_ != nullptr);
     connect(restoreAction, &QAction::triggered, this, &MainWindow::restoreSelectedConversation);
+    pinConversationAction_ = fileMenu->addAction(tr("Pin conversation"));
+    pinConversationAction_->setObjectName(QStringLiteral("pinConversationAction"));
+    pinConversationAction_->setEnabled(sessions_ != nullptr);
+    connect(pinConversationAction_, &QAction::triggered, this,
+            &MainWindow::togglePinnedConversation);
     fileMenu->addSeparator();
     auto* quitAction = fileMenu->addAction(tr("Quit"));
     quitAction->setObjectName(QStringLiteral("quitAction"));

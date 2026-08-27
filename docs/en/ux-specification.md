@@ -22,6 +22,8 @@ The rail button and `Ctrl/Cmd+N` create a new conversation in the current worksp
 
 Archiving the current idle conversation closes its runtime and selects the next active catalog entry; when none exists, a replacement conversation is created first. Active Agent work cannot be archived. Archived rows remain visible, cannot be opened directly, and can be restored through the File menu without losing history.
 
+Pinning is a metadata-only toggle available for the current conversation. It does not reconnect or recreate the runtime; the repository order is immediately reapplied so pinned rows lead their active or archived section.
+
 A persistent notice directly below the header reports an Agent fallback, connection loss, or reconnect attempt. Fallback notices remain visible while the fallback Agent is active. Connection failures preserve the original diagnostic and expose Reconnect in the notice; retrying keeps the previous cause visible until the native handshake succeeds. The status bar may echo the message but is never its only location. `Closed` is terminal: delayed connection, capability, native-identity, or event signals from an asynchronously exiting Agent cannot reopen the conversation, replace its diagnostic, or append timeline data.
 
 ## 4. Timeline

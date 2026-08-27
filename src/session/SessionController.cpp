@@ -284,6 +284,19 @@ bool SessionController::setArchived(bool archived, QString* error) {
     return true;
 }
 
+bool SessionController::setPinned(bool pinned, QString* error) {
+    if (conversation_.pinned == pinned) {
+        return true;
+    }
+    const bool previous = conversation_.pinned;
+    conversation_.pinned = pinned;
+    if (!repository_->saveConversation(conversation_, error)) {
+        conversation_.pinned = previous;
+        return false;
+    }
+    return true;
+}
+
 bool SessionController::steerMessage(const QString& message, QString* error) {
     const QString trimmed = message.trimmed();
     if (trimmed.isEmpty()) {

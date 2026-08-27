@@ -51,7 +51,20 @@ class UiMemoryEventRepository final : public snack::storage::IEventRepository {
                                           : std::optional<snack::domain::Conversation>(*iterator);
     }
 
-    QList<snack::domain::Conversation> conversations(QString*) const override { return catalog; }
+    QList<snack::domain::Conversation> conversations(QString*) const override {
+        auto result = catalog;
+        std::sort(result.begin(), result.end(), [](const auto& left, const auto& right) {
+            if (left.archived != right.archived) {
+                return !left.archived;
+            }
+            if (left.pinned != right.pinned) {
+                return left.pinned;
+            }
+            const int titleOrder = left.title.compare(right.title, Qt::CaseInsensitive);
+            return titleOrder != 0 ? titleOrder < 0 : left.id.toString() < right.id.toString();
+        });
+        return result;
+    }
 
     bool appendEvent(const snack::domain::AgentEvent& event, QString*) override {
         events.append(event);
@@ -129,6 +142,7 @@ class TestMainWindow final : public QObject {
     void filtersConversationRailLocally();
     void createsConversationFromRail();
     void archivesAndRestoresConversation();
+    void pinsAndReordersConversationRail();
 };
 
 void TestMainWindow::opensAndSwitchesConversationFromRail() {
@@ -392,6 +406,48 @@ void TestMainWindow::archivesAndRestoresConversation() {
     QVERIFY(sessions.controller(first.id) != nullptr);
     QVERIFY(!list->currentItem()->data(Qt::UserRole + 1).toBool());
     QCOMPARE(repository.events.size(), 0);
+}
+
+void TestMainWindow::pinsAndReordersConversationRail() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::app::AppSettings settings(directory.filePath(QStringLiteral("settings.ini")));
+    UiMemoryEventRepository repository;
+    snack::domain::Conversation first;
+    first.title = QStringLiteral("Zulu");
+    first.workingDirectory = directory.path();
+    snack::domain::Conversation second;
+    second.title = QStringLiteral("Alpha");
+    second.workingDirectory = directory.path();
+    repository.catalog = {first, second};
+
+    const auto makeRuntime = [](snack::domain::AgentKind kind) {
+        snack::agent::AgentRuntime runtime;
+        runtime.requestedKind = kind;
+        runtime.selectedKind = kind;
+        runtime.adapter = std::make_unique<snack::agent::FakeAgentAdapter>(nullptr, 1);
+        return runtime;
+    };
+    snack::app::SessionManager sessions(&repository, makeRuntime);
+    QString error;
+    auto* controller = sessions.addPrepared(first, makeRuntime(first.agentKind), &error);
+    QVERIFY(controller != nullptr);
+    snack::ui::MainWindow window(controller, &settings, &sessions, false);
+    auto* pin = window.findChild<QAction*>(QStringLiteral("pinConversationAction"));
+    auto* list = window.findChild<QListWidget*>(QStringLiteral("conversationList"));
+    QVERIFY(pin != nullptr);
+    QVERIFY(list != nullptr);
+    QCOMPARE(list->item(0)->data(Qt::UserRole).toUuid(), second.id);
+
+    pin->trigger();
+    QVERIFY(controller->conversation().pinned);
+    QCOMPARE(list->item(0)->data(Qt::UserRole).toUuid(), first.id);
+    QVERIFY(list->item(0)->text().contains(QStringLiteral("Pinned")));
+    QCOMPARE(pin->text(), QStringLiteral("Unpin conversation"));
+    pin->trigger();
+    QVERIFY(!controller->conversation().pinned);
+    QCOMPARE(list->item(0)->data(Qt::UserRole).toUuid(), second.id);
+    QCOMPARE(pin->text(), QStringLiteral("Pin conversation"));
 }
 
 void TestMainWindow::sendsAndRendersStreamingTurn() {

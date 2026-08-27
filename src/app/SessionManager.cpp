@@ -115,6 +115,25 @@ bool SessionManager::setArchived(const QUuid& conversationId, bool archived, QSt
     return repository_->saveConversation(*stored, error);
 }
 
+bool SessionManager::setPinned(const QUuid& conversationId, bool pinned, QString* error) {
+    if (conversationId.isNull()) {
+        setError(error, QStringLiteral("Cannot update an invalid conversation ID"));
+        return false;
+    }
+    if (auto* openController = registry_.controller(conversationId); openController != nullptr) {
+        return openController->setPinned(pinned, error);
+    }
+    auto stored = repository_->conversationById(conversationId, error);
+    if (!stored.has_value()) {
+        if (error == nullptr || error->isEmpty()) {
+            setError(error, QStringLiteral("Conversation does not exist"));
+        }
+        return false;
+    }
+    stored->pinned = pinned;
+    return repository_->saveConversation(*stored, error);
+}
+
 session::SessionController* SessionManager::restore(const QUuid& conversationId, QString* error) {
     if (conversationId.isNull()) {
         setError(error, QStringLiteral("Cannot restore an invalid conversation ID"));
