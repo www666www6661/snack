@@ -4,6 +4,7 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QString>
+#include <QStringList>
 #include <QUuid>
 
 namespace snack::domain {
@@ -76,6 +77,7 @@ struct Conversation {
     QString nativeSessionId;
     bool archived{false};
     bool pinned{false};
+    QStringList tags;
 };
 
 struct AgentEvent {

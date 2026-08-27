@@ -5,6 +5,7 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QSqlError>
 #include <QSqlQuery>
@@ -14,7 +15,7 @@
 namespace snack::storage {
 namespace {
 
-constexpr int currentSchemaVersion = 6;
+constexpr int currentSchemaVersion = 7;
 
 struct Migration {
     int version;
@@ -101,7 +102,17 @@ QList<Migration> migrations() {
               QStringLiteral("UPDATE schema_migrations SET "
                              "applied_at = CAST(strftime('%s','now') AS INTEGER) * 1000, "
                              "completed_at = CAST(strftime('%s','now') AS INTEGER) * 1000 "
-                             "WHERE version = 6")}}};
+                             "WHERE version = 6")}},
+            {7,
+             {QStringLiteral("INSERT INTO schema_migrations "
+                             "(version, applied_at, started_at, completed_at) VALUES "
+                             "(7, 0, CAST(strftime('%s','now') AS INTEGER) * 1000, NULL)"),
+              QStringLiteral("ALTER TABLE conversations ADD COLUMN "
+                             "tags TEXT NOT NULL DEFAULT '[]'"),
+              QStringLiteral("UPDATE schema_migrations SET "
+                             "applied_at = CAST(strftime('%s','now') AS INTEGER) * 1000, "
+                             "completed_at = CAST(strftime('%s','now') AS INTEGER) * 1000 "
+                             "WHERE version = 7")}}};
 }
 
 QString compactJson(const QJsonObject& object) {
@@ -111,6 +122,28 @@ QString compactJson(const QJsonObject& object) {
 QJsonObject parseObject(const QString& value) {
     const auto document = QJsonDocument::fromJson(value.toUtf8());
     return document.isObject() ? document.object() : QJsonObject{};
+}
+
+QString compactStringList(const QStringList& values) {
+    QJsonArray array;
+    for (const QString& value : values) {
+        array.append(value);
+    }
+    return QString::fromUtf8(QJsonDocument(array).toJson(QJsonDocument::Compact));
+}
+
+QStringList parseStringList(const QString& value) {
+    const auto document = QJsonDocument::fromJson(value.toUtf8());
+    QStringList result;
+    if (!document.isArray()) {
+        return result;
+    }
+    for (const QJsonValue& item : document.array()) {
+        if (item.isString()) {
+            result.append(item.toString());
+        }
+    }
+    return result;
 }
 
 void setSqlError(QString* error, const QString& context, const QSqlError& sqlError) {
@@ -218,14 +251,14 @@ bool EventStore::saveConversation(const domain::Conversation& conversation, QStr
     query.prepare(QStringLiteral(
         "INSERT INTO conversations "
         "(id, title, title_is_placeholder, working_directory, agent_kind, status, "
-        "native_thread_id, native_session_id, archived, pinned) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+        "native_thread_id, native_session_id, archived, pinned, tags) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
         "ON CONFLICT(id) DO UPDATE SET title = excluded.title, "
         "title_is_placeholder = excluded.title_is_placeholder, "
         "working_directory = excluded.working_directory, agent_kind = excluded.agent_kind, "
         "status = excluded.status, native_thread_id = excluded.native_thread_id, "
         "native_session_id = excluded.native_session_id, archived = excluded.archived, "
-        "pinned = excluded.pinned"));
+        "pinned = excluded.pinned, tags = excluded.tags"));
     query.addBindValue(conversation.id.toString(QUuid::WithoutBraces));
     query.addBindValue(conversation.title);
     query.addBindValue(conversation.titleIsPlaceholder);
@@ -236,6 +269,7 @@ bool EventStore::saveConversation(const domain::Conversation& conversation, QStr
     query.addBindValue(conversation.nativeSessionId);
     query.addBindValue(conversation.archived);
     query.addBindValue(conversation.pinned);
+    query.addBindValue(compactStringList(conversation.tags));
     if (!query.exec()) {
         setSqlError(error, QStringLiteral("Cannot save conversation"), query.lastError());
         return false;
@@ -248,7 +282,7 @@ std::optional<domain::Conversation> EventStore::conversationById(const QUuid& co
     QSqlQuery query(database_);
     query.prepare(
         QStringLiteral("SELECT title, title_is_placeholder, working_directory, agent_kind, "
-                       "status, native_thread_id, native_session_id, archived, pinned "
+                       "status, native_thread_id, native_session_id, archived, pinned, tags "
                        "FROM conversations WHERE id = ?"));
     query.addBindValue(conversationId.toString(QUuid::WithoutBraces));
     if (!query.exec()) {
@@ -270,6 +304,7 @@ std::optional<domain::Conversation> EventStore::conversationById(const QUuid& co
     conversation.nativeSessionId = query.value(6).toString();
     conversation.archived = query.value(7).toBool();
     conversation.pinned = query.value(8).toBool();
+    conversation.tags = parseStringList(query.value(9).toString());
     return conversation;
 }
 
@@ -278,7 +313,7 @@ QList<domain::Conversation> EventStore::conversations(QString* error) const {
     QSqlQuery query(database_);
     if (!query.exec(QStringLiteral(
             "SELECT id, title, title_is_placeholder, working_directory, agent_kind, status, "
-            "native_thread_id, native_session_id, archived, pinned FROM conversations "
+            "native_thread_id, native_session_id, archived, pinned, tags FROM conversations "
             "ORDER BY archived ASC, pinned DESC, title COLLATE NOCASE ASC, id ASC"))) {
         setSqlError(error, QStringLiteral("Cannot load conversations"), query.lastError());
         return result;
@@ -295,6 +330,7 @@ QList<domain::Conversation> EventStore::conversations(QString* error) const {
         conversation.nativeSessionId = query.value(7).toString();
         conversation.archived = query.value(8).toBool();
         conversation.pinned = query.value(9).toBool();
+        conversation.tags = parseStringList(query.value(10).toString());
         result.append(std::move(conversation));
     }
     return result;
@@ -600,11 +636,22 @@ bool EventStore::validateSchema(bool checkIntegrity, QString* error) const {
 
     QSqlQuery completionQuery(database_);
     if (!completionQuery.exec(QStringLiteral("SELECT COUNT(*) FROM schema_migrations "
-                                             "WHERE version IN (2, 3, 4, 5, 6) "
+                                             "WHERE version IN (2, 3, 4, 5, 6, 7) "
                                              "AND completed_at IS NOT NULL")) ||
-        !completionQuery.next() || completionQuery.value(0).toInt() != 5) {
+        !completionQuery.next() || completionQuery.value(0).toInt() != 6) {
         if (error != nullptr) {
             *error = QStringLiteral("Database schema validation failed: migrations are incomplete");
+        }
+        return false;
+    }
+    QSqlQuery tagsColumnQuery(database_);
+    if (!tagsColumnQuery.exec(
+            QStringLiteral("SELECT COUNT(*) FROM pragma_table_info('conversations') "
+                           "WHERE name = 'tags' AND \"notnull\" = 1")) ||
+        !tagsColumnQuery.next() || tagsColumnQuery.value(0).toInt() != 1) {
+        if (error != nullptr) {
+            *error = QStringLiteral(
+                "Database schema validation failed: conversation tags column is missing");
         }
         return false;
     }
