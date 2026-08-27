@@ -67,11 +67,15 @@ QString compactJson(const QJsonValue& value) {
 
 MainWindow::MainWindow(session::SessionController* controller, app::AppSettings* settings,
                        QWidget* parent)
-    : MainWindow(controller, settings, QSystemTrayIcon::isSystemTrayAvailable(), parent) {}
+    : MainWindow(controller, settings, nullptr, QSystemTrayIcon::isSystemTrayAvailable(), parent) {}
 
 MainWindow::MainWindow(session::SessionController* controller, app::AppSettings* settings,
                        bool closeToTrayEnabled, QWidget* parent)
-    : QMainWindow(parent), controller_(controller), settings_(settings),
+    : MainWindow(controller, settings, nullptr, closeToTrayEnabled, parent) {}
+
+MainWindow::MainWindow(session::SessionController* controller, app::AppSettings* settings,
+                       app::SessionManager* sessions, bool closeToTrayEnabled, QWidget* parent)
+    : QMainWindow(parent), controller_(controller), sessions_(sessions), settings_(settings),
       settingsSnapshot_(settings_->load()), closeToTrayEnabled_(closeToTrayEnabled) {
     Q_ASSERT(controller_ != nullptr);
     Q_ASSERT(settings_ != nullptr);
@@ -81,6 +85,27 @@ MainWindow::MainWindow(session::SessionController* controller, app::AppSettings*
     restoreWindowState();
     buildTray();
 
+    connectControllerSignals();
+    refreshConversationList();
+    connect(qApp->styleHints(), &QStyleHints::colorSchemeChanged, this,
+            [this](Qt::ColorScheme) { refreshSystemTheme(); });
+    connect(qApp, &QCoreApplication::aboutToQuit, this, &MainWindow::shutdown);
+
+    restoreTimeline();
+    if (settingsSnapshot_.themeMode == app::ThemeMode::System) {
+        refreshSystemTheme();
+    } else {
+        applyTheme(settingsSnapshot_.themeMode == app::ThemeMode::Dark ? ThemeDefinition::dark()
+                                                                       : ThemeDefinition::light());
+    }
+    applyInterfaceScale(settingsSnapshot_.interfaceScale);
+    rebuildCapabilityControls(controller_->nextTurnSettings());
+    updateQueuedMessages(controller_->queuedMessages());
+    controller_->open();
+    QTimer::singleShot(0, this, &MainWindow::ensureWindowVisible);
+}
+
+void MainWindow::connectControllerSignals() {
     connect(controller_, &session::SessionController::eventRecorded, this,
             &MainWindow::appendEvent);
     connect(controller_, &session::SessionController::statusChanged, this,
@@ -104,22 +129,6 @@ MainWindow::MainWindow(session::SessionController* controller, app::AppSettings*
             &MainWindow::updateQueuedMessages);
     connect(controller_, &session::SessionController::promptTemplatesChanged, this,
             [this] { rebuildPromptTemplateMenu(); });
-    connect(qApp->styleHints(), &QStyleHints::colorSchemeChanged, this,
-            [this](Qt::ColorScheme) { refreshSystemTheme(); });
-    connect(qApp, &QCoreApplication::aboutToQuit, this, &MainWindow::shutdown);
-
-    restoreTimeline();
-    if (settingsSnapshot_.themeMode == app::ThemeMode::System) {
-        refreshSystemTheme();
-    } else {
-        applyTheme(settingsSnapshot_.themeMode == app::ThemeMode::Dark ? ThemeDefinition::dark()
-                                                                       : ThemeDefinition::light());
-    }
-    applyInterfaceScale(settingsSnapshot_.interfaceScale);
-    rebuildCapabilityControls(controller_->nextTurnSettings());
-    updateQueuedMessages(controller_->queuedMessages());
-    controller_->open();
-    QTimer::singleShot(0, this, &MainWindow::ensureWindowVisible);
 }
 
 void MainWindow::showStartupNotice(const QString& notice) {
@@ -129,6 +138,104 @@ void MainWindow::showStartupNotice(const QString& notice) {
         statusBar()->showMessage(startupNotice_, 10000);
         refreshConnectionNotice();
     }
+}
+
+void MainWindow::refreshConversationList() {
+    QString error;
+    conversationCatalog_ = controller_->conversationCatalog(&error);
+    const auto current = std::find_if(
+        conversationCatalog_.cbegin(), conversationCatalog_.cend(),
+        [this](const auto& value) { return value.id == controller_->conversation().id; });
+    if (current == conversationCatalog_.cend()) {
+        conversationCatalog_.prepend(controller_->conversation());
+    }
+
+    const QSignalBlocker blocker(conversationList_);
+    conversationList_->clear();
+    int currentRow = -1;
+    for (const auto& conversation : conversationCatalog_) {
+        auto* item = new QListWidgetItem(
+            QStringLiteral("%1\n%2").arg(conversation.title, conversation.workingDirectory),
+            conversationList_);
+        item->setData(Qt::UserRole, conversation.id);
+        item->setToolTip(conversation.workingDirectory);
+        if (conversation.id == controller_->conversation().id) {
+            currentRow = conversationList_->count() - 1;
+        }
+    }
+    conversationList_->setCurrentRow(currentRow);
+    if (!error.isEmpty()) {
+        statusBar()->showMessage(error, 8000);
+    }
+}
+
+void MainWindow::activateConversation(QListWidgetItem* item) {
+    if (item == nullptr || sessions_ == nullptr) {
+        return;
+    }
+    const QUuid conversationId = item->data(Qt::UserRole).toUuid();
+    if (conversationId == controller_->conversation().id) {
+        return;
+    }
+    const auto selected =
+        std::find_if(conversationCatalog_.cbegin(), conversationCatalog_.cend(),
+                     [&conversationId](const auto& value) { return value.id == conversationId; });
+    if (selected == conversationCatalog_.cend()) {
+        refreshConversationList();
+        return;
+    }
+
+    persistComposerDraft();
+    QString error;
+    auto* nextController = sessions_->open(*selected, &error);
+    if (nextController == nullptr) {
+        statusBar()->showMessage(tr("Cannot open conversation: %1").arg(error), 8000);
+        refreshConversationList();
+        return;
+    }
+
+    disconnect(controller_, nullptr, this, nullptr);
+    controller_ = nextController;
+    resetConversationView();
+    connectControllerSignals();
+
+    const auto* runtime = sessions_->runtime(conversationId);
+    startupNotice_ = runtime != nullptr && runtime->fellBack
+                         ? tr("Using Mock Agent because %1").arg(runtime->detail)
+                         : QString{};
+    sessionRow_->setToolTip(startupNotice_);
+    updateConversationTitle(controller_->conversation().title);
+    composer_->setPlainText(settings_->composerDraft(conversationId));
+    restoreTimeline();
+    rebuildCapabilityControls(controller_->nextTurnSettings());
+    updateQueuedMessages(controller_->queuedMessages());
+    updateConnectionDetail(controller_->connectionDetail());
+    updateStatus(controller_->status());
+
+    settingsSnapshot_.lastConversationId = conversationId.toString(QUuid::WithoutBraces);
+    settingsSnapshot_.lastWorkspace = controller_->conversation().workingDirectory;
+    settings_->save(settingsSnapshot_);
+    refreshConversationList();
+    controller_->open();
+}
+
+void MainWindow::resetConversationView() {
+    timeline_->clear();
+    approvalCards_.clear();
+    userInputCards_.clear();
+    toolCards_.clear();
+    reasoningCards_.clear();
+    activeAgentRow_ = -1;
+    usageLabel_->clear();
+    usageLabel_->hide();
+    planList_->clear();
+    planItemText_->clear();
+    planItemText_->hide();
+    planExplanation_->setText(tr("Agent plans will appear here."));
+    streamedPlanText_.clear();
+    taskDock_->hide();
+    const QSignalBlocker blocker(composer_);
+    composer_->clear();
 }
 
 void MainWindow::activateWindowForRequest(const std::optional<QString>& directory) {
@@ -490,12 +597,14 @@ void MainWindow::buildUi() {
         tr("●  %1\n    %2").arg(agentDisplayName(), controller_->conversation().title), sidebar);
     sessionRow_->setObjectName(QStringLiteral("sessionRow"));
     sessionRow_->setContentsMargins(8, 14, 8, 14);
+    conversationList_ = new QListWidget(sidebar);
+    conversationList_->setObjectName(QStringLiteral("conversationList"));
     sidebarLayout->addWidget(brand);
     sidebarLayout->addSpacing(10);
     sidebarLayout->addWidget(newConversation);
     sidebarLayout->addWidget(search);
     sidebarLayout->addWidget(sessionRow_);
-    sidebarLayout->addStretch();
+    sidebarLayout->addWidget(conversationList_, 1);
 
     auto* conversation = new QWidget(central);
     auto* conversationLayout = new QVBoxLayout(conversation);
@@ -652,6 +761,7 @@ void MainWindow::buildUi() {
     connect(sendButton_, &QPushButton::clicked, this, &MainWindow::sendMessage);
     connect(stopButton_, &QPushButton::clicked, this, &MainWindow::stopTurn);
     connect(reconnectButton_, &QPushButton::clicked, this, &MainWindow::reconnectSession);
+    connect(conversationList_, &QListWidget::itemClicked, this, &MainWindow::activateConversation);
     connect(composer_, &ComposerTextEdit::sendRequested, this, &MainWindow::sendMessage);
     connect(composer_, &ComposerTextEdit::queueRequested, this, &MainWindow::queueComposerMessage);
     connect(composer_, &ComposerTextEdit::stopRequested, this, &MainWindow::stopTurn);
@@ -1458,6 +1568,9 @@ void MainWindow::refreshConnectionNotice() {
 void MainWindow::updateConversationTitle(const QString& title) {
     titleLabel_->setText(title);
     sessionRow_->setText(tr("●  %1\n    %2").arg(agentDisplayName(), title));
+    if (conversationList_ != nullptr) {
+        refreshConversationList();
+    }
 }
 
 void MainWindow::persistComposerDraft() {
@@ -1645,15 +1758,22 @@ bool MainWindow::confirmQuit() {
 }
 
 bool MainWindow::hasActiveWork() const {
-    switch (controller_->status()) {
-    case domain::ConversationStatus::Connecting:
-    case domain::ConversationStatus::Running:
-    case domain::ConversationStatus::WaitingApproval:
-    case domain::ConversationStatus::WaitingInput:
-        return true;
-    default:
-        return false;
+    const auto isActive = [](domain::ConversationStatus status) {
+        return status == domain::ConversationStatus::Connecting ||
+               status == domain::ConversationStatus::Running ||
+               status == domain::ConversationStatus::WaitingApproval ||
+               status == domain::ConversationStatus::WaitingInput;
+    };
+    if (sessions_ == nullptr) {
+        return isActive(controller_->status());
     }
+    for (const QUuid& id : sessions_->conversationIds()) {
+        const auto* openController = sessions_->controller(id);
+        if (openController != nullptr && isActive(openController->status())) {
+            return true;
+        }
+    }
+    return false;
 }
 
 } // namespace snack::ui

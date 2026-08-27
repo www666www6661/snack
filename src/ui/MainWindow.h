@@ -1,6 +1,7 @@
 #pragma once
 
 #include "app/AppSettings.h"
+#include "app/SessionManager.h"
 #include "session/SessionController.h"
 #include "ui/ThemeDefinition.h"
 
@@ -34,6 +35,8 @@ class MainWindow final : public QMainWindow {
                QWidget* parent = nullptr);
     MainWindow(session::SessionController* controller, app::AppSettings* settings,
                bool closeToTrayEnabled, QWidget* parent = nullptr);
+    MainWindow(session::SessionController* controller, app::AppSettings* settings,
+               app::SessionManager* sessions, bool closeToTrayEnabled, QWidget* parent = nullptr);
 
     void activateWindowForRequest(const std::optional<QString>& directory);
     void showStartupNotice(const QString& notice);
@@ -66,10 +69,14 @@ class MainWindow final : public QMainWindow {
     void requestQuit();
     void preferCodexAgent();
     void preferMockAgent();
+    void activateConversation(QListWidgetItem* item);
 
   private:
     void buildUi();
     void buildMenus();
+    void connectControllerSignals();
+    void refreshConversationList();
+    void resetConversationView();
     void appendEvent(const domain::AgentEvent& event);
     void appendApprovalRequest(const domain::AgentEvent& event);
     void resolveApprovalCard(const domain::AgentEvent& event);
@@ -109,6 +116,7 @@ class MainWindow final : public QMainWindow {
     [[nodiscard]] bool hasActiveWork() const;
 
     session::SessionController* controller_{nullptr};
+    app::SessionManager* sessions_{nullptr};
     app::AppSettings* settings_{nullptr};
     app::AppSettingsSnapshot settingsSnapshot_;
     QListWidget* timeline_{nullptr};
@@ -133,6 +141,7 @@ class MainWindow final : public QMainWindow {
     QLabel* titleLabel_{nullptr};
     QLabel* usageLabel_{nullptr};
     QLabel* sessionRow_{nullptr};
+    QListWidget* conversationList_{nullptr};
     QComboBox* modelCombo_{nullptr};
     QComboBox* effortCombo_{nullptr};
     QComboBox* accessCombo_{nullptr};
@@ -142,6 +151,7 @@ class MainWindow final : public QMainWindow {
     QLabel* planItemText_{nullptr};
     QListWidget* planList_{nullptr};
     QString startupNotice_;
+    QList<domain::Conversation> conversationCatalog_;
     struct ApprovalCardState {
         QLabel* status{nullptr};
         QList<QPushButton*> buttons;

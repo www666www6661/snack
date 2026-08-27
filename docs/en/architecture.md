@@ -76,7 +76,7 @@ Interruptions and process loss are persisted. Reconnection never automatically r
 
 M3 multi-session ownership begins at a Widget-free registry. The application entry point owns this registry through `SessionManager` instead of keeping a standalone runtime/controller pair, while windows and conversation rails receive non-owning controller pointers only. Removing a registry entry first drives an open controller to `Closed`, then destroys it, its adapter, and finally its transport; controllers already closed by a window shutdown are not closed twice. This boundary prevents an active controller from retaining a dangling Agent pointer and gives true exit one deterministic `closeAll()` path.
 
-`SessionManager` is the application-layer opening boundary above the registry. It accepts a runtime factory, reuses an already-open compatible session, and creates a fresh runtime only for a closed historical conversation. A fallback whose selected Agent type differs from the stored conversation is reported as unavailable rather than silently opening that conversation through another Agent.
+`SessionManager` is the application-layer opening boundary above the registry. It accepts a runtime factory, reuses an already-open compatible session, and creates a fresh runtime only for a closed historical conversation. Persisted historical status is normalized to `Dormant` before the fresh controller connects; stale `Idle` or `Running` values never imply that a newly created runtime is already connected. A fallback whose selected Agent type differs from the stored conversation is reported as unavailable rather than silently opening that conversation through another Agent.
 
 ## 6. WebEngine boundary
 

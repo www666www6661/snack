@@ -139,7 +139,7 @@ int main(int argc, char* argv[]) {
 
     const bool closeToTrayEnabled = QSystemTrayIcon::isSystemTrayAvailable();
     application.setQuitOnLastWindowClosed(!closeToTrayEnabled);
-    snack::ui::MainWindow window(controller, &settings, closeToTrayEnabled);
+    snack::ui::MainWindow window(controller, &settings, &sessions, closeToTrayEnabled);
     if (currentRuntime->fellBack) {
         window.showStartupNotice(QCoreApplication::translate("main", "Using Mock Agent because %1")
                                      .arg(currentRuntime->detail));

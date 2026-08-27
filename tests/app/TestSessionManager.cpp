@@ -89,13 +89,15 @@ void TestSessionManager::opensMultipleConversationsOnDemand() {
         return runtime(kind);
     });
     const auto codex = conversation(snack::domain::AgentKind::Codex);
-    const auto mock = conversation(snack::domain::AgentKind::Mock);
+    auto mock = conversation(snack::domain::AgentKind::Mock);
+    mock.status = snack::domain::ConversationStatus::Running;
 
     QVERIFY(manager.open(codex, &error) != nullptr);
     QVERIFY(manager.open(mock, &error) != nullptr);
     QCOMPARE(factoryCalls, 2);
     QCOMPARE(manager.size(), qsizetype{2});
     QCOMPARE(manager.conversationIds(), QList<QUuid>({codex.id, mock.id}));
+    QCOMPARE(manager.controller(mock.id)->status(), snack::domain::ConversationStatus::Dormant);
     QVERIFY(manager.close(codex.id));
     QCOMPARE(manager.size(), qsizetype{1});
 }

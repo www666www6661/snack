@@ -1,5 +1,6 @@
 #include "agent/FakeAgentAdapter.h"
 #include "app/AppSettings.h"
+#include "app/SessionManager.h"
 #include "session/SessionController.h"
 #include "storage/EventRepository.h"
 #include "ui/MainWindow.h"
@@ -20,20 +21,37 @@
 #include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QStatusBar>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QTimer>
 
 class UiMemoryEventRepository final : public snack::storage::IEventRepository {
   public:
-    bool saveConversation(const snack::domain::Conversation&, QString*) override { return true; }
-
-    std::optional<snack::domain::Conversation> conversationById(const QUuid&,
-                                                                QString*) const override {
-        return std::nullopt;
+    bool saveConversation(const snack::domain::Conversation& conversation, QString*) override {
+        const auto iterator =
+            std::find_if(catalog.begin(), catalog.end(), [&conversation](const auto& existing) {
+                return existing.id == conversation.id;
+            });
+        if (iterator == catalog.end()) {
+            catalog.append(conversation);
+        } else {
+            *iterator = conversation;
+        }
+        return true;
     }
 
-    QList<snack::domain::Conversation> conversations(QString*) const override { return {}; }
+    std::optional<snack::domain::Conversation> conversationById(const QUuid& conversationId,
+                                                                QString*) const override {
+        const auto iterator = std::find_if(catalog.cbegin(), catalog.cend(),
+                                           [&conversationId](const auto& conversation) {
+                                               return conversation.id == conversationId;
+                                           });
+        return iterator == catalog.cend() ? std::nullopt
+                                          : std::optional<snack::domain::Conversation>(*iterator);
+    }
+
+    QList<snack::domain::Conversation> conversations(QString*) const override { return catalog; }
 
     bool appendEvent(const snack::domain::AgentEvent& event, QString*) override {
         events.append(event);
@@ -82,6 +100,7 @@ class UiMemoryEventRepository final : public snack::storage::IEventRepository {
     }
 
     QList<snack::domain::AgentEvent> events;
+    QList<snack::domain::Conversation> catalog;
     QHash<QUuid, QList<snack::domain::QueuedMessage>> queues;
     QHash<QUuid, snack::domain::PromptTemplate> templates;
 };
@@ -105,7 +124,121 @@ class TestMainWindow final : public QObject {
     void handlesApprovalCard();
     void handlesUserInputCardAndUsage();
     void cancelsQuitWhileAgentIsRunning();
+    void opensAndSwitchesConversationFromRail();
+    void keepsCurrentConversationWhenRailOpenFails();
 };
+
+void TestMainWindow::opensAndSwitchesConversationFromRail() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::app::AppSettings settings(directory.filePath(QStringLiteral("settings.ini")));
+    UiMemoryEventRepository repository;
+    snack::domain::Conversation first;
+    first.title = QStringLiteral("First session");
+    first.workingDirectory = directory.filePath(QStringLiteral("first"));
+    snack::domain::Conversation second;
+    second.title = QStringLiteral("Second session");
+    second.workingDirectory = directory.filePath(QStringLiteral("second"));
+    repository.catalog = {first, second};
+    snack::domain::AgentEvent secondMessage;
+    secondMessage.conversationId = second.id;
+    secondMessage.sequence = 1;
+    secondMessage.type = snack::domain::AgentEventType::UserMessage;
+    secondMessage.payload = {{QStringLiteral("text"), QStringLiteral("Second timeline")}};
+    repository.events.append(secondMessage);
+    settings.saveComposerDraft(first.id, QStringLiteral("First draft"));
+    settings.saveComposerDraft(second.id, QStringLiteral("Second draft"));
+
+    const auto makeRuntime = [](snack::domain::AgentKind kind) {
+        snack::agent::AgentRuntime runtime;
+        runtime.requestedKind = kind;
+        runtime.selectedKind = kind;
+        runtime.adapter = std::make_unique<snack::agent::FakeAgentAdapter>(nullptr, 1);
+        return runtime;
+    };
+    snack::app::SessionManager sessions(&repository, makeRuntime);
+    QString error;
+    auto* firstController = sessions.addPrepared(first, makeRuntime(first.agentKind), &error);
+    QVERIFY2(firstController != nullptr, qPrintable(error));
+    snack::ui::MainWindow window(firstController, &settings, &sessions, false);
+    auto* list = window.findChild<QListWidget*>(QStringLiteral("conversationList"));
+    auto* title = window.findChild<QLabel*>(QStringLiteral("conversationTitle"));
+    auto* composer = window.findChild<QPlainTextEdit*>(QStringLiteral("composer"));
+    auto* timeline = window.findChild<QListWidget*>(QStringLiteral("timeline"));
+    QVERIFY(list != nullptr);
+    QVERIFY(title != nullptr);
+    QVERIFY(composer != nullptr);
+    QVERIFY(timeline != nullptr);
+    QCOMPARE(list->count(), 2);
+    QCOMPARE(composer->toPlainText(), QStringLiteral("First draft"));
+
+    QListWidgetItem* secondItem = nullptr;
+    for (int row = 0; row < list->count(); ++row) {
+        if (list->item(row)->data(Qt::UserRole).toUuid() == second.id) {
+            secondItem = list->item(row);
+        }
+    }
+    QVERIFY(secondItem != nullptr);
+    emit list->itemClicked(secondItem);
+
+    QCOMPARE(title->text(), QStringLiteral("Second session"));
+    QCOMPARE(composer->toPlainText(), QStringLiteral("Second draft"));
+    QCOMPARE(settings.composerDraft(first.id), QStringLiteral("First draft"));
+    QCOMPARE(timeline->count(), 1);
+    QVERIFY(timeline->item(0)->text().contains(QStringLiteral("Second timeline")));
+    QCOMPARE(sessions.size(), qsizetype{2});
+    QVERIFY(sessions.controller(second.id) != nullptr);
+    QCOMPARE(settings.load().lastConversationId, second.id.toString(QUuid::WithoutBraces));
+    QCOMPARE(list->currentItem()->data(Qt::UserRole).toUuid(), second.id);
+}
+
+void TestMainWindow::keepsCurrentConversationWhenRailOpenFails() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::app::AppSettings settings(directory.filePath(QStringLiteral("settings.ini")));
+    UiMemoryEventRepository repository;
+    snack::domain::Conversation current;
+    current.title = QStringLiteral("Current session");
+    current.workingDirectory = directory.path();
+    snack::domain::Conversation unavailable;
+    unavailable.title = QStringLiteral("Unavailable Codex session");
+    unavailable.workingDirectory = directory.path();
+    unavailable.agentKind = snack::domain::AgentKind::Codex;
+    repository.catalog = {current, unavailable};
+
+    const auto mockRuntime = [](snack::domain::AgentKind requestedKind) {
+        snack::agent::AgentRuntime runtime;
+        runtime.requestedKind = requestedKind;
+        runtime.selectedKind = snack::domain::AgentKind::Mock;
+        runtime.detail = QStringLiteral("Codex unavailable");
+        runtime.fellBack = requestedKind != snack::domain::AgentKind::Mock;
+        runtime.adapter = std::make_unique<snack::agent::FakeAgentAdapter>(nullptr, 1);
+        return runtime;
+    };
+    snack::app::SessionManager sessions(&repository, mockRuntime);
+    QString error;
+    auto* controller = sessions.addPrepared(current, mockRuntime(current.agentKind), &error);
+    QVERIFY2(controller != nullptr, qPrintable(error));
+    snack::ui::MainWindow window(controller, &settings, &sessions, false);
+    auto* list = window.findChild<QListWidget*>(QStringLiteral("conversationList"));
+    auto* title = window.findChild<QLabel*>(QStringLiteral("conversationTitle"));
+    QVERIFY(list != nullptr);
+    QVERIFY(title != nullptr);
+
+    QListWidgetItem* unavailableItem = nullptr;
+    for (int row = 0; row < list->count(); ++row) {
+        if (list->item(row)->data(Qt::UserRole).toUuid() == unavailable.id) {
+            unavailableItem = list->item(row);
+        }
+    }
+    QVERIFY(unavailableItem != nullptr);
+    emit list->itemClicked(unavailableItem);
+
+    QCOMPARE(title->text(), QStringLiteral("Current session"));
+    QCOMPARE(sessions.size(), qsizetype{1});
+    QCOMPARE(list->currentItem()->data(Qt::UserRole).toUuid(), current.id);
+    QVERIFY(window.statusBar()->currentMessage().contains(QStringLiteral("Codex unavailable")));
+}
 
 void TestMainWindow::sendsAndRendersStreamingTurn() {
     QTemporaryDir directory;

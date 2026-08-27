@@ -36,6 +36,7 @@ session::SessionController* SessionManager::open(domain::Conversation conversati
                             : runtime.detail);
         return nullptr;
     }
+    conversation.status = domain::ConversationStatus::Dormant;
     return addPrepared(std::move(conversation), std::move(runtime), error);
 }
 
