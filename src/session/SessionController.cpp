@@ -535,6 +535,10 @@ bool SessionController::saveConversationView(domain::SavedConversationView view,
     return repository_->saveConversationView(view, error);
 }
 
+bool SessionController::reorderConversationViews(const QList<QUuid>& viewIds, QString* error) {
+    return repository_->reorderConversationViews(viewIds, error);
+}
+
 bool SessionController::deleteConversationView(const QUuid& viewId, QString* error) {
     return repository_->deleteConversationView(viewId, error);
 }

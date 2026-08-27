@@ -39,6 +39,7 @@ class EventStore final : public IEventRepository {
     bool deletePromptTemplate(const QUuid& templateId, QString* error) override;
     [[nodiscard]] QList<domain::PromptTemplate> promptTemplates(QString* error) const override;
     bool saveConversationView(const domain::SavedConversationView& view, QString* error) override;
+    bool reorderConversationViews(const QList<QUuid>& viewIds, QString* error) override;
     bool deleteConversationView(const QUuid& viewId, QString* error) override;
     [[nodiscard]] QList<domain::SavedConversationView>
     conversationViews(QString* error) const override;

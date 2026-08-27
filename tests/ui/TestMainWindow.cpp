@@ -117,6 +117,19 @@ class UiMemoryEventRepository final : public snack::storage::IEventRepository {
         return true;
     }
 
+    bool reorderConversationViews(const QList<QUuid>& viewIds, QString*) override {
+        if (viewIds.size() != views.size()) {
+            return false;
+        }
+        for (qsizetype position = 0; position < viewIds.size(); ++position) {
+            if (!views.contains(viewIds.at(position))) {
+                return false;
+            }
+            views[viewIds.at(position)].position = position;
+        }
+        return true;
+    }
+
     bool deleteConversationView(const QUuid& viewId, QString*) override {
         return views.remove(viewId) > 0;
     }
@@ -150,6 +163,7 @@ class TestMainWindow final : public QObject {
     void savesAndAppliesConversationViews();
     void renamesConversationViews();
     void updatesConversationViewsFromCurrentFilter();
+    void reordersConversationViews();
     void editsArchivedConversationTagsFromContextMenu();
     void restoresPersistedTimeline();
     void restoresToolReasoningAndPlanViews();
@@ -1628,6 +1642,50 @@ void TestMainWindow::updatesConversationViewsFromCurrentFilter() {
     QVERIFY(updated.showArchived);
     QCOMPARE(updated.position, view.position);
     QCOMPARE(views->currentData().toUuid(), view.id);
+}
+
+void TestMainWindow::reordersConversationViews() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::app::AppSettings settings(directory.filePath(QStringLiteral("settings.ini")));
+    UiMemoryEventRepository repository;
+    snack::domain::Conversation conversation;
+    conversation.title = QStringLiteral("Saved view order");
+    conversation.workingDirectory = directory.path();
+    snack::domain::SavedConversationView first;
+    first.name = QStringLiteral("First view");
+    first.position = 0;
+    snack::domain::SavedConversationView second;
+    second.name = QStringLiteral("Second view");
+    second.position = 1;
+    repository.views.insert(first.id, first);
+    repository.views.insert(second.id, second);
+    snack::agent::FakeAgentAdapter adapter(nullptr, 1);
+    snack::session::SessionController controller(conversation, &adapter, &repository);
+    snack::ui::MainWindow window(&controller, &settings, false);
+
+    auto* views = window.findChild<QComboBox*>(QStringLiteral("conversationViewCombo"));
+    auto* moveUp = window.findChild<QAction*>(QStringLiteral("moveConversationViewUpAction"));
+    auto* moveDown = window.findChild<QAction*>(QStringLiteral("moveConversationViewDownAction"));
+    QVERIFY(views != nullptr);
+    QVERIFY(moveUp != nullptr);
+    QVERIFY(moveDown != nullptr);
+    views->setCurrentIndex(views->findData(second.id));
+    QVERIFY(moveUp->isEnabled());
+    QVERIFY(!moveDown->isEnabled());
+
+    moveUp->trigger();
+    QCOMPARE(views->itemData(1).toUuid(), second.id);
+    QCOMPARE(views->itemData(2).toUuid(), first.id);
+    QVERIFY(!moveUp->isEnabled());
+    QVERIFY(moveDown->isEnabled());
+    QCOMPARE(repository.views.value(second.id).position, 0);
+    QCOMPARE(repository.views.value(first.id).position, 1);
+
+    moveDown->trigger();
+    QCOMPARE(views->itemData(1).toUuid(), first.id);
+    QCOMPARE(views->itemData(2).toUuid(), second.id);
+    QCOMPARE(views->currentData().toUuid(), second.id);
 }
 
 void TestMainWindow::restoresPersistedTimeline() {

@@ -72,6 +72,13 @@ class MemoryEventRepository : public snack::storage::IEventRepository {
         return true;
     }
 
+    bool reorderConversationViews(const QList<QUuid>& viewIds, QString*) override {
+        for (qsizetype position = 0; position < viewIds.size(); ++position) {
+            views_[viewIds.at(position)].position = position;
+        }
+        return true;
+    }
+
     bool deleteConversationView(const QUuid& viewId, QString*) override {
         return views_.remove(viewId) > 0;
     }

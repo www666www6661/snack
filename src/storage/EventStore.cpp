@@ -7,6 +7,7 @@
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QSet>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QTimeZone>
@@ -602,6 +603,60 @@ bool EventStore::saveConversationView(const domain::SavedConversationView& view,
     sqlQuery.addBindValue(view.position);
     if (!sqlQuery.exec()) {
         setSqlError(error, QStringLiteral("Cannot save conversation view"), sqlQuery.lastError());
+        return false;
+    }
+    return true;
+}
+
+bool EventStore::reorderConversationViews(const QList<QUuid>& viewIds, QString* error) {
+    if (!ensureWritable(error)) {
+        return false;
+    }
+    QSet<QUuid> requestedIds;
+    for (const auto& viewId : viewIds) {
+        if (viewId.isNull() || requestedIds.contains(viewId)) {
+            if (error != nullptr) {
+                *error = QStringLiteral("Cannot reorder conversation views: invalid order");
+            }
+            return false;
+        }
+        requestedIds.insert(viewId);
+    }
+    QString loadError;
+    const auto existingViews = conversationViews(&loadError);
+    QSet<QUuid> existingIds;
+    for (const auto& view : existingViews) {
+        existingIds.insert(view.id);
+    }
+    if (!loadError.isEmpty() || existingIds != requestedIds) {
+        if (error != nullptr) {
+            *error = loadError.isEmpty()
+                         ? QStringLiteral("Cannot reorder conversation views: order is incomplete")
+                         : loadError;
+        }
+        return false;
+    }
+    if (!database_.transaction()) {
+        setSqlError(error, QStringLiteral("Cannot begin conversation view reorder"),
+                    database_.lastError());
+        return false;
+    }
+    QSqlQuery query(database_);
+    query.prepare(QStringLiteral("UPDATE saved_views SET position = ? WHERE id = ?"));
+    for (qsizetype position = 0; position < viewIds.size(); ++position) {
+        query.bindValue(0, position);
+        query.bindValue(1, viewIds.at(position).toString(QUuid::WithoutBraces));
+        if (!query.exec() || query.numRowsAffected() != 1) {
+            const QSqlError sqlError = query.lastError();
+            database_.rollback();
+            setSqlError(error, QStringLiteral("Cannot reorder conversation views"), sqlError);
+            return false;
+        }
+    }
+    if (!database_.commit()) {
+        const QSqlError sqlError = database_.lastError();
+        database_.rollback();
+        setSqlError(error, QStringLiteral("Cannot commit conversation view reorder"), sqlError);
         return false;
     }
     return true;

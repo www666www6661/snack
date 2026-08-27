@@ -30,6 +30,7 @@ class IEventRepository {
     [[nodiscard]] virtual QList<domain::PromptTemplate> promptTemplates(QString* error) const = 0;
     virtual bool saveConversationView(const domain::SavedConversationView& view,
                                       QString* error) = 0;
+    virtual bool reorderConversationViews(const QList<QUuid>& viewIds, QString* error) = 0;
     virtual bool deleteConversationView(const QUuid& viewId, QString* error) = 0;
     [[nodiscard]] virtual QList<domain::SavedConversationView>
     conversationViews(QString* error) const = 0;

@@ -275,6 +275,15 @@ void TestStorage::eventStorePersistsOrderedEvents() {
     snack::domain::SavedConversationView invalidView;
     invalidView.id = QUuid{};
     QVERIFY(!store.saveConversationView(invalidView, &error));
+    QVERIFY2(store.reorderConversationViews({activeCodex.id, backend.id}, &error),
+             qPrintable(error));
+    views = store.conversationViews(&error);
+    QCOMPARE(views.at(0).id, activeCodex.id);
+    QCOMPARE(views.at(0).position, 0);
+    QCOMPARE(views.at(1).id, backend.id);
+    QCOMPARE(views.at(1).position, 1);
+    QVERIFY(!store.reorderConversationViews({backend.id}, &error));
+    QCOMPARE(store.conversationViews(&error).at(0).id, activeCodex.id);
     QVERIFY(store.deleteConversationView(backend.id, &error));
     QCOMPARE(store.conversationViews(&error).size(), 1);
     QVERIFY(!store.deleteConversationView(backend.id, &error));

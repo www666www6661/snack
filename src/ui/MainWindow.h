@@ -72,6 +72,8 @@ class MainWindow final : public QMainWindow {
     void saveConversationView();
     void renameConversationView();
     void updateConversationView();
+    void moveConversationViewUp();
+    void moveConversationViewDown();
     void deleteConversationView();
     void applyConversationView(int index);
     void activateFirstSearchResult();
@@ -103,6 +105,7 @@ class MainWindow final : public QMainWindow {
     void connectControllerSignals();
     void refreshConversationList();
     void rebuildConversationViews(const QUuid& selectedViewId = {});
+    void moveConversationView(int offset);
     void editConversationTagsFor(const QUuid& conversationId, const QStringList& tags);
     void activateRelativeConversation(int offset);
     void activateConversationById(const QUuid& conversationId);
@@ -196,6 +199,8 @@ class MainWindow final : public QMainWindow {
     QAction* nextUnreadConversationAction_{nullptr};
     QAction* renameConversationViewAction_{nullptr};
     QAction* updateConversationViewAction_{nullptr};
+    QAction* moveConversationViewUpAction_{nullptr};
+    QAction* moveConversationViewDownAction_{nullptr};
     QMenu* conversationContextMenu_{nullptr};
     QAction* contextOpenAction_{nullptr};
     QAction* contextPinAction_{nullptr};

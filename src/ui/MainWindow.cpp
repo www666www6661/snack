@@ -1142,6 +1142,43 @@ void MainWindow::updateConversationView() {
     rebuildConversationViews(viewId);
 }
 
+void MainWindow::moveConversationViewUp() { moveConversationView(-1); }
+
+void MainWindow::moveConversationViewDown() { moveConversationView(1); }
+
+void MainWindow::moveConversationView(int offset) {
+    const QUuid viewId = conversationViewCombo_->currentData().toUuid();
+    if (viewId.isNull()) {
+        return;
+    }
+    QString error;
+    const auto views = controller_->conversationViews(&error);
+    const auto selected = std::find_if(views.cbegin(), views.cend(),
+                                       [&viewId](const auto& view) { return view.id == viewId; });
+    if (!error.isEmpty() || selected == views.cend()) {
+        statusBar()->showMessage(error.isEmpty() ? tr("Conversation view no longer exists") : error,
+                                 8000);
+        rebuildConversationViews();
+        return;
+    }
+    const qsizetype source = std::distance(views.cbegin(), selected);
+    const qsizetype target = source + offset;
+    if (target < 0 || target >= views.size()) {
+        return;
+    }
+    QList<QUuid> viewIds;
+    viewIds.reserve(views.size());
+    for (const auto& view : views) {
+        viewIds.append(view.id);
+    }
+    viewIds.move(source, target);
+    if (!controller_->reorderConversationViews(viewIds, &error)) {
+        statusBar()->showMessage(tr("Cannot reorder conversation views: %1").arg(error), 8000);
+        return;
+    }
+    rebuildConversationViews(viewId);
+}
+
 void MainWindow::saveConversationView() {
     bool accepted = false;
     const QString name = QInputDialog::getText(this, tr("Save conversation view"), tr("View name"),
@@ -1171,6 +1208,9 @@ void MainWindow::saveConversationView() {
 void MainWindow::applyConversationView(int index) {
     deleteConversationViewButton_->setEnabled(index > 0);
     renameConversationViewAction_->setEnabled(index > 0);
+    moveConversationViewUpAction_->setEnabled(index > 1);
+    moveConversationViewDownAction_->setEnabled(index > 0 &&
+                                                index + 1 < conversationViewCombo_->count());
     if (index <= 0) {
         return;
     }
@@ -1188,6 +1228,8 @@ void MainWindow::applyConversationView(int index) {
     conversationViewCombo_->setCurrentIndex(conversationViewCombo_->findData(viewId));
     deleteConversationViewButton_->setEnabled(true);
     renameConversationViewAction_->setEnabled(true);
+    moveConversationViewUpAction_->setEnabled(index > 1);
+    moveConversationViewDownAction_->setEnabled(index + 1 < conversationViewCombo_->count());
 }
 
 void MainWindow::rebuildConversationViews(const QUuid& selectedViewId) {
@@ -1205,6 +1247,8 @@ void MainWindow::rebuildConversationViews(const QUuid& selectedViewId) {
     deleteConversationViewButton_->setEnabled(selectedIndex > 0);
     renameConversationViewAction_->setEnabled(selectedIndex > 0);
     updateConversationViewAction_->setEnabled(!views.isEmpty());
+    moveConversationViewUpAction_->setEnabled(selectedIndex > 1);
+    moveConversationViewDownAction_->setEnabled(selectedIndex > 0 && selectedIndex < views.size());
     if (!error.isEmpty()) {
         statusBar()->showMessage(error, 8000);
     }
@@ -1285,6 +1329,15 @@ void MainWindow::buildUi() {
         manageConversationViewMenu->addAction(tr("Update saved view with current filter..."));
     updateConversationViewAction_->setObjectName(QStringLiteral("updateConversationViewAction"));
     updateConversationViewAction_->setEnabled(false);
+    manageConversationViewMenu->addSeparator();
+    moveConversationViewUpAction_ = manageConversationViewMenu->addAction(tr("Move saved view up"));
+    moveConversationViewUpAction_->setObjectName(QStringLiteral("moveConversationViewUpAction"));
+    moveConversationViewUpAction_->setEnabled(false);
+    moveConversationViewDownAction_ =
+        manageConversationViewMenu->addAction(tr("Move saved view down"));
+    moveConversationViewDownAction_->setObjectName(
+        QStringLiteral("moveConversationViewDownAction"));
+    moveConversationViewDownAction_->setEnabled(false);
     manageConversationViewButton->setMenu(manageConversationViewMenu);
     deleteConversationViewButton_ = new QPushButton(tr("Delete"), viewRow);
     deleteConversationViewButton_->setObjectName(QStringLiteral("deleteConversationViewButton"));
@@ -1490,6 +1543,10 @@ void MainWindow::buildUi() {
             &MainWindow::renameConversationView);
     connect(updateConversationViewAction_, &QAction::triggered, this,
             &MainWindow::updateConversationView);
+    connect(moveConversationViewUpAction_, &QAction::triggered, this,
+            &MainWindow::moveConversationViewUp);
+    connect(moveConversationViewDownAction_, &QAction::triggered, this,
+            &MainWindow::moveConversationViewDown);
     connect(deleteConversationViewButton_, &QPushButton::clicked, this,
             &MainWindow::deleteConversationView);
     connect(conversationViewCombo_, &QComboBox::currentIndexChanged, this,
