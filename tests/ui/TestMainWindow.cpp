@@ -278,6 +278,7 @@ void TestMainWindow::filtersConversationRailLocally() {
     codex.title = QStringLiteral("Review parser");
     codex.workingDirectory = QStringLiteral("C:/projects/compiler");
     codex.agentKind = snack::domain::AgentKind::Codex;
+    codex.status = snack::domain::ConversationStatus::WaitingApproval;
     codex.tags = {QStringLiteral("Backend"), QStringLiteral("urgent")};
     snack::domain::Conversation mock;
     mock.title = QStringLiteral("Prototype UI");
@@ -293,7 +294,7 @@ void TestMainWindow::filtersConversationRailLocally() {
     QVERIFY(search != nullptr);
     QVERIFY(list != nullptr);
     QCOMPARE(search->placeholderText(), QStringLiteral("Search conversations or tag:name"));
-    QCOMPARE(search->toolTip(), QStringLiteral("Filters: tag:name, agent:codex|claude|mock"));
+    QCOMPARE(search->toolTip(), QStringLiteral("Filters: tag:name, agent:name, status:name"));
     QCOMPARE(list->count(), 2);
 
     search->setText(QStringLiteral("parser"));
@@ -331,6 +332,18 @@ void TestMainWindow::filtersConversationRailLocally() {
     search->setText(QStringLiteral("agent:code"));
     QCOMPARE(list->count(), 0);
     search->setText(QStringLiteral("agent:"));
+    QCOMPARE(list->count(), 0);
+    search->setText(QStringLiteral("status:WAITING-APPROVAL"));
+    QCOMPARE(list->count(), 1);
+    QCOMPARE(list->item(0)->data(Qt::UserRole).toUuid(), codex.id);
+    search->setText(QStringLiteral("status:waiting-approval agent:codex tag:backend"));
+    QCOMPARE(list->count(), 1);
+    QCOMPARE(list->item(0)->data(Qt::UserRole).toUuid(), codex.id);
+    search->setText(QStringLiteral("status:waiting-approval agent:mock"));
+    QCOMPARE(list->count(), 0);
+    search->setText(QStringLiteral("status:waiting"));
+    QCOMPARE(list->count(), 0);
+    search->setText(QStringLiteral("status:"));
     QCOMPARE(list->count(), 0);
     search->clear();
     QCOMPARE(list->count(), 2);

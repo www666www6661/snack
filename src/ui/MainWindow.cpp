@@ -114,6 +114,13 @@ bool conversationMatchesQuery(const domain::Conversation& conversation, const QS
             }
             continue;
         }
+        if (term.left(7).compare(QStringLiteral("status:"), Qt::CaseInsensitive) == 0) {
+            if (domain::enumName(conversation.status)
+                    .compare(term.sliced(7), Qt::CaseInsensitive) != 0) {
+                return false;
+            }
+            continue;
+        }
         if (!conversation.title.contains(term, Qt::CaseInsensitive) &&
             !conversation.workingDirectory.contains(term, Qt::CaseInsensitive) &&
             !agentName.contains(term, Qt::CaseInsensitive) &&
@@ -1042,7 +1049,7 @@ void MainWindow::buildUi() {
     conversationSearch_ = new QLineEdit(sidebar);
     conversationSearch_->setObjectName(QStringLiteral("conversationSearch"));
     conversationSearch_->setPlaceholderText(tr("Search conversations or tag:name"));
-    conversationSearch_->setToolTip(tr("Filters: tag:name, agent:codex|claude|mock"));
+    conversationSearch_->setToolTip(tr("Filters: tag:name, agent:name, status:name"));
     conversationSearch_->setClearButtonEnabled(true);
     conversationSearch_->installEventFilter(this);
     sessionRow_ = new QLabel(
