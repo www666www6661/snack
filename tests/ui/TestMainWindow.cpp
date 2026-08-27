@@ -90,6 +90,7 @@ class TestMainWindow final : public QObject {
   private slots:
     void sendsAndRendersStreamingTurn();
     void updatesPlaceholderTitleAfterFirstSend();
+    void renamesCurrentConversation();
     void restoresPersistedTimeline();
     void restoresToolReasoningAndPlanViews();
     void hidesToTrayWithoutClosingSession();
@@ -229,6 +230,39 @@ void TestMainWindow::updatesPlaceholderTitleAfterFirstSend() {
     sendButton->click();
     QCOMPARE(title->text(), QStringLiteral("Name this conversation from its first prompt"));
     QVERIFY(sessionRow->text().contains(title->text()));
+}
+
+void TestMainWindow::renamesCurrentConversation() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::app::AppSettings settings(directory.filePath(QStringLiteral("settings.ini")));
+    UiMemoryEventRepository repository;
+    snack::agent::FakeAgentAdapter adapter(nullptr, 1);
+    snack::domain::Conversation conversation;
+    conversation.title = QStringLiteral("Before rename");
+    conversation.workingDirectory = directory.path();
+    snack::session::SessionController controller(conversation, &adapter, &repository);
+    snack::ui::MainWindow window(&controller, &settings, false);
+
+    auto* renameAction = window.findChild<QAction*>(QStringLiteral("renameConversationAction"));
+    auto* title = window.findChild<QLabel*>(QStringLiteral("conversationTitle"));
+    auto* sessionRow = window.findChild<QLabel*>(QStringLiteral("sessionRow"));
+    QVERIFY(renameAction != nullptr);
+    QVERIFY(title != nullptr);
+    QVERIFY(sessionRow != nullptr);
+    QCOMPARE(renameAction->shortcut(), QKeySequence(Qt::Key_F2));
+
+    QTimer::singleShot(0, [] {
+        auto* dialog = qobject_cast<QInputDialog*>(QApplication::activeModalWidget());
+        QVERIFY(dialog != nullptr);
+        QCOMPARE(dialog->textValue(), QStringLiteral("Before rename"));
+        dialog->setTextValue(QStringLiteral("After rename"));
+        dialog->accept();
+    });
+    renameAction->trigger();
+    QCOMPARE(controller.conversation().title, QStringLiteral("After rename"));
+    QCOMPARE(title->text(), QStringLiteral("After rename"));
+    QVERIFY(sessionRow->text().contains(QStringLiteral("After rename")));
 }
 
 void TestMainWindow::restoresPersistedTimeline() {

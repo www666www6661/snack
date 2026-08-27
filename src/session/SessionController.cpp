@@ -238,6 +238,35 @@ bool SessionController::sendMessage(const QString& message, QString* error) {
     return true;
 }
 
+bool SessionController::renameConversation(const QString& title, QString* error) {
+    if (conversation_.status == domain::ConversationStatus::Closed) {
+        if (error != nullptr) {
+            *error = QStringLiteral("Conversation is closed");
+        }
+        return false;
+    }
+    const QString normalized = domain::fallbackConversationTitle(title);
+    if (normalized.isEmpty()) {
+        if (error != nullptr) {
+            *error = QStringLiteral("Conversation title cannot be empty");
+        }
+        return false;
+    }
+    if (normalized == conversation_.title && !conversation_.titleIsPlaceholder) {
+        return true;
+    }
+
+    domain::Conversation updated = conversation_;
+    updated.title = normalized;
+    updated.titleIsPlaceholder = false;
+    if (!repository_->saveConversation(updated, error)) {
+        return false;
+    }
+    conversation_ = std::move(updated);
+    emit conversationTitleChanged(conversation_.title);
+    return true;
+}
+
 bool SessionController::steerMessage(const QString& message, QString* error) {
     const QString trimmed = message.trimmed();
     if (trimmed.isEmpty()) {

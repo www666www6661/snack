@@ -95,6 +95,7 @@ class TestSessionController final : public QObject {
   private slots:
     void streamsAndPersistsTurn();
     void replacesPlaceholderTitleFromFirstMessage();
+    void renamesCurrentConversation();
     void snapshotsSettingsPerTurn();
     void steersActiveTurn();
     void persistsEditsAndDispatchesQueuedMessages();
@@ -160,6 +161,30 @@ void TestSessionController::replacesPlaceholderTitleFromFirstMessage() {
     QVERIFY(controller.sendMessage(QStringLiteral("Do not replace the established title")));
     QCOMPARE(controller.conversation().title, QStringLiteral("Build a useful conversation rail"));
     QCOMPARE(titleSpy.count(), 1);
+}
+
+void TestSessionController::renamesCurrentConversation() {
+    MemoryEventRepository repository;
+    snack::agent::FakeAgentAdapter adapter(nullptr, 1);
+    snack::session::SessionController controller(conversation(), &adapter, &repository);
+    QSignalSpy titleSpy(&controller, &snack::session::SessionController::conversationTitleChanged);
+    QString error;
+
+    controller.open();
+    QTRY_COMPARE(controller.status(), snack::domain::ConversationStatus::Idle);
+    QVERIFY(!controller.renameConversation(QStringLiteral(" \t\n "), &error));
+    QVERIFY(error.contains(QStringLiteral("empty")));
+    QVERIFY(controller.renameConversation(QStringLiteral("  Renamed\n conversation  "), &error));
+    QCOMPARE(controller.conversation().title, QStringLiteral("Renamed conversation"));
+    QVERIFY(!controller.conversation().titleIsPlaceholder);
+    QCOMPARE(repository.conversation_.title, QStringLiteral("Renamed conversation"));
+    QCOMPARE(titleSpy.count(), 1);
+    QVERIFY(controller.renameConversation(QStringLiteral("Renamed conversation"), &error));
+    QCOMPARE(titleSpy.count(), 1);
+
+    controller.close();
+    QVERIFY(!controller.renameConversation(QStringLiteral("Too late"), &error));
+    QVERIFY(error.contains(QStringLiteral("closed")));
 }
 
 void TestSessionController::snapshotsSettingsPerTurn() {

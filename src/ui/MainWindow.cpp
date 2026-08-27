@@ -394,6 +394,20 @@ void MainWindow::stopTurn() {
     statusBar()->showMessage(tr("Stopping the current turn"), 3000);
 }
 
+void MainWindow::renameConversation() {
+    bool accepted = false;
+    const QString title =
+        QInputDialog::getText(this, tr("Rename conversation"), tr("Conversation title"),
+                              QLineEdit::Normal, controller_->conversation().title, &accepted);
+    if (!accepted) {
+        return;
+    }
+    QString error;
+    if (!controller_->renameConversation(title, &error)) {
+        statusBar()->showMessage(error, 4000);
+    }
+}
+
 void MainWindow::reconnectSession() { controller_->open(); }
 
 void MainWindow::updateSessionSettings() {
@@ -656,6 +670,11 @@ void MainWindow::buildUi() {
 
 void MainWindow::buildMenus() {
     auto* fileMenu = menuBar()->addMenu(tr("File"));
+    auto* renameAction = fileMenu->addAction(tr("Rename conversation..."));
+    renameAction->setObjectName(QStringLiteral("renameConversationAction"));
+    renameAction->setShortcut(QKeySequence(Qt::Key_F2));
+    connect(renameAction, &QAction::triggered, this, &MainWindow::renameConversation);
+    fileMenu->addSeparator();
     auto* quitAction = fileMenu->addAction(tr("Quit"));
     quitAction->setObjectName(QStringLiteral("quitAction"));
     quitAction->setShortcut(QKeySequence::Quit);
