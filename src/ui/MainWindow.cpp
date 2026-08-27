@@ -79,9 +79,33 @@ bool createsUnreadAttention(domain::AgentEventType type) {
     }
 }
 
+QStringList conversationQueryTerms(const QString& query) {
+    QStringList terms;
+    QString current;
+    bool quoted = false;
+    for (const QChar character : query.trimmed()) {
+        if (character == QLatin1Char('"')) {
+            quoted = !quoted;
+            continue;
+        }
+        if (character.isSpace() && !quoted) {
+            if (!current.isEmpty()) {
+                terms.append(current);
+                current.clear();
+            }
+            continue;
+        }
+        current.append(character);
+    }
+    if (!current.isEmpty()) {
+        terms.append(current);
+    }
+    return terms;
+}
+
 bool conversationMatchesQuery(const domain::Conversation& conversation, const QString& agentName,
                               const QString& query) {
-    const QStringList terms = query.simplified().split(QLatin1Char(' '), Qt::SkipEmptyParts);
+    const QStringList terms = conversationQueryTerms(query);
     for (const QString& term : terms) {
         if (term.left(4).compare(QStringLiteral("tag:"), Qt::CaseInsensitive) == 0) {
             const QString requestedTag = term.sliced(4);
@@ -117,6 +141,14 @@ bool conversationMatchesQuery(const domain::Conversation& conversation, const QS
         if (term.left(7).compare(QStringLiteral("status:"), Qt::CaseInsensitive) == 0) {
             if (domain::enumName(conversation.status)
                     .compare(term.sliced(7), Qt::CaseInsensitive) != 0) {
+                return false;
+            }
+            continue;
+        }
+        if (term.left(5).compare(QStringLiteral("path:"), Qt::CaseInsensitive) == 0) {
+            const QString requestedPath = term.sliced(5);
+            if (requestedPath.isEmpty() ||
+                !conversation.workingDirectory.contains(requestedPath, Qt::CaseInsensitive)) {
                 return false;
             }
             continue;
@@ -1049,7 +1081,8 @@ void MainWindow::buildUi() {
     conversationSearch_ = new QLineEdit(sidebar);
     conversationSearch_->setObjectName(QStringLiteral("conversationSearch"));
     conversationSearch_->setPlaceholderText(tr("Search conversations or tag:name"));
-    conversationSearch_->setToolTip(tr("Filters: tag:name, agent:name, status:name"));
+    conversationSearch_->setToolTip(
+        tr("Filters: tag:name, agent:name, status:name, path:\"directory\""));
     conversationSearch_->setClearButtonEnabled(true);
     conversationSearch_->installEventFilter(this);
     sessionRow_ = new QLabel(

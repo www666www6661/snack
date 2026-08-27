@@ -276,7 +276,7 @@ void TestMainWindow::filtersConversationRailLocally() {
     UiMemoryEventRepository repository;
     snack::domain::Conversation codex;
     codex.title = QStringLiteral("Review parser");
-    codex.workingDirectory = QStringLiteral("C:/projects/compiler");
+    codex.workingDirectory = QStringLiteral("C:/projects/compiler tools");
     codex.agentKind = snack::domain::AgentKind::Codex;
     codex.status = snack::domain::ConversationStatus::WaitingApproval;
     codex.tags = {QStringLiteral("Backend"), QStringLiteral("urgent")};
@@ -294,7 +294,8 @@ void TestMainWindow::filtersConversationRailLocally() {
     QVERIFY(search != nullptr);
     QVERIFY(list != nullptr);
     QCOMPARE(search->placeholderText(), QStringLiteral("Search conversations or tag:name"));
-    QCOMPARE(search->toolTip(), QStringLiteral("Filters: tag:name, agent:name, status:name"));
+    QCOMPARE(search->toolTip(),
+             QStringLiteral("Filters: tag:name, agent:name, status:name, path:\"directory\""));
     QCOMPARE(list->count(), 2);
 
     search->setText(QStringLiteral("parser"));
@@ -345,6 +346,22 @@ void TestMainWindow::filtersConversationRailLocally() {
     QCOMPARE(list->count(), 0);
     search->setText(QStringLiteral("status:"));
     QCOMPARE(list->count(), 0);
+    search->setText(QStringLiteral("path:COMPILER"));
+    QCOMPARE(list->count(), 1);
+    QCOMPARE(list->item(0)->data(Qt::UserRole).toUuid(), codex.id);
+    search->setText(QStringLiteral("path:\"C:/projects/compiler tools\""));
+    QCOMPARE(list->count(), 1);
+    QCOMPARE(list->item(0)->data(Qt::UserRole).toUuid(), codex.id);
+    search->setText(QStringLiteral("path:\"compiler tools\" tag:backend"));
+    QCOMPARE(list->count(), 1);
+    QCOMPARE(list->item(0)->data(Qt::UserRole).toUuid(), codex.id);
+    search->setText(QStringLiteral("path:\"compiler tools\" agent:mock"));
+    QCOMPARE(list->count(), 0);
+    search->setText(QStringLiteral("path:"));
+    QCOMPARE(list->count(), 0);
+    search->setText(QStringLiteral("\"Review parser\""));
+    QCOMPARE(list->count(), 1);
+    QCOMPARE(list->item(0)->data(Qt::UserRole).toUuid(), codex.id);
     search->clear();
     QCOMPARE(list->count(), 2);
     QTRY_COMPARE(controller.status(), snack::domain::ConversationStatus::Idle);
