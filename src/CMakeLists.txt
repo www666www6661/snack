@@ -45,6 +45,8 @@ set(SNACK_CORE_SOURCES
     app/WorkspacePathPolicy.h
     app/WorkspaceWatcher.cpp
     app/WorkspaceWatcher.h
+    app/WorkspaceSymbolIndex.cpp
+    app/WorkspaceSymbolIndex.h
     app/WorkspaceFilePreview.cpp
     app/WorkspaceFilePreview.h
     app/WorkspaceExternalOpener.cpp

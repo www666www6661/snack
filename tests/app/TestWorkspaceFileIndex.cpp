@@ -2,6 +2,7 @@
 #include "app/WorkspaceFileIndex.h"
 #include "app/WorkspaceFilePreview.h"
 #include "app/WorkspacePathPolicy.h"
+#include "app/WorkspaceSymbolIndex.h"
 
 #include <QDir>
 #include <QFile>
@@ -17,6 +18,7 @@ class TestWorkspaceFileIndex final : public QObject {
     void normalizesPathAliases();
     void readsBoundedTextPreviews();
     void opensOnlyValidatedFilesThroughInjectedBoundary();
+    void buildsBoundedSourceSymbolIndex();
 };
 
 void TestWorkspaceFileIndex::indexesWorkspaceWithExclusionsAndLimit() {
@@ -139,6 +141,23 @@ void TestWorkspaceFileIndex::opensOnlyValidatedFilesThroughInjectedBoundary() {
         },
         &error));
     QCOMPARE(opened.size(), 1);
+}
+
+void TestWorkspaceFileIndex::buildsBoundedSourceSymbolIndex() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    QFile source(directory.filePath(QStringLiteral("sample.cpp")));
+    QVERIFY(source.open(QIODevice::WriteOnly));
+    source.write("class Alpha {};\nstruct Beta {};\nvoid ignored();\n");
+    source.close();
+
+    const auto symbols = snack::app::WorkspaceSymbolIndex::build(directory.path());
+    QCOMPARE(symbols.size(), 2);
+    QCOMPARE(symbols.at(0).name, QStringLiteral("Alpha"));
+    QCOMPARE(symbols.at(0).line, 1);
+    QCOMPARE(symbols.at(1).name, QStringLiteral("Beta"));
+    QCOMPARE(snack::app::WorkspaceSymbolIndex::build(directory.path(), 10, 1).size(), 1);
+    QVERIFY(snack::app::WorkspaceSymbolIndex::build(directory.path(), 0).isEmpty());
 }
 
 QTEST_GUILESS_MAIN(TestWorkspaceFileIndex)
