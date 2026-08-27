@@ -33,6 +33,8 @@ class UiMemoryEventRepository final : public snack::storage::IEventRepository {
         return std::nullopt;
     }
 
+    QList<snack::domain::Conversation> conversations(QString*) const override { return {}; }
+
     bool appendEvent(const snack::domain::AgentEvent& event, QString*) override {
         events.append(event);
         return true;

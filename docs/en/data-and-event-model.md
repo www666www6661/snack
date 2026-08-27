@@ -19,6 +19,8 @@ GUI entities use random UUIDs. Native agent IDs are separate values, never datab
 | `FileSnapshot` | `contentHash`, `path`, `metadata`, `createdAt`, `protectedReason` |
 | `TerminalTab` | `id`, `conversationId`, `name`, `cwd`, `shell`, `windowState` |
 
+The M3 conversation catalog reads complete conversation metadata through the repository boundary. Results are deterministic: active conversations precede archived conversations, pinned entries lead within each section, and titles then sort case-insensitively with UUID as the final tie-breaker. This query does not open, resume, or mutate an Agent session.
+
 ## 3. Unified events
 
 Event types include user and agent message lifecycle, reasoning lifecycle, turn lifecycle, plans, tools, commands, file changes and diffs, approvals, user prompts, usage, capability/connection changes, warnings, errors, and `RawProtocolObserved`.

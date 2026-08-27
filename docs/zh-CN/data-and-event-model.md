@@ -19,6 +19,8 @@
 | `FileSnapshot` | `contentHash`, `path`, `metadata`, `createdAt`, `protectedReason` |
 | `TerminalTab` | `id`, `conversationId`, `name`, `cwd`, `shell`, `windowState` |
 
+M3 会话目录通过 Repository 边界读取完整会话元数据。结果顺序确定：活动会话先于已归档会话，每个区段内置顶项优先，随后按标题不区分大小写排序，最后用 UUID 打破同名顺序。该查询不会打开、恢复或修改 Agent 会话。
+
 ## 3. 统一事件
 
 `AgentEvent.type` 至少包括：

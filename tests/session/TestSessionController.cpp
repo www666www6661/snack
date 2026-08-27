@@ -25,6 +25,11 @@ class MemoryEventRepository : public snack::storage::IEventRepository {
                    : std::nullopt;
     }
 
+    QList<snack::domain::Conversation> conversations(QString*) const override {
+        return conversation_.title.isEmpty() ? QList<snack::domain::Conversation>{}
+                                             : QList<snack::domain::Conversation>{conversation_};
+    }
+
     QList<snack::domain::AgentEvent> eventsForConversation(const QUuid& conversationId,
                                                            QString*) const override {
         QList<snack::domain::AgentEvent> result;
@@ -96,6 +101,7 @@ class TestSessionController final : public QObject {
     void streamsAndPersistsTurn();
     void replacesPlaceholderTitleFromFirstMessage();
     void renamesCurrentConversation();
+    void exposesConversationCatalog();
     void snapshotsSettingsPerTurn();
     void steersActiveTurn();
     void persistsEditsAndDispatchesQueuedMessages();
@@ -185,6 +191,17 @@ void TestSessionController::renamesCurrentConversation() {
     controller.close();
     QVERIFY(!controller.renameConversation(QStringLiteral("Too late"), &error));
     QVERIFY(error.contains(QStringLiteral("closed")));
+}
+
+void TestSessionController::exposesConversationCatalog() {
+    MemoryEventRepository repository;
+    repository.conversation_ = conversation();
+    snack::agent::FakeAgentAdapter adapter(nullptr, 1);
+    snack::session::SessionController controller(repository.conversation_, &adapter, &repository);
+
+    const auto catalog = controller.conversationCatalog();
+    QCOMPARE(catalog.size(), 1);
+    QCOMPARE(catalog.constFirst().id, repository.conversation_.id);
 }
 
 void TestSessionController::snapshotsSettingsPerTurn() {

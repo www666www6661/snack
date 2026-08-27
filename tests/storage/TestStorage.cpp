@@ -158,6 +158,24 @@ void TestStorage::eventStorePersistsOrderedEvents() {
     QVERIFY(restoredConversation->titleIsPlaceholder);
     QVERIFY(!store.conversationById(QUuid::createUuid(), &error).has_value());
 
+    snack::domain::Conversation pinned = conversation;
+    pinned.id = QUuid::createUuid();
+    pinned.title = QStringLiteral("Pinned");
+    pinned.titleIsPlaceholder = false;
+    pinned.pinned = true;
+    QVERIFY(store.saveConversation(pinned, &error));
+    snack::domain::Conversation archived = conversation;
+    archived.id = QUuid::createUuid();
+    archived.title = QStringLiteral("Archived");
+    archived.titleIsPlaceholder = false;
+    archived.archived = true;
+    QVERIFY(store.saveConversation(archived, &error));
+    const auto conversations = store.conversations(&error);
+    QCOMPARE(conversations.size(), 3);
+    QCOMPARE(conversations.at(0).id, pinned.id);
+    QCOMPARE(conversations.at(1).id, conversation.id);
+    QCOMPARE(conversations.at(2).id, archived.id);
+
     for (quint64 sequence = 1; sequence <= 2; ++sequence) {
         snack::domain::AgentEvent event;
         event.conversationId = conversation.id;

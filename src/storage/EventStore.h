@@ -26,6 +26,7 @@ class EventStore final : public IEventRepository {
     bool saveConversation(const domain::Conversation& conversation, QString* error) override;
     [[nodiscard]] std::optional<domain::Conversation>
     conversationById(const QUuid& conversationId, QString* error) const override;
+    [[nodiscard]] QList<domain::Conversation> conversations(QString* error) const override;
     bool appendEvent(const domain::AgentEvent& event, QString* error) override;
     [[nodiscard]] QList<domain::AgentEvent> eventsForConversation(const QUuid& conversationId,
                                                                   QString* error) const override;

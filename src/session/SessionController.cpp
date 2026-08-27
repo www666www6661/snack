@@ -174,6 +174,10 @@ const QList<domain::QueuedMessage>& SessionController::queuedMessages() const {
     return queuedMessages_;
 }
 
+QList<domain::Conversation> SessionController::conversationCatalog(QString* error) const {
+    return repository_->conversations(error);
+}
+
 QList<domain::PromptTemplate> SessionController::promptTemplates(QString* error) const {
     return repository_->promptTemplates(error);
 }

@@ -273,6 +273,33 @@ std::optional<domain::Conversation> EventStore::conversationById(const QUuid& co
     return conversation;
 }
 
+QList<domain::Conversation> EventStore::conversations(QString* error) const {
+    QList<domain::Conversation> result;
+    QSqlQuery query(database_);
+    if (!query.exec(QStringLiteral(
+            "SELECT id, title, title_is_placeholder, working_directory, agent_kind, status, "
+            "native_thread_id, native_session_id, archived, pinned FROM conversations "
+            "ORDER BY archived ASC, pinned DESC, title COLLATE NOCASE ASC, id ASC"))) {
+        setSqlError(error, QStringLiteral("Cannot load conversations"), query.lastError());
+        return result;
+    }
+    while (query.next()) {
+        domain::Conversation conversation;
+        conversation.id = QUuid(query.value(0).toString());
+        conversation.title = query.value(1).toString();
+        conversation.titleIsPlaceholder = query.value(2).toBool();
+        conversation.workingDirectory = query.value(3).toString();
+        conversation.agentKind = domain::agentKindFromString(query.value(4).toString());
+        conversation.status = domain::conversationStatusFromString(query.value(5).toString());
+        conversation.nativeThreadId = query.value(6).toString();
+        conversation.nativeSessionId = query.value(7).toString();
+        conversation.archived = query.value(8).toBool();
+        conversation.pinned = query.value(9).toBool();
+        result.append(std::move(conversation));
+    }
+    return result;
+}
+
 bool EventStore::appendEvent(const domain::AgentEvent& event, QString* error) {
     if (!ensureWritable(error)) {
         return false;

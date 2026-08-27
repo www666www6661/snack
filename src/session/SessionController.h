@@ -23,6 +23,7 @@ class SessionController final : public QObject {
     [[nodiscard]] qsizetype pendingApprovalCount() const;
     [[nodiscard]] qsizetype pendingInputCount() const;
     [[nodiscard]] const QList<domain::QueuedMessage>& queuedMessages() const;
+    [[nodiscard]] QList<domain::Conversation> conversationCatalog(QString* error = nullptr) const;
     [[nodiscard]] QList<domain::PromptTemplate> promptTemplates(QString* error = nullptr) const;
     [[nodiscard]] QList<domain::AgentEvent> restoredEvents(QString* error = nullptr);
 
