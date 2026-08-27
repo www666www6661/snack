@@ -31,7 +31,7 @@ flowchart LR
 - `app`: startup, single-instance IPC, command-line routing, tray, window restore, crash markers, and migrations.
 - `domain`: Widget-free types including `Conversation`, `AgentSession`, `Turn`, `AgentEvent`, `CapabilitySet`, `PermissionRequest`, `DiffSet`, `WorkspaceWriteLease`, and `QueuedMessage`. Native fields never leak into domain objects.
 - `agent`: `IAgentAdapter`, `IAgentTransport`, `CodexAdapter`, `ClaudeAdapter`, and `AgentEventMapper`. Unsupported behavior returns `UnsupportedCapability`; the UI never guesses.
-- `session`: one `SessionController` per conversation, serializing state transitions, active turns, queues, settings snapshots, approvals, native IDs, and recovery.
+- `session`: one `SessionController` per conversation, serializing state transitions, active turns, queues, settings snapshots, approvals, native IDs, and recovery. `SessionRuntimeRegistry` owns each Agent runtime before its controller, rejects identity/type collisions, and closes controllers in reverse insertion order before destroying adapters or transports.
 - `workspace`: canonical paths, ignore rules, symbol index, file watching, baselines, diffs, external-edit conflicts, and write leases.
 - `storage`: append-oriented transactional `EventStore`, SHA-256 `ContentStore`, versioned migrations, and Repository interfaces.
 - `ui`: `QMainWindow` and `QDockWidget`; at most one `QWebEnginePage` per visible conversation window; ViewModels own logic.
@@ -73,6 +73,8 @@ stateDiagram-v2
 ```
 
 Interruptions and process loss are persisted. Reconnection never automatically resends a request or queue.
+
+M3 multi-session ownership begins at a Widget-free registry. Windows and conversation rails receive non-owning controller pointers only; removing a registry entry first drives the controller to `Closed`, then destroys it, its adapter, and finally its transport. This boundary prevents an active controller from retaining a dangling Agent pointer and gives true exit one deterministic `closeAll()` path.
 
 ## 6. WebEngine boundary
 

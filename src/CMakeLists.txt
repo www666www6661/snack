@@ -41,6 +41,8 @@ set(SNACK_CORE_SOURCES
     domain/PromptTemplateEngine.h
     session/SessionController.cpp
     session/SessionController.h
+    session/SessionRuntimeRegistry.cpp
+    session/SessionRuntimeRegistry.h
     storage/ContentStore.cpp
     storage/ContentStore.h
     storage/EventRepository.h

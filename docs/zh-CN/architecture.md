@@ -54,7 +54,9 @@ M2 当前已实现 `IProcessTransport`/`QProcessTransport`、`CodexCliDiscovery`
 
 ### 3.4 `session`
 
-`SessionController` 是单会话编排器。它维护运行状态、当前 Turn、消息队列、设置快照、审批、原生会话 ID与恢复策略。每个会话独立串行处理自身状态转换，不共享可变协议状态。
+`SessionController` 是单会话编排器。它维护运行状态、当前 Turn、消息队列、设置快照、审批、原生会话 ID与恢复策略。每个会话独立串行处理自身状态转换，不共享可变协议状态。`SessionRuntimeRegistry` 在 Controller 之前持有对应 Agent Runtime，拒绝会话身份或 Agent 类型冲突，并在销毁 Adapter/Transport 前按加入顺序的逆序关闭 Controller。
+
+M3 多会话所有权从不依赖 Widget 的 Registry 开始。窗口和会话栏只接收非拥有的 Controller 指针；移除记录时先把 Controller 推到 `Closed`，随后依次销毁 Controller、Adapter 和 Transport。该边界避免活动 Controller 留下悬空 Agent 指针，也让真正退出统一走一条确定性的 `closeAll()` 路径。
 
 ### 3.5 `workspace`
 

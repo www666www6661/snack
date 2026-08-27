@@ -13,6 +13,7 @@ snack_add_test(snack_single_instance_tests app/TestSingleInstance.cpp)
 snack_add_test(snack_theme_tests ui/TestThemeDefinition.cpp)
 snack_add_test(snack_storage_tests storage/TestStorage.cpp)
 snack_add_test(snack_session_tests session/TestSessionController.cpp)
+snack_add_test(snack_session_runtime_tests session/TestSessionRuntimeRegistry.cpp)
 snack_add_test(snack_agent_runtime_tests agent/TestAgentRuntime.cpp)
 snack_add_test(snack_codex_tests agent/TestCodexAppServer.cpp)
 target_compile_definitions(
