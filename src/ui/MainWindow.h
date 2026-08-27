@@ -33,6 +33,7 @@ namespace snack::ui {
 
 class ComposerTextEdit;
 class RichTextView;
+class TerminalTabs;
 
 } // namespace snack::ui
 
@@ -243,6 +244,7 @@ class MainWindow final : public QMainWindow {
     QWidget* sessionSidebar_{nullptr};
     QDockWidget* taskDock_{nullptr};
     QDockWidget* terminalDock_{nullptr};
+    TerminalTabs* terminalTabs_{nullptr};
     QDockWidget* fileDock_{nullptr};
     QDockWidget* diffDock_{nullptr};
     QListWidget* workspaceFileList_{nullptr};

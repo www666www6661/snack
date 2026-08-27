@@ -24,6 +24,7 @@ class TerminalTabs final : public QWidget {
                  QWidget* parent = nullptr);
 
     void setWorkingDirectory(const QString& workingDirectory);
+    void applyInterfaceScale(double scale);
     [[nodiscard]] int terminalCount() const;
 
   public slots:

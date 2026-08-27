@@ -112,6 +112,8 @@ void TestTerminalView::managesFakeTabsAndDetachedWindow() {
     QCOMPARE(states.at(0)->workingDirectory, directory.path());
     auto* pane = tabs.findChild<snack::ui::TerminalPane*>();
     QVERIFY(pane != nullptr);
+    tabs.applyInterfaceScale(1.5);
+    QCOMPARE(pane->view()->font().pointSizeF(), 15.0);
     processes.at(0)->sendOutput("\x1b[31mterminal text\x1b[0m\r\n");
     QTRY_COMPARE(pane->view()->toPlainText(), QStringLiteral("terminal text\n"));
     QTest::keyClicks(pane->view(), QStringLiteral("echo"));

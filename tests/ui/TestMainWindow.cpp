@@ -4,6 +4,7 @@
 #include "session/SessionController.h"
 #include "storage/EventRepository.h"
 #include "ui/MainWindow.h"
+#include "ui/TerminalTabs.h"
 
 #include <QAction>
 #include <QApplication>
@@ -2401,6 +2402,8 @@ void TestMainWindow::appliesBuiltInWorkbenchLayouts() {
     auto* focus = window.findChild<QAction*>(QStringLiteral("focusLayoutAction"));
     auto* review = window.findChild<QAction*>(QStringLiteral("reviewLayoutAction"));
     auto* terminal = window.findChild<QAction*>(QStringLiteral("terminalDebugLayoutAction"));
+    auto* toggleTerminal = window.findChild<QAction*>(QStringLiteral("toggleTerminalAction"));
+    auto* terminalTabs = window.findChild<snack::ui::TerminalTabs*>();
     auto* monitor = window.findChild<QAction*>(QStringLiteral("multiSessionLayoutAction"));
     QVERIFY(sidebar != nullptr);
     QVERIFY(taskDock != nullptr);
@@ -2408,6 +2411,10 @@ void TestMainWindow::appliesBuiltInWorkbenchLayouts() {
     QVERIFY(focus != nullptr);
     QVERIFY(review != nullptr);
     QVERIFY(terminal != nullptr);
+    QVERIFY(toggleTerminal != nullptr);
+    QVERIFY(terminalTabs != nullptr);
+    QCOMPARE(toggleTerminal->shortcut(), QKeySequence(Qt::CTRL | Qt::Key_J));
+    QCOMPARE(terminalTabs->terminalCount(), 0);
     QVERIFY(monitor != nullptr);
     window.show();
 

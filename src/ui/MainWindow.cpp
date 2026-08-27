@@ -7,6 +7,7 @@
 #include "domain/PromptTemplateEngine.h"
 #include "ui/ComposerTextEdit.h"
 #include "ui/RichTextView.h"
+#include "ui/TerminalTabs.h"
 #include "workspace/WorkspaceChangeReview.h"
 #include "workspace/WorkspaceDiff.h"
 
@@ -940,6 +941,7 @@ void MainWindow::bindConversation(session::SessionController* controller) {
     restoreTimeline();
     rebuildCapabilityControls(controller_->nextTurnSettings());
     updateQueuedMessages(controller_->queuedMessages());
+    terminalTabs_->setWorkingDirectory(controller_->conversation().workingDirectory);
     updateConnectionDetail(controller_->connectionDetail());
     updateStatus(controller_->status());
 
@@ -2144,8 +2146,8 @@ void MainWindow::buildUi() {
 
     terminalDock_ = new QDockWidget(tr("Terminal"), this);
     terminalDock_->setObjectName(QStringLiteral("terminalDock"));
-    terminalDock_->setWidget(
-        new QLabel(tr("Terminal integration is scheduled for M4."), terminalDock_));
+    terminalTabs_ = new TerminalTabs(controller_->conversation().workingDirectory, terminalDock_);
+    terminalDock_->setWidget(terminalTabs_);
     addDockWidget(Qt::BottomDockWidgetArea, terminalDock_);
     terminalDock_->hide();
 
@@ -2312,6 +2314,10 @@ void MainWindow::buildMenus() {
     auto* viewMenu = menuBar()->addMenu(tr("View"));
     viewMenu->addAction(fileDock_->toggleViewAction());
     viewMenu->addAction(diffDock_->toggleViewAction());
+    QAction* terminalAction = terminalDock_->toggleViewAction();
+    terminalAction->setObjectName(QStringLiteral("toggleTerminalAction"));
+    terminalAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_J));
+    viewMenu->addAction(terminalAction);
     auto* layoutsMenu = viewMenu->addMenu(tr("Workbench layout"));
     auto* focusLayout = layoutsMenu->addAction(tr("Focus chat"));
     focusLayout->setObjectName(QStringLiteral("focusLayoutAction"));
@@ -3137,6 +3143,7 @@ void MainWindow::applyInterfaceScale(double scale) {
     font.setPointSizeF(10.0 * settingsSnapshot_.interfaceScale);
     qApp->setFont(font);
     richTextView_->applyInterfaceScale(settingsSnapshot_.interfaceScale);
+    terminalTabs_->applyInterfaceScale(settingsSnapshot_.interfaceScale);
     statusBar()->showMessage(
         tr("Interface scale: %1%").arg(settingsSnapshot_.interfaceScale * 100.0, 0, 'f', 0), 1500);
 }

@@ -2,6 +2,7 @@
 
 #include "terminal/NativeTerminalProcess.h"
 #include "ui/TerminalPane.h"
+#include "ui/TerminalView.h"
 
 #include <QFileInfo>
 #include <QHBoxLayout>
@@ -73,11 +74,20 @@ void TerminalTabs::setWorkingDirectory(const QString& workingDirectory) {
     label->setToolTip(workingDirectory_);
 }
 
+void TerminalTabs::applyInterfaceScale(double scale) {
+    for (TerminalView* view : findChildren<TerminalView*>()) {
+        QFont font = view->font();
+        font.setPointSizeF(10.0 * scale);
+        view->setFont(font);
+    }
+}
+
 int TerminalTabs::terminalCount() const { return tabs_->count(); }
 
 void TerminalTabs::newTerminal() {
     auto* pane = new TerminalPane(workingDirectory_, processFactory_(), tabs_);
-    const QString title = tr("Terminal %1").arg(nextTerminalNumber_++);
+    const QString workspaceName = QFileInfo(workingDirectory_).fileName();
+    const QString title = tr("%1 - Terminal %2").arg(workspaceName).arg(nextTerminalNumber_++);
     const int index = tabs_->addTab(pane, title);
     tabs_->setCurrentIndex(index);
     QString error;

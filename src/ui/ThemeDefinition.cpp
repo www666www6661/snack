@@ -167,6 +167,9 @@ QListWidget#queueList { background: transparent; border: none; outline: none; }
 QListWidget#queueList::item { padding: 6px 8px; border-bottom: 1px solid %4; }
 QListWidget#queueList::item:selected { background: %5; color: %2; border-radius: 6px; }
 QPlainTextEdit#toolOutput { background: %1; border: 1px solid %4; border-radius: 7px; padding: 7px; }
+QPlainTextEdit#terminalView { background: %15; color: %16; border: none; padding: 8px; selection-background-color: %7; }
+QWidget#terminalToolbar { background: %3; border-bottom: 1px solid %4; }
+QLabel#terminalStatus { background: %12; color: %14; border-top: 1px solid %4; padding: 5px 8px; }
 QListWidget#planList { background: %1; border: none; outline: none; }
 QListWidget#planList::item { padding: 6px; border-bottom: 1px solid %4; }
 QPlainTextEdit#composer { background: %6; border: 1px solid %4; border-radius: 12px; padding: 10px; }
@@ -189,7 +192,9 @@ QStatusBar { border-top: 1px solid %4; color: %9; }
         .arg(color(*this, QStringLiteral("message.reasoning")).name())
         .arg(color(*this, QStringLiteral("surface.overlay")).name())
         .arg(color(*this, QStringLiteral("state.warning")).name())
-        .arg(color(*this, QStringLiteral("state.danger")).name());
+        .arg(color(*this, QStringLiteral("state.danger")).name())
+        .arg(color(*this, QStringLiteral("terminal.background")).name())
+        .arg(color(*this, QStringLiteral("terminal.foreground")).name());
 }
 
 } // namespace snack::ui
