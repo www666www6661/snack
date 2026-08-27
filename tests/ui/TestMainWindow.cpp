@@ -147,6 +147,7 @@ class TestMainWindow final : public QObject {
     void operatesOnSelectedConversationFromContextMenu();
     void updatesConversationRailForBackgroundRuntimeStatus();
     void persistsArchivedConversationVisibility();
+    void cyclesActiveConversationsInRepositoryOrder();
 };
 
 void TestMainWindow::opensAndSwitchesConversationFromRail() {
@@ -665,6 +666,61 @@ void TestMainWindow::persistsArchivedConversationVisibility() {
     QVERIFY(restoredAction != nullptr);
     QVERIFY(!restoredAction->isChecked());
     QCOMPARE(restoredList->count(), 1);
+}
+
+void TestMainWindow::cyclesActiveConversationsInRepositoryOrder() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::app::AppSettings settings(directory.filePath(QStringLiteral("settings.ini")));
+    UiMemoryEventRepository repository;
+    snack::domain::Conversation alpha;
+    alpha.title = QStringLiteral("Alpha");
+    alpha.workingDirectory = directory.path();
+    snack::domain::Conversation beta;
+    beta.title = QStringLiteral("Beta");
+    beta.workingDirectory = directory.path();
+    snack::domain::Conversation gamma;
+    gamma.title = QStringLiteral("Gamma");
+    gamma.workingDirectory = directory.path();
+    snack::domain::Conversation archived;
+    archived.title = QStringLiteral("Between");
+    archived.workingDirectory = directory.path();
+    archived.archived = true;
+    repository.catalog = {gamma, archived, beta, alpha};
+
+    const auto makeRuntime = [](snack::domain::AgentKind kind) {
+        snack::agent::AgentRuntime runtime;
+        runtime.requestedKind = kind;
+        runtime.selectedKind = kind;
+        runtime.adapter = std::make_unique<snack::agent::FakeAgentAdapter>(nullptr, 1);
+        return runtime;
+    };
+    snack::app::SessionManager sessions(&repository, makeRuntime);
+    QString error;
+    auto* betaController = sessions.addPrepared(beta, makeRuntime(beta.agentKind), &error);
+    QVERIFY2(betaController != nullptr, qPrintable(error));
+    snack::ui::MainWindow window(betaController, &settings, &sessions, false);
+    auto* next = window.findChild<QAction*>(QStringLiteral("nextConversationAction"));
+    auto* previous = window.findChild<QAction*>(QStringLiteral("previousConversationAction"));
+    auto* title = window.findChild<QLabel*>(QStringLiteral("conversationTitle"));
+    auto* composer = window.findChild<QPlainTextEdit*>(QStringLiteral("composer"));
+    QVERIFY(next != nullptr);
+    QVERIFY(previous != nullptr);
+    QVERIFY(title != nullptr);
+    QVERIFY(composer != nullptr);
+    QCOMPARE(next->shortcut(), QKeySequence::NextChild);
+    QCOMPARE(previous->shortcut(), QKeySequence::PreviousChild);
+
+    composer->setPlainText(QStringLiteral("Beta draft"));
+    next->trigger();
+    QCOMPARE(title->text(), QStringLiteral("Gamma"));
+    QCOMPARE(settings.composerDraft(beta.id), QStringLiteral("Beta draft"));
+    next->trigger();
+    QCOMPARE(title->text(), QStringLiteral("Alpha"));
+    previous->trigger();
+    QCOMPARE(title->text(), QStringLiteral("Gamma"));
+    QVERIFY(title->text() != archived.title);
+    QCOMPARE(sessions.size(), qsizetype{3});
 }
 
 void TestMainWindow::sendsAndRendersStreamingTurn() {

@@ -65,6 +65,8 @@ class MainWindow final : public QMainWindow {
     void applyDarkTheme();
     void focusConversationSearch();
     void setShowArchivedConversations(bool visible);
+    void activatePreviousConversation();
+    void activateNextConversation();
     void increaseScale();
     void decreaseScale();
     void resetScale();
@@ -86,6 +88,8 @@ class MainWindow final : public QMainWindow {
     void buildMenus();
     void connectControllerSignals();
     void refreshConversationList();
+    void activateRelativeConversation(int offset);
+    void activateConversationById(const QUuid& conversationId);
     void resetConversationView();
     void bindConversation(session::SessionController* controller);
     void appendEvent(const domain::AgentEvent& event);

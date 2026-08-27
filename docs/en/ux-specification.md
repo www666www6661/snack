@@ -32,6 +32,8 @@ Active rows include a text status such as Connecting, Idle, Running, Waiting for
 
 The View menu can hide or show archived rows. This is a persistent local view preference, defaults to visible for compatibility, and never changes archive metadata or runtime ownership.
 
+`Ctrl+Tab` and `Ctrl+Shift+Tab` cycle forward and backward through active conversations in repository order, wrap at either end, skip archived rows, and save the outgoing draft before opening the target through the normal strict Agent boundary.
+
 A persistent notice directly below the header reports an Agent fallback, connection loss, or reconnect attempt. Fallback notices remain visible while the fallback Agent is active. Connection failures preserve the original diagnostic and expose Reconnect in the notice; retrying keeps the previous cause visible until the native handshake succeeds. The status bar may echo the message but is never its only location. `Closed` is terminal: delayed connection, capability, native-identity, or event signals from an asynchronously exiting Agent cannot reopen the conversation, replace its diagnostic, or append timeline data.
 
 ## 4. Timeline
@@ -68,6 +70,7 @@ Support groups, pinning, tags, archive, and saved views. State uses shape/text a
 |---|---|---|
 | New conversation | `Ctrl+N` | `Cmd+N` |
 | Search | `Ctrl+K` | `Cmd+K` |
+| Next / previous conversation | `Ctrl+Tab` / `Ctrl+Shift+Tab` | `Ctrl+Tab` / `Ctrl+Shift+Tab` |
 | Focus composer | `Ctrl+L` | `Cmd+L` |
 | Send / newline | `Enter` / `Shift+Enter` | same |
 | Queue send | `Ctrl+Enter` | `Cmd+Enter` |

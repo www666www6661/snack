@@ -212,9 +212,15 @@ void MainWindow::activateConversation(QListWidgetItem* item) {
     if (item == nullptr || sessions_ == nullptr) {
         return;
     }
-    const QUuid conversationId = item->data(Qt::UserRole).toUuid();
     if (item->data(Qt::UserRole + 1).toBool()) {
         statusBar()->showMessage(tr("Restore the archived conversation before opening it"), 5000);
+        return;
+    }
+    activateConversationById(item->data(Qt::UserRole).toUuid());
+}
+
+void MainWindow::activateConversationById(const QUuid& conversationId) {
+    if (sessions_ == nullptr || conversationId.isNull()) {
         return;
     }
     if (conversationId == controller_->conversation().id) {
@@ -238,6 +244,29 @@ void MainWindow::activateConversation(QListWidgetItem* item) {
     }
 
     bindConversation(nextController);
+}
+
+void MainWindow::activateRelativeConversation(int offset) {
+    if (sessions_ == nullptr || offset == 0) {
+        return;
+    }
+    QList<QUuid> activeConversationIds;
+    for (const auto& conversation : conversationCatalog_) {
+        if (!conversation.archived) {
+            activeConversationIds.append(conversation.id);
+        }
+    }
+    if (activeConversationIds.size() < 2) {
+        return;
+    }
+    const qsizetype currentIndex = activeConversationIds.indexOf(controller_->conversation().id);
+    if (currentIndex < 0) {
+        refreshConversationList();
+        return;
+    }
+    const qsizetype count = activeConversationIds.size();
+    const qsizetype nextIndex = (currentIndex + offset + count) % count;
+    activateConversationById(activeConversationIds.at(nextIndex));
 }
 
 void MainWindow::createConversation() {
@@ -753,6 +782,10 @@ void MainWindow::focusConversationSearch() {
     conversationSearch_->setFocus();
 }
 
+void MainWindow::activatePreviousConversation() { activateRelativeConversation(-1); }
+
+void MainWindow::activateNextConversation() { activateRelativeConversation(1); }
+
 void MainWindow::setShowArchivedConversations(bool visible) {
     settingsSnapshot_.showArchivedConversations = visible;
     settings_->save(settingsSnapshot_);
@@ -1108,6 +1141,17 @@ void MainWindow::buildMenus() {
     showArchivedConversationsAction_->setChecked(settingsSnapshot_.showArchivedConversations);
     connect(showArchivedConversationsAction_, &QAction::toggled, this,
             &MainWindow::setShowArchivedConversations);
+    auto* previousConversation = viewMenu->addAction(tr("Previous conversation"));
+    previousConversation->setObjectName(QStringLiteral("previousConversationAction"));
+    previousConversation->setShortcut(QKeySequence::PreviousChild);
+    previousConversation->setEnabled(sessions_ != nullptr);
+    connect(previousConversation, &QAction::triggered, this,
+            &MainWindow::activatePreviousConversation);
+    auto* nextConversation = viewMenu->addAction(tr("Next conversation"));
+    nextConversation->setObjectName(QStringLiteral("nextConversationAction"));
+    nextConversation->setShortcut(QKeySequence::NextChild);
+    nextConversation->setEnabled(sessions_ != nullptr);
+    connect(nextConversation, &QAction::triggered, this, &MainWindow::activateNextConversation);
     auto* focusComposer = viewMenu->addAction(tr("Focus composer"));
     focusComposer->setObjectName(QStringLiteral("focusComposerAction"));
     focusComposer->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_L));
