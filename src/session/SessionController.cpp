@@ -535,6 +535,10 @@ bool SessionController::saveConversationView(domain::SavedConversationView view,
     return repository_->saveConversationView(view, error);
 }
 
+bool SessionController::deleteConversationView(const QUuid& viewId, QString* error) {
+    return repository_->deleteConversationView(viewId, error);
+}
+
 bool SessionController::respondToApproval(const QString& requestId,
                                           domain::ApprovalDecision decision, QString* error) {
     if (!pendingApprovals_.contains(requestId)) {

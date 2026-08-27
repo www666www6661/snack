@@ -501,6 +501,8 @@ void TestSessionController::savesConversationViews() {
     QCOMPARE(views.size(), 1);
     QCOMPARE(views.constFirst().name, QStringLiteral("Active backend"));
     QCOMPARE(views.constFirst().query, QStringLiteral("tag:backend status:running"));
+    QVERIFY(controller.deleteConversationView(view.id, &error));
+    QVERIFY(controller.conversationViews(&error).isEmpty());
 }
 
 void TestSessionController::interruptsActiveTurn() {

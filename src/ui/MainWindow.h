@@ -70,6 +70,7 @@ class MainWindow final : public QMainWindow {
     void applyDarkTheme();
     void focusConversationSearch();
     void saveConversationView();
+    void deleteConversationView();
     void applyConversationView(int index);
     void activateFirstSearchResult();
     void leaveConversationSearch();
@@ -172,6 +173,7 @@ class MainWindow final : public QMainWindow {
     QLabel* sessionRow_{nullptr};
     QComboBox* conversationViewCombo_{nullptr};
     QPushButton* saveConversationViewButton_{nullptr};
+    QPushButton* deleteConversationViewButton_{nullptr};
     QLineEdit* conversationSearch_{nullptr};
     QListWidget* conversationList_{nullptr};
     QComboBox* modelCombo_{nullptr};

@@ -1031,11 +1031,35 @@ void MainWindow::activatePreviousConversation() { activateRelativeConversation(-
 void MainWindow::activateNextConversation() { activateRelativeConversation(1); }
 
 void MainWindow::setShowArchivedConversations(bool visible) {
-    const QSignalBlocker blocker(conversationViewCombo_);
     conversationViewCombo_->setCurrentIndex(0);
     settingsSnapshot_.showArchivedConversations = visible;
     settings_->save(settingsSnapshot_);
     refreshConversationList();
+}
+
+void MainWindow::deleteConversationView() {
+    const QUuid viewId = conversationViewCombo_->currentData().toUuid();
+    if (viewId.isNull()) {
+        return;
+    }
+    QMessageBox prompt(QMessageBox::Warning, tr("Delete conversation view?"),
+                       tr("Delete the saved view “%1”? The current filter will remain active.")
+                           .arg(conversationViewCombo_->currentText()),
+                       QMessageBox::NoButton, this);
+    auto* deleteButton = prompt.addButton(tr("Delete view"), QMessageBox::DestructiveRole);
+    auto* cancelButton = prompt.addButton(QMessageBox::Cancel);
+    prompt.setDefaultButton(cancelButton);
+    prompt.setEscapeButton(cancelButton);
+    prompt.exec();
+    if (prompt.clickedButton() != deleteButton) {
+        return;
+    }
+    QString error;
+    if (!controller_->deleteConversationView(viewId, &error)) {
+        statusBar()->showMessage(tr("Cannot delete conversation view: %1").arg(error), 8000);
+        return;
+    }
+    rebuildConversationViews();
 }
 
 void MainWindow::saveConversationView() {
@@ -1065,6 +1089,7 @@ void MainWindow::saveConversationView() {
 }
 
 void MainWindow::applyConversationView(int index) {
+    deleteConversationViewButton_->setEnabled(index > 0);
     if (index <= 0) {
         return;
     }
@@ -1080,6 +1105,7 @@ void MainWindow::applyConversationView(int index) {
     showArchivedConversationsAction_->setChecked(selected->showArchived);
     const QSignalBlocker blocker(conversationViewCombo_);
     conversationViewCombo_->setCurrentIndex(conversationViewCombo_->findData(viewId));
+    deleteConversationViewButton_->setEnabled(true);
 }
 
 void MainWindow::rebuildConversationViews(const QUuid& selectedViewId) {
@@ -1094,6 +1120,7 @@ void MainWindow::rebuildConversationViews(const QUuid& selectedViewId) {
     const int selectedIndex =
         selectedViewId.isNull() ? 0 : conversationViewCombo_->findData(selectedViewId);
     conversationViewCombo_->setCurrentIndex(std::max(0, selectedIndex));
+    deleteConversationViewButton_->setEnabled(selectedIndex > 0);
     if (!error.isEmpty()) {
         statusBar()->showMessage(error, 8000);
     }
@@ -1161,8 +1188,12 @@ void MainWindow::buildUi() {
     conversationViewCombo_->setObjectName(QStringLiteral("conversationViewCombo"));
     saveConversationViewButton_ = new QPushButton(tr("Save view"), viewRow);
     saveConversationViewButton_->setObjectName(QStringLiteral("saveConversationViewButton"));
+    deleteConversationViewButton_ = new QPushButton(tr("Delete"), viewRow);
+    deleteConversationViewButton_->setObjectName(QStringLiteral("deleteConversationViewButton"));
+    deleteConversationViewButton_->setEnabled(false);
     viewRowLayout->addWidget(conversationViewCombo_, 1);
     viewRowLayout->addWidget(saveConversationViewButton_);
+    viewRowLayout->addWidget(deleteConversationViewButton_);
     conversationSearch_ = new QLineEdit(sidebar);
     conversationSearch_->setObjectName(QStringLiteral("conversationSearch"));
     conversationSearch_->setPlaceholderText(tr("Search conversations or tag:name"));
@@ -1356,6 +1387,8 @@ void MainWindow::buildUi() {
     connect(newConversation, &QPushButton::clicked, this, &MainWindow::createConversation);
     connect(saveConversationViewButton_, &QPushButton::clicked, this,
             &MainWindow::saveConversationView);
+    connect(deleteConversationViewButton_, &QPushButton::clicked, this,
+            &MainWindow::deleteConversationView);
     connect(conversationViewCombo_, &QComboBox::currentIndexChanged, this,
             &MainWindow::applyConversationView);
     connect(conversationList_, &QListWidget::itemClicked, this, &MainWindow::activateConversation);
@@ -1382,7 +1415,6 @@ void MainWindow::buildUi() {
     connect(contextRestoreAction_, &QAction::triggered, this,
             &MainWindow::restoreSelectedConversation);
     connect(conversationSearch_, &QLineEdit::textChanged, this, [this] {
-        const QSignalBlocker blocker(conversationViewCombo_);
         conversationViewCombo_->setCurrentIndex(0);
         refreshConversationList();
     });

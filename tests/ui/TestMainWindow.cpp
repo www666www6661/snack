@@ -1473,14 +1473,17 @@ void TestMainWindow::savesAndAppliesConversationViews() {
     auto* list = window.findChild<QListWidget*>(QStringLiteral("conversationList"));
     auto* views = window.findChild<QComboBox*>(QStringLiteral("conversationViewCombo"));
     auto* save = window.findChild<QPushButton*>(QStringLiteral("saveConversationViewButton"));
+    auto* remove = window.findChild<QPushButton*>(QStringLiteral("deleteConversationViewButton"));
     auto* showArchived =
         window.findChild<QAction*>(QStringLiteral("showArchivedConversationsAction"));
     QVERIFY(search != nullptr);
     QVERIFY(list != nullptr);
     QVERIFY(views != nullptr);
     QVERIFY(save != nullptr);
+    QVERIFY(remove != nullptr);
     QVERIFY(showArchived != nullptr);
     QCOMPARE(views->count(), 1);
+    QVERIFY(!remove->isEnabled());
 
     search->setText(QStringLiteral("tag:backend"));
     showArchived->setChecked(false);
@@ -1499,6 +1502,7 @@ void TestMainWindow::savesAndAppliesConversationViews() {
     QCOMPARE(saved.query, QStringLiteral("tag:backend"));
     QVERIFY(!saved.showArchived);
     QCOMPARE(views->currentData().toUuid(), saved.id);
+    QVERIFY(remove->isEnabled());
 
     search->clear();
     showArchived->setChecked(true);
@@ -1508,6 +1512,30 @@ void TestMainWindow::savesAndAppliesConversationViews() {
     QVERIFY(!showArchived->isChecked());
     QCOMPARE(list->count(), 1);
     QCOMPARE(list->item(0)->data(Qt::UserRole).toUuid(), backend.id);
+
+    bool promptFound = false;
+    QTimer::singleShot(0, [&promptFound] {
+        auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+        promptFound = prompt != nullptr;
+        if (prompt == nullptr) {
+            return;
+        }
+        for (auto* button : prompt->findChildren<QPushButton*>()) {
+            if (button->text() == QStringLiteral("Delete view")) {
+                button->click();
+                return;
+            }
+        }
+    });
+    remove->click();
+    QVERIFY(promptFound);
+    QVERIFY(repository.views.isEmpty());
+    QCOMPARE(views->count(), 1);
+    QCOMPARE(views->currentIndex(), 0);
+    QVERIFY(!remove->isEnabled());
+    QCOMPARE(search->text(), QStringLiteral("tag:backend"));
+    QVERIFY(!showArchived->isChecked());
+    QCOMPARE(list->count(), 1);
 }
 
 void TestMainWindow::restoresPersistedTimeline() {

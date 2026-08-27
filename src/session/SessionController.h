@@ -45,6 +45,7 @@ class SessionController final : public QObject {
     bool savePromptTemplate(domain::PromptTemplate promptTemplate, QString* error = nullptr);
     bool deletePromptTemplate(const QUuid& templateId, QString* error = nullptr);
     bool saveConversationView(domain::SavedConversationView view, QString* error = nullptr);
+    bool deleteConversationView(const QUuid& viewId, QString* error = nullptr);
     bool respondToApproval(const QString& requestId, domain::ApprovalDecision decision,
                            QString* error = nullptr);
     bool respondToUserInput(const QString& requestId, const QJsonObject& answers,
