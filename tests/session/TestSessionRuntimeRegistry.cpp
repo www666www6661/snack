@@ -64,6 +64,7 @@ class TestSessionRuntimeRegistry final : public QObject {
   private slots:
     void ownsFindsAndClosesSessions();
     void closesAllSessionsInReverseOrder();
+    void doesNotCloseAnAlreadyClosedControllerTwice();
     void rejectsInvalidRuntimeEntries();
 };
 
@@ -120,6 +121,24 @@ void TestSessionRuntimeRegistry::closesAllSessionsInReverseOrder() {
     }
     QCOMPARE(state->closedAdapters,
              QStringList({QStringLiteral("second"), QStringLiteral("first")}));
+}
+
+void TestSessionRuntimeRegistry::doesNotCloseAnAlreadyClosedControllerTwice() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::storage::EventStore repository;
+    QString error;
+    QVERIFY(repository.open(directory.filePath(QStringLiteral("events.sqlite3")), &error));
+    auto state = std::make_shared<TrackingState>();
+    snack::session::SessionRuntimeRegistry registry(&repository);
+    const auto value = conversation(QStringLiteral("already closed"));
+    QVERIFY(registry.add(value, runtime(QStringLiteral("already closed"), state), &error));
+
+    registry.controller(value.id)->close();
+    QCOMPARE(state->closedAdapters, QStringList({QStringLiteral("already closed")}));
+    registry.closeAll();
+    QCOMPARE(state->closedAdapters, QStringList({QStringLiteral("already closed")}));
+    QCOMPARE(registry.size(), qsizetype{0});
 }
 
 void TestSessionRuntimeRegistry::rejectsInvalidRuntimeEntries() {

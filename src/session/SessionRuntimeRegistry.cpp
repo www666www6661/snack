@@ -48,7 +48,9 @@ bool SessionRuntimeRegistry::close(const QUuid& conversationId) {
     }
     std::unique_ptr<Entry> closing = std::move(*iterator);
     entries_.erase(iterator);
-    closing->sessionController->close();
+    if (closing->sessionController->status() != domain::ConversationStatus::Closed) {
+        closing->sessionController->close();
+    }
     return true;
 }
 
@@ -56,7 +58,9 @@ void SessionRuntimeRegistry::closeAll() {
     Entries closing = std::move(entries_);
     entries_.clear();
     for (auto iterator = closing.rbegin(); iterator != closing.rend(); ++iterator) {
-        (*iterator)->sessionController->close();
+        if ((*iterator)->sessionController->status() != domain::ConversationStatus::Closed) {
+            (*iterator)->sessionController->close();
+        }
     }
 }
 

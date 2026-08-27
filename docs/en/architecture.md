@@ -74,7 +74,7 @@ stateDiagram-v2
 
 Interruptions and process loss are persisted. Reconnection never automatically resends a request or queue.
 
-M3 multi-session ownership begins at a Widget-free registry. Windows and conversation rails receive non-owning controller pointers only; removing a registry entry first drives the controller to `Closed`, then destroys it, its adapter, and finally its transport. This boundary prevents an active controller from retaining a dangling Agent pointer and gives true exit one deterministic `closeAll()` path.
+M3 multi-session ownership begins at a Widget-free registry. The application entry point owns this registry instead of a standalone runtime/controller pair, while windows and conversation rails receive non-owning controller pointers only. Removing a registry entry first drives an open controller to `Closed`, then destroys it, its adapter, and finally its transport; controllers already closed by a window shutdown are not closed twice. This boundary prevents an active controller from retaining a dangling Agent pointer and gives true exit one deterministic `closeAll()` path.
 
 ## 6. WebEngine boundary
 

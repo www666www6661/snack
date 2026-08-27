@@ -3,7 +3,7 @@
 #include "app/ConversationBootstrap.h"
 #include "app/Logging.h"
 #include "app/SingleInstanceGuard.h"
-#include "session/SessionController.h"
+#include "session/SessionRuntimeRegistry.h"
 #include "storage/EventStore.h"
 #include "ui/MainWindow.h"
 
@@ -16,6 +16,8 @@
 #include <QStandardPaths>
 #include <QSystemTrayIcon>
 #include <QTranslator>
+
+#include <utility>
 
 int main(int argc, char* argv[]) {
     QApplication application(argc, argv);
@@ -119,14 +121,25 @@ int main(int argc, char* argv[]) {
     settingsSnapshot.lastConversationId = conversation.id.toString(QUuid::WithoutBraces);
     settings.save(settingsSnapshot);
 
-    snack::session::SessionController controller(conversation, agentRuntime.adapter.get(),
-                                                 &eventStore);
+    snack::session::SessionRuntimeRegistry sessionRuntimes(&eventStore);
+    QString sessionError;
+    if (!sessionRuntimes.add(conversation, std::move(agentRuntime), &sessionError)) {
+        QMessageBox::critical(
+            nullptr, QObject::tr("Snack"),
+            QObject::tr("Cannot create the conversation session: %1").arg(sessionError));
+        return 3;
+    }
+    auto* controller = sessionRuntimes.controller(conversation.id);
+    const auto* currentRuntime = sessionRuntimes.runtime(conversation.id);
+    Q_ASSERT(controller != nullptr);
+    Q_ASSERT(currentRuntime != nullptr);
+
     const bool closeToTrayEnabled = QSystemTrayIcon::isSystemTrayAvailable();
     application.setQuitOnLastWindowClosed(!closeToTrayEnabled);
-    snack::ui::MainWindow window(&controller, &settings, closeToTrayEnabled);
-    if (agentRuntime.fellBack) {
+    snack::ui::MainWindow window(controller, &settings, closeToTrayEnabled);
+    if (currentRuntime->fellBack) {
         window.showStartupNotice(QCoreApplication::translate("main", "Using Mock Agent because %1")
-                                     .arg(agentRuntime.detail));
+                                     .arg(currentRuntime->detail));
     }
     QObject::connect(&singleInstance, &snack::app::SingleInstanceGuard::activationRequested,
                      &window, &snack::ui::MainWindow::activateWindowForRequest);
