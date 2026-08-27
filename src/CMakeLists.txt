@@ -51,6 +51,8 @@ set(SNACK_CORE_SOURCES
     workspace/WorkspaceSnapshot.h
     workspace/IsolationCapability.cpp
     workspace/IsolationCapability.h
+    workspace/WorkspaceDiff.cpp
+    workspace/WorkspaceDiff.h
     app/WorkspaceFilePreview.cpp
     app/WorkspaceFilePreview.h
     app/WorkspaceExternalOpener.cpp

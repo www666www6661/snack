@@ -1,4 +1,5 @@
 #include "workspace/IsolationCapability.h"
+#include "workspace/WorkspaceDiff.h"
 #include "workspace/WorkspaceSnapshot.h"
 
 #include <QFile>
@@ -12,6 +13,7 @@ class TestWorkspaceSnapshot final : public QObject {
     void capturesContentAndDetectsChanges();
     void failsClosedAtBounds();
     void reportsOnlyAdvertisedIsolation();
+    void producesBoundedNativeDiffHunks();
 };
 
 void TestWorkspaceSnapshot::capturesContentAndDetectsChanges() {
@@ -61,6 +63,21 @@ void TestWorkspaceSnapshot::reportsOnlyAdvertisedIsolation() {
     const auto mock = snack::workspace::IsolationCapabilityDetector::detect(
         snack::domain::AgentKind::Mock, codex);
     QCOMPARE(mock.mode, snack::workspace::IsolationMode::None);
+}
+
+void TestWorkspaceSnapshot::producesBoundedNativeDiffHunks() {
+    const auto hunks = snack::workspace::WorkspaceDiff::between(
+        QByteArray("one\ntwo\nthree\n"), QByteArray("one\nchanged\nthree\n"));
+    QCOMPARE(hunks.size(), 1);
+    QCOMPARE(hunks.constFirst().oldStart, 1);
+    const QString unified =
+        snack::workspace::WorkspaceDiff::unifiedText(QStringLiteral("file.txt"), hunks);
+    QVERIFY(unified.contains(QStringLiteral("-two")));
+    QVERIFY(unified.contains(QStringLiteral("+changed")));
+    QVERIFY(
+        snack::workspace::WorkspaceDiff::between(QByteArray("same"), QByteArray("same")).isEmpty());
+    QVERIFY(snack::workspace::WorkspaceDiff::between(QByteArray("a\nb"), QByteArray("a\nc"), 1)
+                .isEmpty());
 }
 
 QTEST_GUILESS_MAIN(TestWorkspaceSnapshot)

@@ -6,6 +6,7 @@
 #include "session/SessionController.h"
 #include "ui/DesktopNotifier.h"
 #include "ui/ThemeDefinition.h"
+#include "workspace/WorkspaceSnapshot.h"
 
 #include <QHash>
 #include <QMainWindow>
@@ -85,6 +86,7 @@ class MainWindow final : public QMainWindow {
     void removeSelectedAttachment();
     void previewSelectedWorkspaceFile();
     void openSelectedWorkspaceFileExternally();
+    void refreshSelectedWorkspaceDiff();
     void chooseWorkspaceReference();
     void updateSessionSettings();
     void applySystemTheme();
@@ -240,9 +242,11 @@ class MainWindow final : public QMainWindow {
     QDockWidget* taskDock_{nullptr};
     QDockWidget* terminalDock_{nullptr};
     QDockWidget* fileDock_{nullptr};
+    QDockWidget* diffDock_{nullptr};
     QListWidget* workspaceFileList_{nullptr};
     QPlainTextEdit* workspaceFilePreview_{nullptr};
     QPushButton* openWorkspaceFileButton_{nullptr};
+    QPlainTextEdit* workspaceDiffView_{nullptr};
     app::WorkspaceWatcher* workspaceWatcher_{nullptr};
     QLabel* planExplanation_{nullptr};
     QLabel* planItemText_{nullptr};
@@ -305,6 +309,7 @@ class MainWindow final : public QMainWindow {
     QString pendingAgentText_;
     QString streamedPlanText_;
     QJsonArray composerAttachments_;
+    std::optional<workspace::WorkspaceSnapshot> workspaceBaseline_;
     int activeAgentRow_{-1};
     int pendingAgentRow_{-1};
     bool planUpdatePending_{false};

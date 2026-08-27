@@ -7,6 +7,7 @@
 #include "domain/PromptTemplateEngine.h"
 #include "ui/ComposerTextEdit.h"
 #include "ui/RichTextView.h"
+#include "workspace/WorkspaceDiff.h"
 
 #include <QAction>
 #include <QActionGroup>
@@ -921,6 +922,7 @@ void MainWindow::bindConversation(session::SessionController* controller) {
         disconnect(controller_, nullptr, this, nullptr);
     }
     controller_ = controller;
+    workspaceBaseline_.reset();
     unreadConversationIds_.remove(controller_->conversation().id);
     resetConversationView();
     connectControllerSignals();
@@ -2107,11 +2109,23 @@ void MainWindow::buildUi() {
     fileDock_->hide();
     connect(workspaceFileList_, &QListWidget::itemSelectionChanged, this,
             &MainWindow::previewSelectedWorkspaceFile);
+    connect(workspaceFileList_, &QListWidget::itemSelectionChanged, this,
+            &MainWindow::refreshSelectedWorkspaceDiff);
     connect(openWorkspaceFileButton_, &QPushButton::clicked, this,
             &MainWindow::openSelectedWorkspaceFileExternally);
     workspaceWatcher_ = new app::WorkspaceWatcher(this);
     connect(workspaceWatcher_, &app::WorkspaceWatcher::workspaceChanged, this,
             &MainWindow::refreshWorkspaceBrowser);
+
+    diffDock_ = new QDockWidget(tr("Workspace diff"), this);
+    diffDock_->setObjectName(QStringLiteral("diffDock"));
+    workspaceDiffView_ = new QPlainTextEdit(diffDock_);
+    workspaceDiffView_->setObjectName(QStringLiteral("workspaceDiffView"));
+    workspaceDiffView_->setReadOnly(true);
+    workspaceDiffView_->setPlaceholderText(tr("Select a changed text file to review its diff."));
+    diffDock_->setWidget(workspaceDiffView_);
+    addDockWidget(Qt::RightDockWidgetArea, diffDock_);
+    diffDock_->hide();
 
     terminalDock_ = new QDockWidget(tr("Terminal"), this);
     terminalDock_->setObjectName(QStringLiteral("terminalDock"));
@@ -2282,6 +2296,7 @@ void MainWindow::buildMenus() {
 
     auto* viewMenu = menuBar()->addMenu(tr("View"));
     viewMenu->addAction(fileDock_->toggleViewAction());
+    viewMenu->addAction(diffDock_->toggleViewAction());
     auto* layoutsMenu = viewMenu->addMenu(tr("Workbench layout"));
     auto* focusLayout = layoutsMenu->addAction(tr("Focus chat"));
     focusLayout->setObjectName(QStringLiteral("focusLayoutAction"));
@@ -3300,10 +3315,34 @@ QString MainWindow::agentDisplayName() const {
 
 void MainWindow::refreshWorkspaceBrowser() {
     workspaceWatcher_->setWorkspace(controller_->conversation().workingDirectory);
+    if (!workspaceBaseline_.has_value()) {
+        workspaceBaseline_ =
+            workspace::WorkspaceSnapshot::capture(controller_->conversation().workingDirectory);
+    }
     workspaceFileList_->clear();
     workspaceFilePreview_->clear();
     workspaceFileList_->addItems(
         app::WorkspaceFileIndex::files(controller_->conversation().workingDirectory));
+}
+
+void MainWindow::refreshSelectedWorkspaceDiff() {
+    workspaceDiffView_->clear();
+    const auto selected = workspaceFileList_->selectedItems();
+    if (selected.isEmpty() || !workspaceBaseline_.has_value() ||
+        !workspaceBaseline_->isComplete()) {
+        return;
+    }
+    const QString relativePath = selected.constFirst()->text();
+    const auto baseline = workspaceBaseline_->entry(relativePath);
+    QString error;
+    const auto current = app::WorkspaceFilePreviewReader::read(
+        controller_->conversation().workingDirectory, relativePath, 1024 * 1024, &error);
+    if (!baseline.has_value() || !error.isEmpty() || current.truncated) {
+        workspaceDiffView_->setPlainText(error);
+        return;
+    }
+    workspaceDiffView_->setPlainText(workspace::WorkspaceDiff::unifiedText(
+        relativePath, workspace::WorkspaceDiff::between(baseline->content, current.text.toUtf8())));
 }
 
 void MainWindow::previewSelectedWorkspaceFile() {
