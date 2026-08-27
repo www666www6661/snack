@@ -13,6 +13,18 @@ class MemoryEventRepository : public snack::storage::IEventRepository {
         return true;
     }
 
+    bool deleteConversation(const QUuid& conversationId, QString*) override {
+        if (conversation_.id != conversationId) {
+            return false;
+        }
+        conversation_ = {};
+        events_.removeIf([&conversationId](const auto& event) {
+            return event.conversationId == conversationId;
+        });
+        queues_.remove(conversationId);
+        return true;
+    }
+
     bool appendEvent(const snack::domain::AgentEvent& event, QString*) override {
         events_.append(event);
         return true;

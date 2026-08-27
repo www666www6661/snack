@@ -123,6 +123,7 @@ class TestStorage final : public QObject {
 
   private slots:
     void eventStorePersistsOrderedEvents();
+    void eventStoreDeletesConversationGraph();
     void contentStoreDeduplicatesAndVerifies();
     void contentStoreRejectsCorruption();
     void contentStoreRejectsInvalidHash();
@@ -134,6 +135,35 @@ class TestStorage final : public QObject {
     void eventStoreRejectsIncompleteCurrentSchema();
     void contentStoreReportsFilesystemErrors();
 };
+
+void TestStorage::eventStoreDeletesConversationGraph() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::storage::EventStore store;
+    QString error;
+    QVERIFY(store.open(directory.filePath(QStringLiteral("events.sqlite3")), &error));
+    snack::domain::Conversation conversation;
+    conversation.title = QStringLiteral("Delete me");
+    conversation.workingDirectory = directory.path();
+    QVERIFY(store.saveConversation(conversation, &error));
+    snack::domain::AgentEvent event;
+    event.conversationId = conversation.id;
+    event.type = snack::domain::AgentEventType::UserMessage;
+    event.payload.insert(QStringLiteral("text"), QStringLiteral("private text"));
+    QVERIFY(store.appendEvent(event, &error));
+    snack::domain::QueuedMessage queued;
+    queued.conversationId = conversation.id;
+    queued.content = QStringLiteral("queued private text");
+    QVERIFY(store.replaceQueuedMessages(conversation.id, {queued}, &error));
+
+    QVERIFY(store.deleteConversation(conversation.id, &error));
+    QVERIFY(!store.conversationById(conversation.id, &error).has_value());
+    QVERIFY(store.eventsForConversation(conversation.id, &error).isEmpty());
+    QVERIFY(store.queuedMessagesForConversation(conversation.id, &error).isEmpty());
+    QVERIFY(!store.deleteConversation(conversation.id, &error));
+    QVERIFY(error.contains(QStringLiteral("no longer exists")));
+    QVERIFY(!store.deleteConversation(QUuid{}, &error));
+}
 
 void TestStorage::eventStorePersistsOrderedEvents() {
     QTemporaryDir directory;

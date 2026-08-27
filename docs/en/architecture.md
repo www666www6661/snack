@@ -82,6 +82,8 @@ New conversations use a separate `create` path. The requested Agent may explicit
 
 Archiving is metadata-only and non-destructive. `SessionManager` refuses to archive active Agent work, persists the archive flag for an idle conversation, and then closes its runtime without deleting events, queues, drafts, or native identities. Restore first validates and creates the strict historical Agent runtime; it clears the archive flag only when an owning Controller can be established, so an unavailable Agent leaves the row archived.
 
+Permanent deletion is a separate lifecycle boundary. `SessionManager` rejects deletion while Agent work is active, closes an open Controller and its Runtime in ownership order, and then asks the repository to delete the conversation. SQLite foreign keys remove its events and queued messages atomically with the parent row. A repository failure attempts to recreate the original same-Agent Runtime instead of leaving a dangling Controller.
+
 ## 6. WebEngine boundary
 
 Load only packaged `qrc://` assets, reject remote subresources, parse Markdown into an AST and render through an allowlist, package Mermaid and math rendering offline, expose only copy/expand/measure/scroll/link requests through WebChannel, and validate external URLs in C++. A renderer crash rebuilds from `EventStore` without affecting the agent.

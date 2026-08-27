@@ -28,6 +28,7 @@ class SessionManager final {
     bool setPinned(const QUuid& conversationId, bool pinned, QString* error = nullptr);
     bool setTags(const QUuid& conversationId, const QStringList& tags, QString* error = nullptr);
     bool setGroup(const QUuid& conversationId, const QString& groupName, QString* error = nullptr);
+    bool deleteConversation(const QUuid& conversationId, QString* error = nullptr);
     [[nodiscard]] session::SessionController* restore(const QUuid& conversationId,
                                                       QString* error = nullptr);
     [[nodiscard]] QList<domain::Conversation> catalog(QString* error = nullptr) const;

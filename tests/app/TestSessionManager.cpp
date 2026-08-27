@@ -64,6 +64,8 @@ class TestSessionManager final : public QObject {
     void pinsOpenAndClosedConversations();
     void updatesTagsForOpenAndClosedConversations();
     void updatesGroupsForOpenAndClosedConversations();
+    void deletesIdleAndClosedConversations();
+    void rejectsDeletingActiveConversation();
 };
 
 void TestSessionManager::adoptsPreparedRuntimeAndReusesOpenSession() {
@@ -351,6 +353,48 @@ void TestSessionManager::updatesGroupsForOpenAndClosedConversations() {
     QCOMPARE(manager.controller(open.id)->conversation().groupName, QStringLiteral("Active"));
     QCOMPARE(repository.conversationById(closed.id, &error)->groupName, QStringLiteral("Backlog"));
     QVERIFY(!manager.setGroup(QUuid{}, QStringLiteral("invalid"), &error));
+}
+
+void TestSessionManager::deletesIdleAndClosedConversations() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::storage::EventStore repository;
+    QString error;
+    QVERIFY(repository.open(directory.filePath(QStringLiteral("events.sqlite3")), &error));
+    snack::app::SessionManager manager(&repository,
+                                       [](snack::domain::AgentKind kind) { return runtime(kind); });
+    const auto open = conversation(snack::domain::AgentKind::Mock);
+    auto closed = conversation(snack::domain::AgentKind::Mock);
+    closed.id = QUuid::createUuid();
+    QVERIFY(manager.addPrepared(open, runtime(open.agentKind), &error) != nullptr);
+    QVERIFY(repository.saveConversation(closed, &error));
+
+    QVERIFY(manager.deleteConversation(open.id, &error));
+    QCOMPARE(manager.size(), qsizetype{0});
+    QVERIFY(!repository.conversationById(open.id, &error).has_value());
+    QVERIFY(manager.deleteConversation(closed.id, &error));
+    QVERIFY(!manager.deleteConversation(closed.id, &error));
+    QVERIFY(error.contains(QStringLiteral("does not exist")));
+    QVERIFY(!manager.deleteConversation(QUuid{}, &error));
+}
+
+void TestSessionManager::rejectsDeletingActiveConversation() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::storage::EventStore repository;
+    QString error;
+    QVERIFY(repository.open(directory.filePath(QStringLiteral("events.sqlite3")), &error));
+    snack::app::SessionManager manager(&repository,
+                                       [](snack::domain::AgentKind kind) { return runtime(kind); });
+    auto active = conversation(snack::domain::AgentKind::Mock);
+    active.status = snack::domain::ConversationStatus::Running;
+    QVERIFY(repository.saveConversation(active, &error));
+    QVERIFY(manager.addPrepared(active, runtime(active.agentKind), &error) != nullptr);
+
+    QVERIFY(!manager.deleteConversation(active.id, &error));
+    QVERIFY(error.contains(QStringLiteral("Agent work is active")));
+    QCOMPARE(manager.size(), qsizetype{1});
+    QVERIFY(repository.conversationById(active.id, &error).has_value());
 }
 
 QTEST_GUILESS_MAIN(TestSessionManager)

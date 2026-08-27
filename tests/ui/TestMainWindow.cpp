@@ -42,6 +42,18 @@ class UiMemoryEventRepository final : public snack::storage::IEventRepository {
         return true;
     }
 
+    bool deleteConversation(const QUuid& conversationId, QString*) override {
+        const auto before = catalog.size();
+        catalog.removeIf([&conversationId](const auto& conversation) {
+            return conversation.id == conversationId;
+        });
+        events.removeIf([&conversationId](const auto& event) {
+            return event.conversationId == conversationId;
+        });
+        queues.remove(conversationId);
+        return catalog.size() != before;
+    }
+
     std::optional<snack::domain::Conversation> conversationById(const QUuid& conversationId,
                                                                 QString*) const override {
         const auto iterator = std::find_if(catalog.cbegin(), catalog.cend(),

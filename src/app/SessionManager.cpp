@@ -181,6 +181,51 @@ bool SessionManager::setGroup(const QUuid& conversationId, const QString& groupN
     return repository_->saveConversation(*stored, error);
 }
 
+bool SessionManager::deleteConversation(const QUuid& conversationId, QString* error) {
+    if (conversationId.isNull()) {
+        setError(error, QStringLiteral("Cannot delete an invalid conversation ID"));
+        return false;
+    }
+
+    std::optional<domain::Conversation> stored;
+    if (auto* openController = registry_.controller(conversationId); openController != nullptr) {
+        const domain::ConversationStatus status = openController->status();
+        const bool active = status == domain::ConversationStatus::Connecting ||
+                            status == domain::ConversationStatus::Running ||
+                            status == domain::ConversationStatus::WaitingApproval ||
+                            status == domain::ConversationStatus::WaitingInput;
+        if (active) {
+            setError(error,
+                     QStringLiteral("Cannot delete a conversation while Agent work is active"));
+            return false;
+        }
+        stored = openController->conversation();
+    } else {
+        stored = repository_->conversationById(conversationId, error);
+    }
+    if (!stored.has_value()) {
+        if (error == nullptr || error->isEmpty()) {
+            setError(error, QStringLiteral("Conversation does not exist"));
+        }
+        return false;
+    }
+
+    if (registry_.controller(conversationId) != nullptr) {
+        registry_.close(conversationId);
+    }
+    QString deleteError;
+    if (repository_->deleteConversation(conversationId, &deleteError)) {
+        return true;
+    }
+
+    QString reopenError;
+    if (open(*stored, &reopenError) == nullptr && !reopenError.isEmpty()) {
+        deleteError += QStringLiteral("; cannot restore runtime: %1").arg(reopenError);
+    }
+    setError(error, deleteError);
+    return false;
+}
+
 session::SessionController* SessionManager::restore(const QUuid& conversationId, QString* error) {
     if (conversationId.isNull()) {
         setError(error, QStringLiteral("Cannot restore an invalid conversation ID"));

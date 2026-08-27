@@ -24,6 +24,7 @@ class EventStore final : public IEventRepository {
     [[nodiscard]] QString recoveryError() const;
 
     bool saveConversation(const domain::Conversation& conversation, QString* error) override;
+    bool deleteConversation(const QUuid& conversationId, QString* error) override;
     [[nodiscard]] std::optional<domain::Conversation>
     conversationById(const QUuid& conversationId, QString* error) const override;
     [[nodiscard]] QList<domain::Conversation> conversations(QString* error) const override;

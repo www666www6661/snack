@@ -339,6 +339,32 @@ bool EventStore::saveConversation(const domain::Conversation& conversation, QStr
     return true;
 }
 
+bool EventStore::deleteConversation(const QUuid& conversationId, QString* error) {
+    if (!ensureWritable(error)) {
+        return false;
+    }
+    if (conversationId.isNull()) {
+        if (error != nullptr) {
+            *error = QStringLiteral("Cannot delete conversation: invalid ID");
+        }
+        return false;
+    }
+    QSqlQuery query(database_);
+    query.prepare(QStringLiteral("DELETE FROM conversations WHERE id = ?"));
+    query.addBindValue(conversationId.toString(QUuid::WithoutBraces));
+    if (!query.exec()) {
+        setSqlError(error, QStringLiteral("Cannot delete conversation"), query.lastError());
+        return false;
+    }
+    if (query.numRowsAffected() != 1) {
+        if (error != nullptr) {
+            *error = QStringLiteral("Conversation no longer exists");
+        }
+        return false;
+    }
+    return true;
+}
+
 std::optional<domain::Conversation> EventStore::conversationById(const QUuid& conversationId,
                                                                  QString* error) const {
     QSqlQuery query(database_);
