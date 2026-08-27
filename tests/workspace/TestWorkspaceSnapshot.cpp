@@ -1,7 +1,9 @@
 #include "workspace/IsolationCapability.h"
+#include "workspace/WorkspaceChangeReview.h"
 #include "workspace/WorkspaceDiff.h"
 #include "workspace/WorkspaceSnapshot.h"
 
+#include <QCryptographicHash>
 #include <QFile>
 #include <QTemporaryDir>
 #include <QTest>
@@ -14,6 +16,7 @@ class TestWorkspaceSnapshot final : public QObject {
     void failsClosedAtBounds();
     void reportsOnlyAdvertisedIsolation();
     void producesBoundedNativeDiffHunks();
+    void acceptsAndRejectsReviewedChanges();
 };
 
 void TestWorkspaceSnapshot::capturesContentAndDetectsChanges() {
@@ -78,6 +81,35 @@ void TestWorkspaceSnapshot::producesBoundedNativeDiffHunks() {
         snack::workspace::WorkspaceDiff::between(QByteArray("same"), QByteArray("same")).isEmpty());
     QVERIFY(snack::workspace::WorkspaceDiff::between(QByteArray("a\nb"), QByteArray("a\nc"), 1)
                 .isEmpty());
+}
+
+void TestWorkspaceSnapshot::acceptsAndRejectsReviewedChanges() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    QFile file(directory.filePath(QStringLiteral("file.txt")));
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write("baseline");
+    file.close();
+    auto snapshot = snack::workspace::WorkspaceSnapshot::capture(directory.path());
+
+    QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    file.write("changed");
+    file.close();
+    const QByteArray changedHash =
+        QCryptographicHash::hash(QByteArray("changed"), QCryptographicHash::Sha256);
+    QString error;
+    QVERIFY(snack::workspace::WorkspaceChangeReview::rejectCurrent(
+        snapshot, QStringLiteral("file.txt"), changedHash, &error));
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QCOMPARE(file.readAll(), QByteArray("baseline"));
+    file.close();
+
+    QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    file.write("accepted");
+    file.close();
+    QVERIFY(snack::workspace::WorkspaceChangeReview::acceptCurrent(
+        snapshot, QStringLiteral("file.txt"), &error));
+    QCOMPARE(snapshot.entry(QStringLiteral("file.txt"))->content, QByteArray("accepted"));
 }
 
 QTEST_GUILESS_MAIN(TestWorkspaceSnapshot)

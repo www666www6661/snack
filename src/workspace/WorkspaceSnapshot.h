@@ -25,6 +25,7 @@ class WorkspaceSnapshot final {
     [[nodiscard]] QStringList paths() const;
     [[nodiscard]] std::optional<SnapshotEntry> entry(const QString& relativePath) const;
     [[nodiscard]] bool matchesCurrentFile(const QString& relativePath) const;
+    void setEntry(const QString& relativePath, SnapshotEntry entry);
 
   private:
     QString workspace_;

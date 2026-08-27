@@ -87,6 +87,8 @@ class MainWindow final : public QMainWindow {
     void previewSelectedWorkspaceFile();
     void openSelectedWorkspaceFileExternally();
     void refreshSelectedWorkspaceDiff();
+    void acceptSelectedWorkspaceChange();
+    void rejectSelectedWorkspaceChange();
     void chooseWorkspaceReference();
     void updateSessionSettings();
     void applySystemTheme();
@@ -247,6 +249,9 @@ class MainWindow final : public QMainWindow {
     QPlainTextEdit* workspaceFilePreview_{nullptr};
     QPushButton* openWorkspaceFileButton_{nullptr};
     QPlainTextEdit* workspaceDiffView_{nullptr};
+    QPushButton* acceptWorkspaceChangeButton_{nullptr};
+    QPushButton* rejectWorkspaceChangeButton_{nullptr};
+    QByteArray selectedDiffSha256_;
     app::WorkspaceWatcher* workspaceWatcher_{nullptr};
     QLabel* planExplanation_{nullptr};
     QLabel* planItemText_{nullptr};

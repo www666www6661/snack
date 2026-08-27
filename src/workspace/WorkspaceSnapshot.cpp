@@ -75,4 +75,8 @@ bool WorkspaceSnapshot::matchesCurrentFile(const QString& relativePath) const {
            QCryptographicHash::hash(file.readAll(), QCryptographicHash::Sha256) == baseline->sha256;
 }
 
+void WorkspaceSnapshot::setEntry(const QString& relativePath, SnapshotEntry entry) {
+    entries_.insert(relativePath, std::move(entry));
+}
+
 } // namespace snack::workspace

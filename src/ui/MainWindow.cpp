@@ -7,6 +7,7 @@
 #include "domain/PromptTemplateEngine.h"
 #include "ui/ComposerTextEdit.h"
 #include "ui/RichTextView.h"
+#include "workspace/WorkspaceChangeReview.h"
 #include "workspace/WorkspaceDiff.h"
 
 #include <QAction>
@@ -14,6 +15,7 @@
 #include <QApplication>
 #include <QCloseEvent>
 #include <QComboBox>
+#include <QCryptographicHash>
 #include <QDate>
 #include <QDateTime>
 #include <QDesktopServices>
@@ -2119,13 +2121,26 @@ void MainWindow::buildUi() {
 
     diffDock_ = new QDockWidget(tr("Workspace diff"), this);
     diffDock_->setObjectName(QStringLiteral("diffDock"));
-    workspaceDiffView_ = new QPlainTextEdit(diffDock_);
+    auto* diffPanel = new QWidget(diffDock_);
+    auto* diffLayout = new QVBoxLayout(diffPanel);
+    workspaceDiffView_ = new QPlainTextEdit(diffPanel);
     workspaceDiffView_->setObjectName(QStringLiteral("workspaceDiffView"));
     workspaceDiffView_->setReadOnly(true);
     workspaceDiffView_->setPlaceholderText(tr("Select a changed text file to review its diff."));
-    diffDock_->setWidget(workspaceDiffView_);
+    auto* diffButtons = new QHBoxLayout();
+    acceptWorkspaceChangeButton_ = new QPushButton(tr("Accept change"), diffPanel);
+    rejectWorkspaceChangeButton_ = new QPushButton(tr("Reject change"), diffPanel);
+    diffButtons->addWidget(acceptWorkspaceChangeButton_);
+    diffButtons->addWidget(rejectWorkspaceChangeButton_);
+    diffLayout->addWidget(workspaceDiffView_);
+    diffLayout->addLayout(diffButtons);
+    diffDock_->setWidget(diffPanel);
     addDockWidget(Qt::RightDockWidgetArea, diffDock_);
     diffDock_->hide();
+    connect(acceptWorkspaceChangeButton_, &QPushButton::clicked, this,
+            &MainWindow::acceptSelectedWorkspaceChange);
+    connect(rejectWorkspaceChangeButton_, &QPushButton::clicked, this,
+            &MainWindow::rejectSelectedWorkspaceChange);
 
     terminalDock_ = new QDockWidget(tr("Terminal"), this);
     terminalDock_->setObjectName(QStringLiteral("terminalDock"));
@@ -3327,6 +3342,7 @@ void MainWindow::refreshWorkspaceBrowser() {
 
 void MainWindow::refreshSelectedWorkspaceDiff() {
     workspaceDiffView_->clear();
+    selectedDiffSha256_.clear();
     const auto selected = workspaceFileList_->selectedItems();
     if (selected.isEmpty() || !workspaceBaseline_.has_value() ||
         !workspaceBaseline_->isComplete()) {
@@ -3343,6 +3359,34 @@ void MainWindow::refreshSelectedWorkspaceDiff() {
     }
     workspaceDiffView_->setPlainText(workspace::WorkspaceDiff::unifiedText(
         relativePath, workspace::WorkspaceDiff::between(baseline->content, current.text.toUtf8())));
+    selectedDiffSha256_ =
+        QCryptographicHash::hash(current.text.toUtf8(), QCryptographicHash::Sha256);
+}
+
+void MainWindow::acceptSelectedWorkspaceChange() {
+    const auto selected = workspaceFileList_->selectedItems();
+    if (selected.isEmpty() || !workspaceBaseline_.has_value()) {
+        return;
+    }
+    QString error;
+    if (!workspace::WorkspaceChangeReview::acceptCurrent(*workspaceBaseline_,
+                                                         selected.constFirst()->text(), &error)) {
+        statusBar()->showMessage(error, 8000);
+    }
+    refreshSelectedWorkspaceDiff();
+}
+
+void MainWindow::rejectSelectedWorkspaceChange() {
+    const auto selected = workspaceFileList_->selectedItems();
+    if (selected.isEmpty() || !workspaceBaseline_.has_value() || selectedDiffSha256_.isEmpty()) {
+        return;
+    }
+    QString error;
+    if (!workspace::WorkspaceChangeReview::rejectCurrent(
+            *workspaceBaseline_, selected.constFirst()->text(), selectedDiffSha256_, &error)) {
+        statusBar()->showMessage(error, 8000);
+    }
+    refreshSelectedWorkspaceDiff();
 }
 
 void MainWindow::previewSelectedWorkspaceFile() {
