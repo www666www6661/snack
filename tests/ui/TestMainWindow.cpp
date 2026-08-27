@@ -278,9 +278,11 @@ void TestMainWindow::filtersConversationRailLocally() {
     codex.title = QStringLiteral("Review parser");
     codex.workingDirectory = QStringLiteral("C:/projects/compiler");
     codex.agentKind = snack::domain::AgentKind::Codex;
+    codex.tags = {QStringLiteral("Backend"), QStringLiteral("urgent")};
     snack::domain::Conversation mock;
     mock.title = QStringLiteral("Prototype UI");
     mock.workingDirectory = QStringLiteral("C:/projects/snack");
+    mock.tags = {QStringLiteral("frontend")};
     repository.catalog = {codex, mock};
 
     snack::agent::FakeAgentAdapter adapter(nullptr, 1);
@@ -290,6 +292,7 @@ void TestMainWindow::filtersConversationRailLocally() {
     auto* list = window.findChild<QListWidget*>(QStringLiteral("conversationList"));
     QVERIFY(search != nullptr);
     QVERIFY(list != nullptr);
+    QCOMPARE(search->placeholderText(), QStringLiteral("Search conversations or tag:name"));
     QCOMPARE(list->count(), 2);
 
     search->setText(QStringLiteral("parser"));
@@ -301,6 +304,18 @@ void TestMainWindow::filtersConversationRailLocally() {
     search->setText(QStringLiteral("codex"));
     QCOMPARE(list->count(), 1);
     QCOMPARE(list->item(0)->data(Qt::UserRole).toUuid(), codex.id);
+    search->setText(QStringLiteral("tag:BACKEND"));
+    QCOMPARE(list->count(), 1);
+    QCOMPARE(list->item(0)->data(Qt::UserRole).toUuid(), codex.id);
+    search->setText(QStringLiteral("tag:backend parser"));
+    QCOMPARE(list->count(), 1);
+    QCOMPARE(list->item(0)->data(Qt::UserRole).toUuid(), codex.id);
+    search->setText(QStringLiteral("tag:backend prototype"));
+    QCOMPARE(list->count(), 0);
+    search->setText(QStringLiteral("tag:back"));
+    QCOMPARE(list->count(), 0);
+    search->setText(QStringLiteral("tag:"));
+    QCOMPARE(list->count(), 0);
     search->clear();
     QCOMPARE(list->count(), 2);
     QTRY_COMPARE(controller.status(), snack::domain::ConversationStatus::Idle);

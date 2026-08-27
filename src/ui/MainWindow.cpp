@@ -79,6 +79,33 @@ bool createsUnreadAttention(domain::AgentEventType type) {
     }
 }
 
+bool conversationMatchesQuery(const domain::Conversation& conversation, const QString& agentName,
+                              const QString& query) {
+    const QStringList terms = query.simplified().split(QLatin1Char(' '), Qt::SkipEmptyParts);
+    for (const QString& term : terms) {
+        if (term.left(4).compare(QStringLiteral("tag:"), Qt::CaseInsensitive) == 0) {
+            const QString requestedTag = term.sliced(4);
+            const bool hasTag =
+                !requestedTag.isEmpty() &&
+                std::any_of(conversation.tags.cbegin(), conversation.tags.cend(),
+                            [&requestedTag](const QString& tag) {
+                                return tag.compare(requestedTag, Qt::CaseInsensitive) == 0;
+                            });
+            if (!hasTag) {
+                return false;
+            }
+            continue;
+        }
+        if (!conversation.title.contains(term, Qt::CaseInsensitive) &&
+            !conversation.workingDirectory.contains(term, Qt::CaseInsensitive) &&
+            !agentName.contains(term, Qt::CaseInsensitive) &&
+            !conversation.tags.join(QLatin1Char(' ')).contains(term, Qt::CaseInsensitive)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 } // namespace
 
 MainWindow::MainWindow(session::SessionController* controller, app::AppSettings* settings,
@@ -186,10 +213,7 @@ void MainWindow::refreshConversationList() {
             agentName = tr("Mock Agent");
             break;
         }
-        if (!query.isEmpty() && !conversation.title.contains(query, Qt::CaseInsensitive) &&
-            !conversation.workingDirectory.contains(query, Qt::CaseInsensitive) &&
-            !agentName.contains(query, Qt::CaseInsensitive) &&
-            !conversation.tags.join(QLatin1Char(' ')).contains(query, Qt::CaseInsensitive)) {
+        if (!conversationMatchesQuery(conversation, agentName, query)) {
             continue;
         }
         const QString title =
@@ -999,7 +1023,7 @@ void MainWindow::buildUi() {
     newConversation->setEnabled(sessions_ != nullptr);
     conversationSearch_ = new QLineEdit(sidebar);
     conversationSearch_->setObjectName(QStringLiteral("conversationSearch"));
-    conversationSearch_->setPlaceholderText(tr("Search conversations"));
+    conversationSearch_->setPlaceholderText(tr("Search conversations or tag:name"));
     conversationSearch_->setClearButtonEnabled(true);
     conversationSearch_->installEventFilter(this);
     sessionRow_ = new QLabel(

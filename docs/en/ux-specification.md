@@ -18,7 +18,7 @@ The M3 conversation rail is backed by the repository catalog rather than placeho
 
 The rail follows standard Qt list navigation: arrow keys move selection without switching conversations, while `Enter` or double-click activates the selected row through the same guarded navigation path. Archived rows remain non-activatable.
 
-Conversation search filters the already-loaded catalog locally and case-insensitively across title, workspace path, and Agent type. Filtering never opens, closes, reconnects, or otherwise mutates a session; clearing the query restores the repository-defined order.
+Conversation search filters the already-loaded catalog locally and case-insensitively across title, workspace path, Agent type, and tags. Whitespace-separated terms combine with AND semantics. A `tag:name` term requires an exact case-insensitive tag match and can be combined with ordinary text terms. Filtering never opens, closes, reconnects, or otherwise mutates a session; clearing the query restores the repository-defined order.
 
 `Ctrl/Cmd+K` clears the current rail filter and focuses the conversation search field without touching any session runtime.
 
