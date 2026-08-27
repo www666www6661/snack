@@ -151,6 +151,7 @@ class TestMainWindow final : public QObject {
     void activatesSearchResultsFromKeyboard();
     void marksBackgroundConversationUnreadUntilOpened();
     void marksAllBackgroundConversationsRead();
+    void opensUnreadConversationsInRepositoryOrder();
 };
 
 void TestMainWindow::opensAndSwitchesConversationFromRail() {
@@ -934,6 +935,67 @@ void TestMainWindow::marksAllBackgroundConversationsRead() {
     QCOMPARE(secondController->status(), snack::domain::ConversationStatus::Running);
     firstController->interrupt();
     secondController->interrupt();
+}
+
+void TestMainWindow::opensUnreadConversationsInRepositoryOrder() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::app::AppSettings settings(directory.filePath(QStringLiteral("settings.ini")));
+    UiMemoryEventRepository repository;
+    snack::domain::Conversation alpha;
+    alpha.title = QStringLiteral("Alpha");
+    alpha.workingDirectory = directory.path();
+    snack::domain::Conversation beta;
+    beta.title = QStringLiteral("Beta");
+    beta.workingDirectory = directory.path();
+    snack::domain::Conversation gamma;
+    gamma.title = QStringLiteral("Gamma");
+    gamma.workingDirectory = directory.path();
+    repository.catalog = {gamma, alpha, beta};
+
+    const auto makeRuntime = [](snack::domain::AgentKind kind) {
+        snack::agent::AgentRuntime runtime;
+        runtime.requestedKind = kind;
+        runtime.selectedKind = kind;
+        runtime.adapter = std::make_unique<snack::agent::FakeAgentAdapter>(nullptr, 100);
+        return runtime;
+    };
+    snack::app::SessionManager sessions(&repository, makeRuntime);
+    QString error;
+    auto* alphaController = sessions.addPrepared(alpha, makeRuntime(alpha.agentKind), &error);
+    auto* betaController = sessions.addPrepared(beta, makeRuntime(beta.agentKind), &error);
+    auto* gammaController = sessions.addPrepared(gamma, makeRuntime(gamma.agentKind), &error);
+    QVERIFY2(alphaController != nullptr, qPrintable(error));
+    QVERIFY2(betaController != nullptr, qPrintable(error));
+    QVERIFY2(gammaController != nullptr, qPrintable(error));
+    snack::ui::MainWindow window(alphaController, &settings, &sessions, false);
+    auto* nextUnread = window.findChild<QAction*>(QStringLiteral("nextUnreadConversationAction"));
+    auto* title = window.findChild<QLabel*>(QStringLiteral("conversationTitle"));
+    QVERIFY(nextUnread != nullptr);
+    QVERIFY(title != nullptr);
+    QVERIFY(!nextUnread->isEnabled());
+    betaController->open();
+    gammaController->open();
+    QTRY_COMPARE(betaController->status(), snack::domain::ConversationStatus::Idle);
+    QTRY_COMPARE(gammaController->status(), snack::domain::ConversationStatus::Idle);
+
+    QString sendError;
+    QVERIFY2(gammaController->sendMessage(QStringLiteral("Gamma work"), &sendError),
+             qPrintable(sendError));
+    QVERIFY2(betaController->sendMessage(QStringLiteral("Beta work"), &sendError),
+             qPrintable(sendError));
+    QTRY_VERIFY(nextUnread->isEnabled());
+
+    nextUnread->trigger();
+    QCOMPARE(title->text(), QStringLiteral("Beta"));
+    QVERIFY(nextUnread->isEnabled());
+    nextUnread->trigger();
+    QCOMPARE(title->text(), QStringLiteral("Gamma"));
+    QVERIFY(!nextUnread->isEnabled());
+    QCOMPARE(betaController->status(), snack::domain::ConversationStatus::Running);
+    QCOMPARE(gammaController->status(), snack::domain::ConversationStatus::Running);
+    betaController->interrupt();
+    gammaController->interrupt();
 }
 
 void TestMainWindow::sendsAndRendersStreamingTurn() {

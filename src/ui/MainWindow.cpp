@@ -240,6 +240,13 @@ void MainWindow::refreshConversationList() {
     if (markAllConversationsReadAction_ != nullptr) {
         markAllConversationsReadAction_->setEnabled(!unreadConversationIds_.isEmpty());
     }
+    if (nextUnreadConversationAction_ != nullptr) {
+        const bool hasActiveUnread = std::any_of(
+            conversationCatalog_.cbegin(), conversationCatalog_.cend(), [this](const auto& value) {
+                return !value.archived && unreadConversationIds_.contains(value.id);
+            });
+        nextUnreadConversationAction_->setEnabled(hasActiveUnread);
+    }
     if (!error.isEmpty()) {
         statusBar()->showMessage(error, 8000);
     }
@@ -853,6 +860,28 @@ void MainWindow::markAllConversationsRead() {
     refreshConversationList();
 }
 
+void MainWindow::activateNextUnreadConversation() {
+    if (sessions_ == nullptr || unreadConversationIds_.isEmpty() ||
+        conversationCatalog_.isEmpty()) {
+        return;
+    }
+    qsizetype currentIndex = 0;
+    for (qsizetype index = 0; index < conversationCatalog_.size(); ++index) {
+        if (conversationCatalog_.at(index).id == controller_->conversation().id) {
+            currentIndex = index;
+            break;
+        }
+    }
+    for (qsizetype offset = 1; offset <= conversationCatalog_.size(); ++offset) {
+        const auto& candidate =
+            conversationCatalog_.at((currentIndex + offset) % conversationCatalog_.size());
+        if (!candidate.archived && unreadConversationIds_.contains(candidate.id)) {
+            activateConversationById(candidate.id);
+            return;
+        }
+    }
+}
+
 void MainWindow::activatePreviousConversation() { activateRelativeConversation(-1); }
 
 void MainWindow::activateNextConversation() { activateRelativeConversation(1); }
@@ -1234,6 +1263,11 @@ void MainWindow::buildMenus() {
     markAllConversationsReadAction_->setEnabled(false);
     connect(markAllConversationsReadAction_, &QAction::triggered, this,
             &MainWindow::markAllConversationsRead);
+    nextUnreadConversationAction_ = viewMenu->addAction(tr("Open next unread conversation"));
+    nextUnreadConversationAction_->setObjectName(QStringLiteral("nextUnreadConversationAction"));
+    nextUnreadConversationAction_->setEnabled(false);
+    connect(nextUnreadConversationAction_, &QAction::triggered, this,
+            &MainWindow::activateNextUnreadConversation);
     auto* previousConversation = viewMenu->addAction(tr("Previous conversation"));
     previousConversation->setObjectName(QStringLiteral("previousConversationAction"));
     previousConversation->setShortcut(QKeySequence::PreviousChild);

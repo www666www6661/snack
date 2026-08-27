@@ -70,6 +70,7 @@ class MainWindow final : public QMainWindow {
     void activateFirstSearchResult();
     void leaveConversationSearch();
     void markAllConversationsRead();
+    void activateNextUnreadConversation();
     void setShowArchivedConversations(bool visible);
     void activatePreviousConversation();
     void activateNextConversation();
@@ -180,6 +181,7 @@ class MainWindow final : public QMainWindow {
     QAction* pinConversationAction_{nullptr};
     QAction* showArchivedConversationsAction_{nullptr};
     QAction* markAllConversationsReadAction_{nullptr};
+    QAction* nextUnreadConversationAction_{nullptr};
     QMenu* conversationContextMenu_{nullptr};
     QAction* contextOpenAction_{nullptr};
     QAction* contextPinAction_{nullptr};

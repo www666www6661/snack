@@ -36,6 +36,8 @@ A background conversation becomes locally unread when an Agent response, tool, a
 
 The View menu exposes Mark all conversations read only while unread markers exist. Clearing them is an in-memory presentation action: it neither switches conversations nor interrupts background work.
 
+Open next unread conversation follows repository order from the current row, wraps at the end, skips archived rows, and uses the same strict navigation boundary. Opening each target clears only that conversation's unread marker.
+
 The View menu can hide or show archived rows. This is a persistent local view preference, defaults to visible for compatibility, and never changes archive metadata or runtime ownership.
 
 `Ctrl+Tab` and `Ctrl+Shift+Tab` cycle forward and backward through active conversations in repository order, wrap at either end, skip archived rows, and save the outgoing draft before opening the target through the normal strict Agent boundary.
