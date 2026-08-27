@@ -40,6 +40,35 @@ session::SessionController* SessionManager::open(domain::Conversation conversati
     return addPrepared(std::move(conversation), std::move(runtime), error);
 }
 
+session::SessionController* SessionManager::create(const QString& workingDirectory,
+                                                   domain::AgentKind requestedKind,
+                                                   const QString& placeholderTitle,
+                                                   QString* error) {
+    if (workingDirectory.trimmed().isEmpty()) {
+        setError(error, QStringLiteral("Cannot create a session without a working directory"));
+        return nullptr;
+    }
+
+    agent::AgentRuntime runtime = runtimeFactory_(requestedKind);
+    if (runtime.adapter == nullptr) {
+        setError(error, runtime.detail.isEmpty()
+                            ? QStringLiteral("The requested Agent runtime is unavailable")
+                            : runtime.detail);
+        return nullptr;
+    }
+
+    domain::Conversation conversation;
+    conversation.title = placeholderTitle.trimmed();
+    if (conversation.title.isEmpty()) {
+        conversation.title = QStringLiteral("New conversation");
+    }
+    conversation.titleIsPlaceholder = true;
+    conversation.workingDirectory = workingDirectory;
+    conversation.agentKind = runtime.selectedKind;
+    conversation.status = domain::ConversationStatus::Dormant;
+    return addPrepared(std::move(conversation), std::move(runtime), error);
+}
+
 bool SessionManager::close(const QUuid& conversationId) { return registry_.close(conversationId); }
 
 void SessionManager::closeAll() { registry_.closeAll(); }

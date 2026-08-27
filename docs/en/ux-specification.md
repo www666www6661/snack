@@ -18,6 +18,8 @@ The M3 conversation rail is backed by the repository catalog rather than placeho
 
 Conversation search filters the already-loaded catalog locally and case-insensitively across title, workspace path, and Agent type. Filtering never opens, closes, reconnects, or otherwise mutates a session; clearing the query restores the repository-defined order.
 
+The rail button and `Ctrl/Cmd+N` create a new conversation in the current workspace using the saved preferred Agent. Creation switches through the same view-binding path as navigation, focuses the composer, and records the actual selected Agent. A new conversation may visibly fall back to Mock when its preferred Agent is unavailable because no historical native identity exists yet.
+
 A persistent notice directly below the header reports an Agent fallback, connection loss, or reconnect attempt. Fallback notices remain visible while the fallback Agent is active. Connection failures preserve the original diagnostic and expose Reconnect in the notice; retrying keeps the previous cause visible until the native handshake succeeds. The status bar may echo the message but is never its only location. `Closed` is terminal: delayed connection, capability, native-identity, or event signals from an asynchronously exiting Agent cannot reopen the conversation, replace its diagnostic, or append timeline data.
 
 ## 4. Timeline

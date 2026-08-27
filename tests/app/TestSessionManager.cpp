@@ -55,6 +55,8 @@ class TestSessionManager final : public QObject {
     void opensMultipleConversationsOnDemand();
     void rejectsUnavailableAndConflictingAgentTypes();
     void validatesBeforeCreatingRuntime();
+    void createsNewConversationWithExplicitFallback();
+    void rejectsInvalidNewConversationRequests();
 };
 
 void TestSessionManager::adoptsPreparedRuntimeAndReusesOpenSession() {
@@ -144,6 +146,56 @@ void TestSessionManager::validatesBeforeCreatingRuntime() {
     QVERIFY(manager.open(invalid, &error) == nullptr);
     QCOMPARE(factoryCalls, 0);
     QVERIFY(error.contains(QStringLiteral("invalid conversation ID")));
+}
+
+void TestSessionManager::createsNewConversationWithExplicitFallback() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::storage::EventStore repository;
+    QString error;
+    QVERIFY(repository.open(directory.filePath(QStringLiteral("events.sqlite3")), &error));
+    snack::app::SessionManager manager(&repository, [](snack::domain::AgentKind requestedKind) {
+        auto result = runtime(snack::domain::AgentKind::Mock);
+        result.requestedKind = requestedKind;
+        result.detail = QStringLiteral("Codex unavailable");
+        result.fellBack = true;
+        return result;
+    });
+
+    auto* created = manager.create(QStringLiteral("C:/workspace"), snack::domain::AgentKind::Codex,
+                                   QStringLiteral(" New conversation "), &error);
+    QVERIFY2(created != nullptr, qPrintable(error));
+    QCOMPARE(created->conversation().title, QStringLiteral("New conversation"));
+    QVERIFY(created->conversation().titleIsPlaceholder);
+    QCOMPARE(created->conversation().workingDirectory, QStringLiteral("C:/workspace"));
+    QCOMPARE(created->conversation().agentKind, snack::domain::AgentKind::Mock);
+    QCOMPARE(created->status(), snack::domain::ConversationStatus::Dormant);
+    QVERIFY(manager.runtime(created->conversation().id)->fellBack);
+}
+
+void TestSessionManager::rejectsInvalidNewConversationRequests() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::storage::EventStore repository;
+    QString error;
+    QVERIFY(repository.open(directory.filePath(QStringLiteral("events.sqlite3")), &error));
+    int factoryCalls = 0;
+    snack::app::SessionManager manager(&repository, [&factoryCalls](snack::domain::AgentKind kind) {
+        ++factoryCalls;
+        auto result = runtime(kind);
+        result.adapter.reset();
+        result.detail = QStringLiteral("Runtime unavailable");
+        return result;
+    });
+
+    QVERIFY(manager.create(QStringLiteral("  "), snack::domain::AgentKind::Mock,
+                           QStringLiteral("New conversation"), &error) == nullptr);
+    QCOMPARE(factoryCalls, 0);
+    QVERIFY(error.contains(QStringLiteral("working directory")));
+    QVERIFY(manager.create(QStringLiteral("C:/workspace"), snack::domain::AgentKind::Mock,
+                           QString{}, &error) == nullptr);
+    QCOMPARE(factoryCalls, 1);
+    QCOMPARE(error, QStringLiteral("Runtime unavailable"));
 }
 
 QTEST_GUILESS_MAIN(TestSessionManager)

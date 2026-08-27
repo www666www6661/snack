@@ -69,6 +69,7 @@ class MainWindow final : public QMainWindow {
     void requestQuit();
     void preferCodexAgent();
     void preferMockAgent();
+    void createConversation();
     void activateConversation(QListWidgetItem* item);
 
   private:
@@ -77,6 +78,7 @@ class MainWindow final : public QMainWindow {
     void connectControllerSignals();
     void refreshConversationList();
     void resetConversationView();
+    void bindConversation(session::SessionController* controller);
     void appendEvent(const domain::AgentEvent& event);
     void appendApprovalRequest(const domain::AgentEvent& event);
     void resolveApprovalCard(const domain::AgentEvent& event);

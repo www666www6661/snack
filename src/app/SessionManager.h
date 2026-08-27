@@ -20,6 +20,10 @@ class SessionManager final {
                                                           QString* error = nullptr);
     [[nodiscard]] session::SessionController* open(domain::Conversation conversation,
                                                    QString* error = nullptr);
+    [[nodiscard]] session::SessionController* create(const QString& workingDirectory,
+                                                     domain::AgentKind requestedKind,
+                                                     const QString& placeholderTitle,
+                                                     QString* error = nullptr);
     bool close(const QUuid& conversationId);
     void closeAll();
 

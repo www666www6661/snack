@@ -60,6 +60,8 @@ M3 多会话所有权从不依赖 Widget 的 Registry 开始。应用入口现�
 
 `SessionManager` 是 Registry 之上的应用层会话打开边界。它接收可替换的 Runtime Factory，复用已经打开且类型相容的会话，只为已关闭的历史会话创建新 Runtime。新 Controller 连接前会把持久化的历史状态归一为 `Dormant`，旧的 `Idle` 或 `Running` 值绝不代表新 Runtime 已经连接。如果回退后的 Agent 类型与已存会话不同，则明确报告不可用，绝不通过另一种 Agent 静默打开该会话。
 
+新会话使用独立的 `create` 路径。因为此时尚不存在原生身份，请求的 Agent 可以先明确回退；最终会话记录 Runtime 实际选中的 Agent 类型并显示回退诊断。这不会放宽历史会话的 Agent 隔离。
+
 ### 3.5 `workspace`
 
 负责路径规范化、忽略规则、符号索引、文件监听、基线快照、Diff、外部编辑冲突与写租约。路径身份使用平台规范化后的 canonical key；展示路径保持用户原始形式。

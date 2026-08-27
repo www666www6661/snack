@@ -213,12 +213,35 @@ void MainWindow::activateConversation(QListWidgetItem* item) {
         return;
     }
 
+    bindConversation(nextController);
+}
+
+void MainWindow::createConversation() {
+    if (sessions_ == nullptr) {
+        return;
+    }
+    persistComposerDraft();
+    const domain::AgentKind requestedKind = settingsSnapshot_.preferredAgentKind;
+    QString error;
+    auto* created = sessions_->create(controller_->conversation().workingDirectory, requestedKind,
+                                      tr("New conversation"), &error);
+    if (created == nullptr) {
+        statusBar()->showMessage(tr("Cannot create conversation: %1").arg(error), 8000);
+        return;
+    }
+    bindConversation(created);
+    composer_->setFocus();
+}
+
+void MainWindow::bindConversation(session::SessionController* controller) {
+    Q_ASSERT(controller != nullptr);
     disconnect(controller_, nullptr, this, nullptr);
-    controller_ = nextController;
+    controller_ = controller;
     resetConversationView();
     connectControllerSignals();
 
-    const auto* runtime = sessions_->runtime(conversationId);
+    const QUuid conversationId = controller_->conversation().id;
+    const auto* runtime = sessions_ != nullptr ? sessions_->runtime(conversationId) : nullptr;
     startupNotice_ = runtime != nullptr && runtime->fellBack
                          ? tr("Using Mock Agent because %1").arg(runtime->detail)
                          : QString{};
@@ -234,6 +257,7 @@ void MainWindow::activateConversation(QListWidgetItem* item) {
     settingsSnapshot_.lastConversationId = conversationId.toString(QUuid::WithoutBraces);
     settingsSnapshot_.lastWorkspace = controller_->conversation().workingDirectory;
     settings_->save(settingsSnapshot_);
+    conversationSearch_->clear();
     refreshConversationList();
     controller_->open();
 }
@@ -608,7 +632,8 @@ void MainWindow::buildUi() {
     sidebarLayout->setContentsMargins(16, 18, 16, 18);
     auto* brand = new QLabel(tr("SNACK  /  零食"), sidebar);
     auto* newConversation = new QPushButton(tr("New conversation"), sidebar);
-    newConversation->setEnabled(false);
+    newConversation->setObjectName(QStringLiteral("newConversationButton"));
+    newConversation->setEnabled(sessions_ != nullptr);
     conversationSearch_ = new QLineEdit(sidebar);
     conversationSearch_->setObjectName(QStringLiteral("conversationSearch"));
     conversationSearch_->setPlaceholderText(tr("Search conversations"));
@@ -781,6 +806,7 @@ void MainWindow::buildUi() {
     connect(sendButton_, &QPushButton::clicked, this, &MainWindow::sendMessage);
     connect(stopButton_, &QPushButton::clicked, this, &MainWindow::stopTurn);
     connect(reconnectButton_, &QPushButton::clicked, this, &MainWindow::reconnectSession);
+    connect(newConversation, &QPushButton::clicked, this, &MainWindow::createConversation);
     connect(conversationList_, &QListWidget::itemClicked, this, &MainWindow::activateConversation);
     connect(conversationSearch_, &QLineEdit::textChanged, this,
             [this] { refreshConversationList(); });
@@ -814,6 +840,12 @@ void MainWindow::buildUi() {
 
 void MainWindow::buildMenus() {
     auto* fileMenu = menuBar()->addMenu(tr("File"));
+    auto* newConversationAction = fileMenu->addAction(tr("New conversation"));
+    newConversationAction->setObjectName(QStringLiteral("newConversationAction"));
+    newConversationAction->setShortcut(QKeySequence::New);
+    newConversationAction->setEnabled(sessions_ != nullptr);
+    connect(newConversationAction, &QAction::triggered, this, &MainWindow::createConversation);
+    fileMenu->addSeparator();
     auto* renameAction = fileMenu->addAction(tr("Rename conversation..."));
     renameAction->setObjectName(QStringLiteral("renameConversationAction"));
     renameAction->setShortcut(QKeySequence(Qt::Key_F2));

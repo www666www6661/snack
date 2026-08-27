@@ -127,6 +127,7 @@ class TestMainWindow final : public QObject {
     void opensAndSwitchesConversationFromRail();
     void keepsCurrentConversationWhenRailOpenFails();
     void filtersConversationRailLocally();
+    void createsConversationFromRail();
 };
 
 void TestMainWindow::opensAndSwitchesConversationFromRail() {
@@ -276,6 +277,60 @@ void TestMainWindow::filtersConversationRailLocally() {
     search->clear();
     QCOMPARE(list->count(), 2);
     QTRY_COMPARE(controller.status(), snack::domain::ConversationStatus::Idle);
+}
+
+void TestMainWindow::createsConversationFromRail() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::app::AppSettings settings(directory.filePath(QStringLiteral("settings.ini")));
+    auto snapshot = settings.load();
+    snapshot.preferredAgentKind = snack::domain::AgentKind::Codex;
+    settings.save(snapshot);
+    UiMemoryEventRepository repository;
+    snack::domain::Conversation first;
+    first.title = QStringLiteral("Existing session");
+    first.workingDirectory = directory.path();
+    repository.catalog = {first};
+
+    const auto mockFallback = [](snack::domain::AgentKind requestedKind) {
+        snack::agent::AgentRuntime runtime;
+        runtime.requestedKind = requestedKind;
+        runtime.selectedKind = snack::domain::AgentKind::Mock;
+        runtime.detail = QStringLiteral("Codex unavailable");
+        runtime.fellBack = requestedKind == snack::domain::AgentKind::Codex;
+        runtime.adapter = std::make_unique<snack::agent::FakeAgentAdapter>(nullptr, 1);
+        return runtime;
+    };
+    snack::app::SessionManager sessions(&repository, mockFallback);
+    QString error;
+    auto* firstController = sessions.addPrepared(first, mockFallback(first.agentKind), &error);
+    QVERIFY2(firstController != nullptr, qPrintable(error));
+    snack::ui::MainWindow window(firstController, &settings, &sessions, false);
+    auto* newButton = window.findChild<QPushButton*>(QStringLiteral("newConversationButton"));
+    auto* newAction = window.findChild<QAction*>(QStringLiteral("newConversationAction"));
+    auto* list = window.findChild<QListWidget*>(QStringLiteral("conversationList"));
+    auto* title = window.findChild<QLabel*>(QStringLiteral("conversationTitle"));
+    auto* notice = window.findChild<QFrame*>(QStringLiteral("connectionNoticeFrame"));
+    QVERIFY(newButton != nullptr);
+    QVERIFY(newAction != nullptr);
+    QVERIFY(list != nullptr);
+    QVERIFY(title != nullptr);
+    QVERIFY(notice != nullptr);
+    QVERIFY(newButton->isEnabled());
+    QCOMPARE(newAction->shortcut(), QKeySequence::New);
+
+    newButton->click();
+
+    QCOMPARE(sessions.size(), qsizetype{2});
+    QCOMPARE(title->text(), QStringLiteral("New conversation"));
+    QCOMPARE(list->count(), 2);
+    const QUuid createdId = list->currentItem()->data(Qt::UserRole).toUuid();
+    QVERIFY(createdId != first.id);
+    QCOMPARE(sessions.controller(createdId)->conversation().agentKind,
+             snack::domain::AgentKind::Mock);
+    QVERIFY(!notice->isHidden());
+    QVERIFY(window.statusBar()->currentMessage().contains(QStringLiteral("Codex unavailable")));
+    QCOMPARE(settings.load().lastConversationId, createdId.toString(QUuid::WithoutBraces));
 }
 
 void TestMainWindow::sendsAndRendersStreamingTurn() {

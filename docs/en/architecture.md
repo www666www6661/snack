@@ -78,6 +78,8 @@ M3 multi-session ownership begins at a Widget-free registry. The application ent
 
 `SessionManager` is the application-layer opening boundary above the registry. It accepts a runtime factory, reuses an already-open compatible session, and creates a fresh runtime only for a closed historical conversation. Persisted historical status is normalized to `Dormant` before the fresh controller connects; stale `Idle` or `Running` values never imply that a newly created runtime is already connected. A fallback whose selected Agent type differs from the stored conversation is reported as unavailable rather than silently opening that conversation through another Agent.
 
+New conversations use a separate `create` path. The requested Agent may explicitly fall back before any native identity exists; the resulting conversation records the runtime's actual Agent type and displays the fallback diagnostic. This does not weaken historical-session isolation.
+
 ## 6. WebEngine boundary
 
 Load only packaged `qrc://` assets, reject remote subresources, parse Markdown into an AST and render through an allowlist, package Mermaid and math rendering offline, expose only copy/expand/measure/scroll/link requests through WebChannel, and validate external URLs in C++. A renderer crash rebuilds from `EventStore` without affecting the agent.
