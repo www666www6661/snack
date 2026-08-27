@@ -315,6 +315,65 @@ void MainWindow::togglePinnedConversation() {
     refreshConversationList();
 }
 
+void MainWindow::openSelectedConversation() {
+    activateConversation(conversationList_->currentItem());
+}
+
+void MainWindow::archiveSelectedConversation() {
+    if (sessions_ == nullptr || conversationList_->currentItem() == nullptr) {
+        return;
+    }
+    const QUuid conversationId = conversationList_->currentItem()->data(Qt::UserRole).toUuid();
+    if (conversationId == controller_->conversation().id) {
+        archiveConversation();
+        return;
+    }
+    QString error;
+    if (!sessions_->setArchived(conversationId, true, &error)) {
+        statusBar()->showMessage(tr("Cannot archive conversation: %1").arg(error), 8000);
+        return;
+    }
+    refreshConversationList();
+}
+
+void MainWindow::toggleSelectedPinnedConversation() {
+    if (sessions_ == nullptr || conversationList_->currentItem() == nullptr) {
+        return;
+    }
+    const QUuid conversationId = conversationList_->currentItem()->data(Qt::UserRole).toUuid();
+    const auto selected =
+        std::find_if(conversationCatalog_.cbegin(), conversationCatalog_.cend(),
+                     [&conversationId](const auto& value) { return value.id == conversationId; });
+    if (selected == conversationCatalog_.cend()) {
+        refreshConversationList();
+        return;
+    }
+    QString error;
+    if (!sessions_->setPinned(conversationId, !selected->pinned, &error)) {
+        statusBar()->showMessage(tr("Cannot update pinned state: %1").arg(error), 8000);
+        return;
+    }
+    refreshConversationList();
+}
+
+void MainWindow::prepareConversationContextMenu() {
+    const auto* item = conversationList_->currentItem();
+    const bool hasSelection = item != nullptr;
+    const bool archived = hasSelection && item->data(Qt::UserRole + 1).toBool();
+    const QUuid conversationId = hasSelection ? item->data(Qt::UserRole).toUuid() : QUuid{};
+    const auto selected =
+        std::find_if(conversationCatalog_.cbegin(), conversationCatalog_.cend(),
+                     [&conversationId](const auto& value) { return value.id == conversationId; });
+    const bool pinned = selected != conversationCatalog_.cend() && selected->pinned;
+    const bool isCurrent = hasSelection && conversationId == controller_->conversation().id;
+
+    contextOpenAction_->setEnabled(hasSelection && !archived && !isCurrent);
+    contextPinAction_->setEnabled(hasSelection);
+    contextPinAction_->setText(pinned ? tr("Unpin conversation") : tr("Pin conversation"));
+    contextArchiveAction_->setEnabled(hasSelection && !archived);
+    contextRestoreAction_->setEnabled(hasSelection && archived);
+}
+
 void MainWindow::bindConversation(session::SessionController* controller) {
     Q_ASSERT(controller != nullptr);
     if (controller_ != nullptr) {
@@ -733,6 +792,18 @@ void MainWindow::buildUi() {
     sessionRow_->setContentsMargins(8, 14, 8, 14);
     conversationList_ = new QListWidget(sidebar);
     conversationList_->setObjectName(QStringLiteral("conversationList"));
+    conversationList_->setContextMenuPolicy(Qt::CustomContextMenu);
+    conversationContextMenu_ = new QMenu(conversationList_);
+    conversationContextMenu_->setObjectName(QStringLiteral("conversationContextMenu"));
+    contextOpenAction_ = conversationContextMenu_->addAction(tr("Open conversation"));
+    contextOpenAction_->setObjectName(QStringLiteral("contextOpenConversationAction"));
+    contextPinAction_ = conversationContextMenu_->addAction(tr("Pin conversation"));
+    contextPinAction_->setObjectName(QStringLiteral("contextPinConversationAction"));
+    conversationContextMenu_->addSeparator();
+    contextArchiveAction_ = conversationContextMenu_->addAction(tr("Archive conversation"));
+    contextArchiveAction_->setObjectName(QStringLiteral("contextArchiveConversationAction"));
+    contextRestoreAction_ = conversationContextMenu_->addAction(tr("Restore conversation"));
+    contextRestoreAction_->setObjectName(QStringLiteral("contextRestoreConversationAction"));
     sidebarLayout->addWidget(brand);
     sidebarLayout->addSpacing(10);
     sidebarLayout->addWidget(newConversation);
@@ -897,6 +968,24 @@ void MainWindow::buildUi() {
     connect(reconnectButton_, &QPushButton::clicked, this, &MainWindow::reconnectSession);
     connect(newConversation, &QPushButton::clicked, this, &MainWindow::createConversation);
     connect(conversationList_, &QListWidget::itemClicked, this, &MainWindow::activateConversation);
+    connect(conversationList_, &QListWidget::customContextMenuRequested, this,
+            [this](const QPoint& position) {
+                auto* item = conversationList_->itemAt(position);
+                if (item == nullptr) {
+                    return;
+                }
+                conversationList_->setCurrentItem(item);
+                prepareConversationContextMenu();
+                conversationContextMenu_->popup(
+                    conversationList_->viewport()->mapToGlobal(position));
+            });
+    connect(contextOpenAction_, &QAction::triggered, this, &MainWindow::openSelectedConversation);
+    connect(contextPinAction_, &QAction::triggered, this,
+            &MainWindow::toggleSelectedPinnedConversation);
+    connect(contextArchiveAction_, &QAction::triggered, this,
+            &MainWindow::archiveSelectedConversation);
+    connect(contextRestoreAction_, &QAction::triggered, this,
+            &MainWindow::restoreSelectedConversation);
     connect(conversationSearch_, &QLineEdit::textChanged, this,
             [this] { refreshConversationList(); });
     connect(composer_, &ComposerTextEdit::sendRequested, this, &MainWindow::sendMessage);

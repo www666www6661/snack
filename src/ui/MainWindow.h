@@ -74,6 +74,10 @@ class MainWindow final : public QMainWindow {
     void archiveConversation();
     void restoreSelectedConversation();
     void togglePinnedConversation();
+    void openSelectedConversation();
+    void archiveSelectedConversation();
+    void toggleSelectedPinnedConversation();
+    void prepareConversationContextMenu();
     void activateConversation(QListWidgetItem* item);
 
   private:
@@ -160,6 +164,11 @@ class MainWindow final : public QMainWindow {
     QString startupNotice_;
     QList<domain::Conversation> conversationCatalog_;
     QAction* pinConversationAction_{nullptr};
+    QMenu* conversationContextMenu_{nullptr};
+    QAction* contextOpenAction_{nullptr};
+    QAction* contextPinAction_{nullptr};
+    QAction* contextArchiveAction_{nullptr};
+    QAction* contextRestoreAction_{nullptr};
     struct ApprovalCardState {
         QLabel* status{nullptr};
         QList<QPushButton*> buttons;

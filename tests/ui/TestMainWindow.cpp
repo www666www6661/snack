@@ -144,6 +144,7 @@ class TestMainWindow final : public QObject {
     void createsConversationFromRail();
     void archivesAndRestoresConversation();
     void pinsAndReordersConversationRail();
+    void operatesOnSelectedConversationFromContextMenu();
 };
 
 void TestMainWindow::opensAndSwitchesConversationFromRail() {
@@ -483,6 +484,87 @@ void TestMainWindow::pinsAndReordersConversationRail() {
     QVERIFY(!controller->conversation().pinned);
     QCOMPARE(list->item(0)->data(Qt::UserRole).toUuid(), second.id);
     QCOMPARE(pin->text(), QStringLiteral("Pin conversation"));
+}
+
+void TestMainWindow::operatesOnSelectedConversationFromContextMenu() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::app::AppSettings settings(directory.filePath(QStringLiteral("settings.ini")));
+    UiMemoryEventRepository repository;
+    snack::domain::Conversation first;
+    first.title = QStringLiteral("Current");
+    first.workingDirectory = directory.path();
+    snack::domain::Conversation second;
+    second.title = QStringLiteral("Selected");
+    second.workingDirectory = directory.path();
+    repository.catalog = {first, second};
+
+    const auto makeRuntime = [](snack::domain::AgentKind kind) {
+        snack::agent::AgentRuntime runtime;
+        runtime.requestedKind = kind;
+        runtime.selectedKind = kind;
+        runtime.adapter = std::make_unique<snack::agent::FakeAgentAdapter>(nullptr, 1);
+        return runtime;
+    };
+    snack::app::SessionManager sessions(&repository, makeRuntime);
+    QString error;
+    auto* controller = sessions.addPrepared(first, makeRuntime(first.agentKind), &error);
+    QVERIFY2(controller != nullptr, qPrintable(error));
+    snack::ui::MainWindow window(controller, &settings, &sessions, false);
+    auto* list = window.findChild<QListWidget*>(QStringLiteral("conversationList"));
+    auto* open = window.findChild<QAction*>(QStringLiteral("contextOpenConversationAction"));
+    auto* pin = window.findChild<QAction*>(QStringLiteral("contextPinConversationAction"));
+    auto* archive = window.findChild<QAction*>(QStringLiteral("contextArchiveConversationAction"));
+    auto* restore = window.findChild<QAction*>(QStringLiteral("contextRestoreConversationAction"));
+    auto* title = window.findChild<QLabel*>(QStringLiteral("conversationTitle"));
+    QVERIFY(list != nullptr);
+    QVERIFY(open != nullptr);
+    QVERIFY(pin != nullptr);
+    QVERIFY(archive != nullptr);
+    QVERIFY(restore != nullptr);
+    QVERIFY(title != nullptr);
+
+    const auto selectConversation = [list](const QUuid& id) {
+        for (int row = 0; row < list->count(); ++row) {
+            if (list->item(row)->data(Qt::UserRole).toUuid() == id) {
+                list->setCurrentRow(row);
+                return;
+            }
+        }
+    };
+    selectConversation(second.id);
+    QVERIFY(QMetaObject::invokeMethod(&window, "prepareConversationContextMenu"));
+    QVERIFY(open->isEnabled());
+    QVERIFY(pin->isEnabled());
+    QVERIFY(archive->isEnabled());
+    QVERIFY(!restore->isEnabled());
+
+    pin->trigger();
+    QVERIFY(repository.conversationById(second.id, nullptr)->pinned);
+    QCOMPARE(sessions.size(), qsizetype{1});
+    selectConversation(second.id);
+    QVERIFY(QMetaObject::invokeMethod(&window, "prepareConversationContextMenu"));
+    QCOMPARE(pin->text(), QStringLiteral("Unpin conversation"));
+    archive->trigger();
+    QVERIFY(repository.conversationById(second.id, nullptr)->archived);
+    QCOMPARE(title->text(), QStringLiteral("Current"));
+    QCOMPARE(sessions.size(), qsizetype{1});
+
+    selectConversation(second.id);
+    QVERIFY(QMetaObject::invokeMethod(&window, "prepareConversationContextMenu"));
+    QVERIFY(!open->isEnabled());
+    QVERIFY(!archive->isEnabled());
+    QVERIFY(restore->isEnabled());
+    restore->trigger();
+    QCOMPARE(title->text(), QStringLiteral("Selected"));
+    QVERIFY(!repository.conversationById(second.id, nullptr)->archived);
+    QCOMPARE(sessions.size(), qsizetype{2});
+
+    selectConversation(first.id);
+    QVERIFY(QMetaObject::invokeMethod(&window, "prepareConversationContextMenu"));
+    QVERIFY(open->isEnabled());
+    open->trigger();
+    QCOMPARE(title->text(), QStringLiteral("Current"));
 }
 
 void TestMainWindow::sendsAndRendersStreamingTurn() {
