@@ -102,6 +102,7 @@ class MainWindow final : public QMainWindow {
     void updatePlan(const domain::AgentEvent& event);
     [[nodiscard]] QString toolTitle(const QJsonObject& payload) const;
     [[nodiscard]] QString toolDetails(const QJsonObject& payload) const;
+    [[nodiscard]] QString conversationStatusText(domain::ConversationStatus status) const;
     void applyTheme(const ThemeDefinition& theme);
     void refreshSystemTheme();
     void applyInterfaceScale(double scale);

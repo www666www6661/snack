@@ -174,11 +174,12 @@ void MainWindow::refreshConversationList() {
         }
         const QString title =
             conversation.pinned ? tr("Pinned · %1").arg(conversation.title) : conversation.title;
+        const QString status = conversationStatusText(conversation.status);
         auto* item = new QListWidgetItem(
             conversation.archived
                 ? tr("Archived · %1 · %2\n%3").arg(title, agentName, conversation.workingDirectory)
-                : QStringLiteral("%1  ·  %2\n%3")
-                      .arg(title, agentName, conversation.workingDirectory),
+                : tr("%1 · %2 · %3\n%4")
+                      .arg(title, agentName, status, conversation.workingDirectory),
             conversationList_);
         item->setData(Qt::UserRole, conversation.id);
         item->setData(Qt::UserRole + 1, conversation.archived);
@@ -188,6 +189,13 @@ void MainWindow::refreshConversationList() {
         }
     }
     conversationList_->setCurrentRow(currentRow);
+    if (sessions_ != nullptr) {
+        for (const QUuid& conversationId : sessions_->conversationIds()) {
+            auto* openController = sessions_->controller(conversationId);
+            connect(openController, &session::SessionController::statusChanged, this,
+                    &MainWindow::refreshConversationList, Qt::UniqueConnection);
+        }
+    }
     if (pinConversationAction_ != nullptr) {
         pinConversationAction_->setText(
             controller_->conversation().pinned ? tr("Unpin conversation") : tr("Pin conversation"));
@@ -1526,6 +1534,30 @@ QString MainWindow::toolDetails(const QJsonObject& payload) const {
     }
     details.removeAll(QString{});
     return details.join(QLatin1Char('\n'));
+}
+
+QString MainWindow::conversationStatusText(domain::ConversationStatus status) const {
+    switch (status) {
+    case domain::ConversationStatus::Dormant:
+        return tr("Dormant");
+    case domain::ConversationStatus::Connecting:
+        return tr("Connecting");
+    case domain::ConversationStatus::Idle:
+        return tr("Idle");
+    case domain::ConversationStatus::Running:
+        return tr("Running");
+    case domain::ConversationStatus::WaitingApproval:
+        return tr("Waiting for approval");
+    case domain::ConversationStatus::WaitingInput:
+        return tr("Waiting for input");
+    case domain::ConversationStatus::Disconnected:
+        return tr("Disconnected");
+    case domain::ConversationStatus::Failed:
+        return tr("Failed");
+    case domain::ConversationStatus::Closed:
+        return tr("Closed");
+    }
+    return tr("Unknown");
 }
 
 void MainWindow::appendToolStarted(const domain::AgentEvent& event) {

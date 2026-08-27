@@ -145,6 +145,7 @@ class TestMainWindow final : public QObject {
     void archivesAndRestoresConversation();
     void pinsAndReordersConversationRail();
     void operatesOnSelectedConversationFromContextMenu();
+    void updatesConversationRailForBackgroundRuntimeStatus();
 };
 
 void TestMainWindow::opensAndSwitchesConversationFromRail() {
@@ -565,6 +566,61 @@ void TestMainWindow::operatesOnSelectedConversationFromContextMenu() {
     QVERIFY(open->isEnabled());
     open->trigger();
     QCOMPARE(title->text(), QStringLiteral("Current"));
+}
+
+void TestMainWindow::updatesConversationRailForBackgroundRuntimeStatus() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::app::AppSettings settings(directory.filePath(QStringLiteral("settings.ini")));
+    UiMemoryEventRepository repository;
+    snack::domain::Conversation first;
+    first.title = QStringLiteral("Current");
+    first.workingDirectory = directory.path();
+    snack::domain::Conversation second;
+    second.title = QStringLiteral("Background");
+    second.workingDirectory = directory.path();
+    repository.catalog = {first, second};
+
+    const auto makeRuntime = [](snack::domain::AgentKind kind) {
+        snack::agent::AgentRuntime runtime;
+        runtime.requestedKind = kind;
+        runtime.selectedKind = kind;
+        runtime.adapter = std::make_unique<snack::agent::FakeAgentAdapter>(nullptr, 100);
+        return runtime;
+    };
+    snack::app::SessionManager sessions(&repository, makeRuntime);
+    QString error;
+    auto* firstController = sessions.addPrepared(first, makeRuntime(first.agentKind), &error);
+    auto* secondController = sessions.addPrepared(second, makeRuntime(second.agentKind), &error);
+    QVERIFY2(firstController != nullptr, qPrintable(error));
+    QVERIFY2(secondController != nullptr, qPrintable(error));
+    snack::ui::MainWindow window(firstController, &settings, &sessions, false);
+    auto* list = window.findChild<QListWidget*>(QStringLiteral("conversationList"));
+    QVERIFY(list != nullptr);
+    secondController->open();
+    QTRY_COMPARE(secondController->status(), snack::domain::ConversationStatus::Idle);
+
+    QString sendError;
+    QVERIFY2(secondController->sendMessage(QStringLiteral("Background work"), &sendError),
+             qPrintable(sendError));
+    QCOMPARE(secondController->status(), snack::domain::ConversationStatus::Running);
+
+    const auto backgroundItem = [list, id = second.id] {
+        for (int row = 0; row < list->count(); ++row) {
+            if (list->item(row)->data(Qt::UserRole).toUuid() == id) {
+                return list->item(row);
+            }
+        }
+        return static_cast<QListWidgetItem*>(nullptr);
+    };
+    QVERIFY(backgroundItem() != nullptr);
+    QVERIFY(backgroundItem()->text().contains(QStringLiteral("Running")));
+    QCOMPARE(window.findChild<QLabel*>(QStringLiteral("conversationTitle"))->text(),
+             QStringLiteral("Current"));
+    QTRY_COMPARE_WITH_TIMEOUT(secondController->status(), snack::domain::ConversationStatus::Idle,
+                              1000);
+    QTRY_VERIFY(backgroundItem() != nullptr &&
+                backgroundItem()->text().contains(QStringLiteral("Idle")));
 }
 
 void TestMainWindow::sendsAndRendersStreamingTurn() {

@@ -28,6 +28,8 @@ Pinning is a metadata-only toggle available for the current conversation. It doe
 
 Each rail row exposes a context menu for opening, pinning, archiving, or restoring that selected conversation. Actions operate on the row rather than silently switching first; archiving a background conversation leaves the current chat bound and uses the same active-work guard as the File menu.
 
+Active rows include a text status such as Connecting, Idle, Running, Waiting for approval/input, Disconnected, or Failed. Status changes from every open runtime refresh the rail in place, so background work remains visible without switching conversations.
+
 A persistent notice directly below the header reports an Agent fallback, connection loss, or reconnect attempt. Fallback notices remain visible while the fallback Agent is active. Connection failures preserve the original diagnostic and expose Reconnect in the notice; retrying keeps the previous cause visible until the native handshake succeeds. The status bar may echo the message but is never its only location. `Closed` is terminal: delayed connection, capability, native-identity, or event signals from an asynchronously exiting Agent cannot reopen the conversation, replace its diagnostic, or append timeline data.
 
 ## 4. Timeline
