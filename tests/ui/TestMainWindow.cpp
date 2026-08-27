@@ -133,6 +133,9 @@ void TestMainWindow::sendsAndRendersStreamingTurn() {
         window.findChild<QLabel*>(QStringLiteral("connectionNoticeTitle"));
     auto* connectionNoticeDetail =
         window.findChild<QLabel*>(QStringLiteral("connectionNoticeDetail"));
+    auto* systemThemeAction = window.findChild<QAction*>(QStringLiteral("systemThemeAction"));
+    auto* lightThemeAction = window.findChild<QAction*>(QStringLiteral("lightThemeAction"));
+    auto* darkThemeAction = window.findChild<QAction*>(QStringLiteral("darkThemeAction"));
     QVERIFY(composer != nullptr);
     QVERIFY(sendButton != nullptr);
     QVERIFY(stopButton != nullptr);
@@ -144,6 +147,10 @@ void TestMainWindow::sendsAndRendersStreamingTurn() {
     QVERIFY(connectionNoticeFrame != nullptr);
     QVERIFY(connectionNoticeTitle != nullptr);
     QVERIFY(connectionNoticeDetail != nullptr);
+    QVERIFY(systemThemeAction != nullptr);
+    QVERIFY(lightThemeAction != nullptr);
+    QVERIFY(darkThemeAction != nullptr);
+    QVERIFY(systemThemeAction->isChecked());
     QTRY_VERIFY(sendButton->isEnabled());
     QCOMPARE(modelCombo->count(), 2);
     QCOMPARE(modelCombo->currentData().toString(), QStringLiteral("mock-balanced"));
@@ -193,7 +200,14 @@ void TestMainWindow::sendsAndRendersStreamingTurn() {
     preferMock->trigger();
     QCOMPARE(settings.load().preferredAgentKind, snack::domain::AgentKind::Mock);
 
-    QVERIFY(QMetaObject::invokeMethod(&window, "applyDarkTheme"));
+    darkThemeAction->trigger();
+    QVERIFY(darkThemeAction->isChecked());
+    QVERIFY(!systemThemeAction->isChecked());
+    systemThemeAction->trigger();
+    QVERIFY(systemThemeAction->isChecked());
+    lightThemeAction->trigger();
+    QVERIFY(lightThemeAction->isChecked());
+    darkThemeAction->trigger();
     QVERIFY(QMetaObject::invokeMethod(&window, "increaseScale"));
     window.activateWindowForRequest(std::nullopt);
     window.activateWindowForRequest(QDir::tempPath());

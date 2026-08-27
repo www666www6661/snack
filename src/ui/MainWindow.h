@@ -57,6 +57,7 @@ class MainWindow final : public QMainWindow {
     void showPromptTemplateMenu();
     void saveComposerAsTemplate();
     void updateSessionSettings();
+    void applySystemTheme();
     void applyLightTheme();
     void applyDarkTheme();
     void increaseScale();
@@ -85,6 +86,7 @@ class MainWindow final : public QMainWindow {
     [[nodiscard]] QString toolTitle(const QJsonObject& payload) const;
     [[nodiscard]] QString toolDetails(const QJsonObject& payload) const;
     void applyTheme(const ThemeDefinition& theme);
+    void refreshSystemTheme();
     void applyInterfaceScale(double scale);
     void updateStatus(domain::ConversationStatus status);
     void updateConnectionDetail(const QString& detail);

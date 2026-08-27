@@ -30,6 +30,7 @@
 #include <QSignalBlocker>
 #include <QStatusBar>
 #include <QStyle>
+#include <QStyleHints>
 #include <QSystemTrayIcon>
 #include <QTimer>
 #include <QVBoxLayout>
@@ -103,11 +104,17 @@ MainWindow::MainWindow(session::SessionController* controller, app::AppSettings*
             &MainWindow::updateQueuedMessages);
     connect(controller_, &session::SessionController::promptTemplatesChanged, this,
             [this] { rebuildPromptTemplateMenu(); });
+    connect(qApp->styleHints(), &QStyleHints::colorSchemeChanged, this,
+            [this](Qt::ColorScheme) { refreshSystemTheme(); });
     connect(qApp, &QCoreApplication::aboutToQuit, this, &MainWindow::shutdown);
 
     restoreTimeline();
-    applyTheme(settingsSnapshot_.themeMode == app::ThemeMode::Dark ? ThemeDefinition::dark()
-                                                                   : ThemeDefinition::light());
+    if (settingsSnapshot_.themeMode == app::ThemeMode::System) {
+        refreshSystemTheme();
+    } else {
+        applyTheme(settingsSnapshot_.themeMode == app::ThemeMode::Dark ? ThemeDefinition::dark()
+                                                                       : ThemeDefinition::light());
+    }
     applyInterfaceScale(settingsSnapshot_.interfaceScale);
     rebuildCapabilityControls(controller_->nextTurnSettings());
     updateQueuedMessages(controller_->queuedMessages());
@@ -427,6 +434,11 @@ void MainWindow::applyLightTheme() {
     applyTheme(ThemeDefinition::light());
 }
 
+void MainWindow::applySystemTheme() {
+    settingsSnapshot_.themeMode = app::ThemeMode::System;
+    refreshSystemTheme();
+}
+
 void MainWindow::applyDarkTheme() {
     settingsSnapshot_.themeMode = app::ThemeMode::Dark;
     applyTheme(ThemeDefinition::dark());
@@ -697,8 +709,21 @@ void MainWindow::buildMenus() {
     connect(mockAction, &QAction::triggered, this, &MainWindow::preferMockAgent);
 
     auto* viewMenu = menuBar()->addMenu(tr("View"));
+    auto* themeGroup = new QActionGroup(viewMenu);
+    themeGroup->setExclusive(true);
+    auto* systemAction = viewMenu->addAction(tr("System theme"));
     auto* lightAction = viewMenu->addAction(tr("Light theme"));
     auto* darkAction = viewMenu->addAction(tr("Dark theme"));
+    systemAction->setObjectName(QStringLiteral("systemThemeAction"));
+    lightAction->setObjectName(QStringLiteral("lightThemeAction"));
+    darkAction->setObjectName(QStringLiteral("darkThemeAction"));
+    for (QAction* action : {systemAction, lightAction, darkAction}) {
+        action->setCheckable(true);
+        themeGroup->addAction(action);
+    }
+    systemAction->setChecked(settingsSnapshot_.themeMode == app::ThemeMode::System);
+    lightAction->setChecked(settingsSnapshot_.themeMode == app::ThemeMode::Light);
+    darkAction->setChecked(settingsSnapshot_.themeMode == app::ThemeMode::Dark);
     viewMenu->addSeparator();
     auto* focusComposer = viewMenu->addAction(tr("Focus composer"));
     focusComposer->setObjectName(QStringLiteral("focusComposerAction"));
@@ -712,6 +737,7 @@ void MainWindow::buildMenus() {
     zoomOut->setShortcut(QKeySequence::ZoomOut);
     resetZoom->setShortcut(
         QKeySequence::fromString(QStringLiteral("Ctrl+0"), QKeySequence::PortableText));
+    connect(systemAction, &QAction::triggered, this, &MainWindow::applySystemTheme);
     connect(lightAction, &QAction::triggered, this, &MainWindow::applyLightTheme);
     connect(darkAction, &QAction::triggered, this, &MainWindow::applyDarkTheme);
     connect(zoomIn, &QAction::triggered, this, &MainWindow::increaseScale);
@@ -1320,6 +1346,14 @@ void MainWindow::updatePlan(const domain::AgentEvent& event) {
 
 void MainWindow::applyTheme(const ThemeDefinition& theme) {
     qApp->setStyleSheet(theme.styleSheet());
+}
+
+void MainWindow::refreshSystemTheme() {
+    if (settingsSnapshot_.themeMode != app::ThemeMode::System) {
+        return;
+    }
+    const bool dark = qApp->styleHints()->colorScheme() == Qt::ColorScheme::Dark;
+    applyTheme(dark ? ThemeDefinition::dark() : ThemeDefinition::light());
 }
 
 void MainWindow::applyInterfaceScale(double scale) {

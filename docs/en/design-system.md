@@ -8,6 +8,8 @@ The default is calm, spacious, and reading-oriented like the ChatGPT desktop app
 
 Declarative JSON themes compile into Qt palette/QSS and WebEngine CSS. Token groups cover canvas/sidebar/raised/overlay surfaces; primary/secondary/disabled/link text; subtle/strong borders and focus; running/waiting/success/warning/danger states; user/tool/reasoning messages; diff states; terminal colors; spacing, radii, and overlay shadow. Safety color pairs have enforced minimum contrast.
 
+The System theme is a live preference rather than a one-time startup guess. Snack follows Qt's current platform color scheme, reapplies the built-in light or dark token set when that scheme changes, and stops following immediately when the user explicitly selects Light or Dark. The View menu keeps these three modes mutually exclusive and persists the selected mode.
+
 ## 3. Typography
 
 Default to installed system UI and monospace fonts. Users select UI, chat, and code/terminal families separately. Global zoom is the base scale; code and terminal sizes are additional preferences. Design uses weights 400 and 500 and avoids oversized bold text.
