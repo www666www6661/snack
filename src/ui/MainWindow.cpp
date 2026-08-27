@@ -13,6 +13,7 @@
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDockWidget>
+#include <QFileDialog>
 #include <QFormLayout>
 #include <QFrame>
 #include <QHBoxLayout>
@@ -672,6 +673,47 @@ void MainWindow::deleteConversationFor(const QUuid& conversationId, const QStrin
     } else {
         refreshConversationList();
     }
+}
+
+void MainWindow::exportConversationMarkdown() {
+    exportConversation(app::ConversationExportFormat::Markdown);
+}
+
+void MainWindow::exportConversationJson() {
+    exportConversation(app::ConversationExportFormat::Json);
+}
+
+void MainWindow::exportConversation(app::ConversationExportFormat format) {
+    QString error;
+    const auto events = controller_->conversationEvents(controller_->conversation().id, &error);
+    if (!error.isEmpty()) {
+        statusBar()->showMessage(tr("Cannot load conversation for export: %1").arg(error), 8000);
+        return;
+    }
+
+    const bool markdown = format == app::ConversationExportFormat::Markdown;
+    const QString suffix = markdown ? QStringLiteral("md") : QStringLiteral("json");
+    const QString suggestedName =
+        QStringLiteral("snack-%1.%2")
+            .arg(controller_->conversation().id.toString(QUuid::WithoutBraces).left(8), suffix);
+    QFileDialog dialog(
+        this, markdown ? tr("Export conversation as Markdown") : tr("Export conversation as JSON"),
+        QDir(controller_->conversation().workingDirectory).filePath(suggestedName),
+        markdown ? tr("Markdown files (*.md)") : tr("JSON files (*.json)"));
+    dialog.setObjectName(QStringLiteral("conversationExportDialog"));
+    dialog.setAcceptMode(QFileDialog::AcceptSave);
+    dialog.setFileMode(QFileDialog::AnyFile);
+    dialog.setDefaultSuffix(suffix);
+    dialog.setOption(QFileDialog::DontUseNativeDialog);
+    if (dialog.exec() != QDialog::Accepted || dialog.selectedFiles().isEmpty()) {
+        return;
+    }
+    if (!app::ConversationExporter::write(dialog.selectedFiles().constFirst(),
+                                          controller_->conversation(), events, format, &error)) {
+        statusBar()->showMessage(tr("Cannot export conversation: %1").arg(error), 8000);
+        return;
+    }
+    statusBar()->showMessage(tr("Conversation exported"), 4000);
 }
 
 void MainWindow::restoreSelectedConversation() {
@@ -1908,6 +1950,14 @@ void MainWindow::buildMenus() {
     deleteAction->setObjectName(QStringLiteral("deleteConversationAction"));
     deleteAction->setEnabled(sessions_ != nullptr);
     connect(deleteAction, &QAction::triggered, this, &MainWindow::deleteConversation);
+    auto* exportMenu = fileMenu->addMenu(tr("Export conversation"));
+    exportMenu->setObjectName(QStringLiteral("exportConversationMenu"));
+    auto* exportMarkdown = exportMenu->addAction(tr("Markdown..."));
+    exportMarkdown->setObjectName(QStringLiteral("exportConversationMarkdownAction"));
+    connect(exportMarkdown, &QAction::triggered, this, &MainWindow::exportConversationMarkdown);
+    auto* exportJson = exportMenu->addAction(tr("JSON..."));
+    exportJson->setObjectName(QStringLiteral("exportConversationJsonAction"));
+    connect(exportJson, &QAction::triggered, this, &MainWindow::exportConversationJson);
     pinConversationAction_ = fileMenu->addAction(tr("Pin conversation"));
     pinConversationAction_->setObjectName(QStringLiteral("pinConversationAction"));
     pinConversationAction_->setEnabled(sessions_ != nullptr);

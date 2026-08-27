@@ -184,6 +184,11 @@ QList<domain::Conversation> SessionController::conversationCatalog(QString* erro
     return repository_->conversations(error);
 }
 
+QList<domain::AgentEvent> SessionController::conversationEvents(const QUuid& conversationId,
+                                                                QString* error) const {
+    return repository_->eventsForConversation(conversationId, error);
+}
+
 QList<domain::PromptTemplate> SessionController::promptTemplates(QString* error) const {
     return repository_->promptTemplates(error);
 }

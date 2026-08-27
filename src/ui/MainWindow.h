@@ -1,6 +1,7 @@
 #pragma once
 
 #include "app/AppSettings.h"
+#include "app/ConversationExporter.h"
 #include "app/SessionManager.h"
 #include "session/SessionController.h"
 #include "ui/ThemeDefinition.h"
@@ -99,6 +100,8 @@ class MainWindow final : public QMainWindow {
     void openSelectedConversation();
     void archiveSelectedConversation();
     void deleteSelectedConversation();
+    void exportConversationMarkdown();
+    void exportConversationJson();
     void toggleSelectedPinnedConversation();
     void prepareConversationContextMenu();
     void activateConversation(QListWidgetItem* item);
@@ -113,6 +116,7 @@ class MainWindow final : public QMainWindow {
     void editConversationTagsFor(const QUuid& conversationId, const QStringList& tags);
     void editConversationGroupFor(const QUuid& conversationId, const QString& groupName);
     void deleteConversationFor(const QUuid& conversationId, const QString& title);
+    void exportConversation(app::ConversationExportFormat format);
     void activateRelativeConversation(int offset);
     void activateConversationById(const QUuid& conversationId);
     void resetConversationView();

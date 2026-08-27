@@ -12,6 +12,8 @@
 #include <QDialog>
 #include <QDir>
 #include <QDockWidget>
+#include <QFile>
+#include <QFileDialog>
 #include <QFrame>
 #include <QInputDialog>
 #include <QJsonArray>
@@ -198,6 +200,7 @@ class TestMainWindow final : public QObject {
     void createsConversationFromRail();
     void archivesAndRestoresConversation();
     void deletesCurrentAndBackgroundConversations();
+    void exportsCurrentConversationWithoutOpeningRuntime();
     void pinsAndReordersConversationRail();
     void operatesOnSelectedConversationFromContextMenu();
     void updatesConversationRailForBackgroundRuntimeStatus();
@@ -686,6 +689,46 @@ void TestMainWindow::deletesCurrentAndBackgroundConversations() {
     QCOMPARE(title->text(), QStringLiteral("Delete background"));
     QCOMPARE(list->count(), 1);
     QCOMPARE(list->item(0)->data(Qt::UserRole).toUuid(), third.id);
+}
+
+void TestMainWindow::exportsCurrentConversationWithoutOpeningRuntime() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    snack::app::AppSettings settings(directory.filePath(QStringLiteral("settings.ini")));
+    UiMemoryEventRepository repository;
+    snack::domain::Conversation conversation;
+    conversation.title = QStringLiteral("Export from UI");
+    conversation.workingDirectory = directory.path();
+    snack::domain::AgentEvent event;
+    event.conversationId = conversation.id;
+    event.sequence = 1;
+    event.type = snack::domain::AgentEventType::UserMessage;
+    event.payload = {{QStringLiteral("text"), QStringLiteral("Exported prompt")}};
+    repository.catalog = {conversation};
+    repository.events = {event};
+    snack::agent::FakeAgentAdapter adapter(nullptr, 1);
+    snack::session::SessionController controller(conversation, &adapter, &repository);
+    snack::ui::MainWindow window(&controller, &settings, false);
+    auto* exportMarkdown =
+        window.findChild<QAction*>(QStringLiteral("exportConversationMarkdownAction"));
+    QVERIFY(exportMarkdown != nullptr);
+    const QString exportPath = directory.filePath(QStringLiteral("exported.md"));
+    QTimer::singleShot(0, [exportPath] {
+        auto* dialog = qobject_cast<QFileDialog*>(QApplication::activeModalWidget());
+        QVERIFY(dialog != nullptr);
+        QCOMPARE(dialog->objectName(), QStringLiteral("conversationExportDialog"));
+        dialog->selectFile(exportPath);
+        QVERIFY(QMetaObject::invokeMethod(dialog, "accept"));
+    });
+
+    exportMarkdown->trigger();
+
+    QFile file(exportPath);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    const QByteArray content = file.readAll();
+    QVERIFY(content.contains("# Export from UI"));
+    QVERIFY(content.contains("Exported prompt"));
+    QVERIFY(window.statusBar()->currentMessage().contains(QStringLiteral("exported")));
 }
 
 void TestMainWindow::pinsAndReordersConversationRail() {

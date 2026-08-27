@@ -31,6 +31,8 @@ set(SNACK_CORE_SOURCES
     app/AppSettings.h
     app/ConversationBootstrap.cpp
     app/ConversationBootstrap.h
+    app/ConversationExporter.cpp
+    app/ConversationExporter.h
     app/Logging.cpp
     app/Logging.h
     app/SessionManager.cpp

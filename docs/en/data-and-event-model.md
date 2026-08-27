@@ -54,6 +54,8 @@ Shard blobs by hash prefix and record size, compression, MIME type, reference co
 
 Raw logs and reviewed snapshots default to 30 days with a 10 GB cap. Pending reviews, conflict recovery, active sessions, and restore transactions carry a `protectedReason` and are never auto-deleted. Backup manifests contain app/schema versions, platform, path mappings, and hashes.
 
+Explicit conversation export is a read-only projection and never opens an Agent runtime. Markdown exports conversation metadata, user/Agent text, and structured audit blocks for other events without raw protocol payloads. Versioned JSON exports conversation metadata plus every event payload and raw payload so it can serve as a complete machine-readable record. Both formats use an atomic replace-on-success file write.
+
 ## 9. Migrations
 
 Migrations are forward-only, idempotent, and record start/completion. Back up the database before upgrading. Failure enters read-only recovery mode and never replaces old data with an empty database.

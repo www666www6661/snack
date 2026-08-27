@@ -28,6 +28,8 @@ class SessionController final : public QObject {
     [[nodiscard]] QList<domain::SavedConversationView>
     conversationViews(QString* error = nullptr) const;
     [[nodiscard]] QList<domain::AgentEvent> restoredEvents(QString* error = nullptr);
+    [[nodiscard]] QList<domain::AgentEvent> conversationEvents(const QUuid& conversationId,
+                                                               QString* error = nullptr) const;
 
     void open();
     bool sendMessage(const QString& message, QString* error = nullptr);
