@@ -175,6 +175,7 @@ void ClaudeAdapter::startTurn(const TurnRequest& request) {
     }
 
     activeTurn_ = request;
+    eventMapper_.reset();
     nativeUserMessageUuid_ = request.turnId.toString(QUuid::WithoutBraces);
     if (!client_.sendEnvelope(envelope)) {
         if (!activeTurn_.turnId.isNull()) {
@@ -320,8 +321,10 @@ void ClaudeAdapter::handleRecord(const StreamRecord& record) {
     if (!connected_ || activeTurn_.turnId.isNull()) {
         return;
     }
+    for (const MappedEvent& event : eventMapper_.consume(record)) {
+        emitActiveEvent(event.type, event.payload, event.rawPayload);
+    }
     if (record.kind != StreamRecordKind::Result) {
-        emitActiveEvent(domain::AgentEventType::RawProtocolObserved, {}, record.payload);
         return;
     }
 
@@ -331,7 +334,7 @@ void ClaudeAdapter::handleRecord(const StreamRecord& record) {
         emitActiveEvent(domain::AgentEventType::WarningRaised,
                         {{QStringLiteral("message"),
                           QStringLiteral("Ignored a Claude result for an unknown user message")}},
-                        record.payload);
+                        sanitizedClaudePayload(record.payload));
         return;
     }
     const bool failed = record.payload.value(QStringLiteral("is_error")).toBool() ||
@@ -341,10 +344,12 @@ void ClaudeAdapter::handleRecord(const StreamRecord& record) {
         if (message.isEmpty()) {
             message = QStringLiteral("Claude turn failed");
         }
-        finishActiveTurn(domain::AgentEventType::TurnFailed, message, record.payload, false, false);
+        finishActiveTurn(domain::AgentEventType::TurnFailed, message,
+                         sanitizedClaudePayload(record.payload), false, false);
         return;
     }
-    finishActiveTurn(domain::AgentEventType::TurnCompleted, {}, record.payload, false, true);
+    finishActiveTurn(domain::AgentEventType::TurnCompleted, {},
+                     sanitizedClaudePayload(record.payload), false, true);
 }
 
 void ClaudeAdapter::finishActiveTurn(domain::AgentEventType type, const QString& message,

@@ -5,6 +5,8 @@ set(SNACK_CORE_SOURCES
     agent/claude/ClaudeAdapter.h
     agent/claude/ClaudeCliDiscovery.cpp
     agent/claude/ClaudeCliDiscovery.h
+    agent/claude/ClaudeEventMapper.cpp
+    agent/claude/ClaudeEventMapper.h
     agent/claude/ClaudeStreamClient.cpp
     agent/claude/ClaudeStreamClient.h
     agent/claude/ClaudeStreamProtocol.cpp

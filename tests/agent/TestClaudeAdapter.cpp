@@ -27,6 +27,7 @@ class TestClaudeAdapter final : public QObject {
     void adapterConnectsNewAndResumedSessions();
     void adapterSendsAndCorrelatesMultipleTurns();
     void adapterRejectsInvalidLifecycleRequests();
+    void mapsVisibleStreamEventsAndRedactsThinking();
 };
 
 class FakeClaudeProcessTransport final : public snack::agent::process::IProcessTransport {
@@ -665,6 +666,78 @@ void TestClaudeAdapter::adapterRejectsInvalidLifecycleRequests() {
     QCOMPARE(closeConnectionSpy.count(), 2);
     QCOMPARE(closeConnectionSpy.constLast().at(0).toBool(), false);
     QCOMPARE(closeConnectionSpy.constLast().at(1).toString(), QStringLiteral("closed"));
+}
+
+void TestClaudeAdapter::mapsVisibleStreamEventsAndRedactsThinking() {
+    using namespace snack::agent::claude;
+    ClaudeEventMapper mapper;
+    mapper.reset();
+
+    QList<MappedEvent> mapped;
+    const QList<QByteArray> lines = {
+        R"({"type":"stream_event","event":{"type":"message_start","message":{"id":"msg-1","usage":{"input_tokens":10,"output_tokens":0}}}})",
+        R"({"type":"stream_event","event":{"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"private thought","signature":"secret"}}})",
+        R"({"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"more private thought"}}})",
+        R"({"type":"stream_event","event":{"type":"content_block_stop","index":0}})",
+        R"({"type":"stream_event","event":{"type":"content_block_start","index":1,"content_block":{"type":"text","text":""}}})",
+        R"({"type":"stream_event","event":{"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"Hello "}}})",
+        R"({"type":"stream_event","event":{"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"world"}}})",
+        R"({"type":"stream_event","event":{"type":"content_block_stop","index":1}})",
+        R"({"type":"stream_event","event":{"type":"content_block_start","index":2,"content_block":{"type":"tool_use","id":"tool-1","name":"Read","input":{}}}})",
+        R"({"type":"assistant","message":{"id":"msg-1","content":[{"type":"thinking","thinking":"complete private thought","signature":"secret"},{"type":"text","text":"Hello world"},{"type":"tool_use","id":"tool-1","name":"Read","input":{"file_path":"README.md"}}],"usage":{"input_tokens":10,"output_tokens":4,"cache_read_input_tokens":3}}})",
+        R"({"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"tool-1","content":"file output","is_error":false}]}})",
+        R"({"type":"result","subtype":"success","usage":{"input_tokens":10,"output_tokens":4,"cache_read_input_tokens":3}})",
+    };
+    for (const QByteArray& line : lines) {
+        const StreamRecord record = parseStreamRecord(line);
+        QCOMPARE_NE(record.kind, StreamRecordKind::Malformed);
+        mapped.append(mapper.consume(record));
+    }
+
+    QList<domain::AgentEventType> types;
+    QString visibleText;
+    bool toolStarted = false;
+    bool toolCompleted = false;
+    bool usageMapped = false;
+    for (const MappedEvent& event : mapped) {
+        types.append(event.type);
+        if (event.type == domain::AgentEventType::AgentMessageDelta) {
+            visibleText.append(event.payload.value(QStringLiteral("text")).toString());
+        } else if (event.type == domain::AgentEventType::ToolStarted) {
+            toolStarted =
+                event.payload.value(QStringLiteral("itemId")) == QLatin1String("tool-1") &&
+                event.payload.value(QStringLiteral("tool")) == QLatin1String("Read");
+        } else if (event.type == domain::AgentEventType::ToolCompleted) {
+            toolCompleted = event.payload.value(QStringLiteral("aggregatedOutput")) ==
+                            QLatin1String("file output");
+        } else if (event.type == domain::AgentEventType::UsageUpdated) {
+            const QJsonObject total = event.payload.value(QStringLiteral("total")).toObject();
+            usageMapped = total.value(QStringLiteral("totalTokens")).toInteger() == 17;
+        }
+
+        const QByteArray serialized =
+            QJsonDocument(event.rawPayload).toJson(QJsonDocument::Compact);
+        QVERIFY(!serialized.contains("private thought"));
+        QVERIFY(!serialized.contains("more private thought"));
+        QVERIFY(!serialized.contains("complete private thought"));
+        QVERIFY(!serialized.contains("secret"));
+    }
+
+    QCOMPARE(visibleText, QStringLiteral("Hello world"));
+    QVERIFY(types.contains(domain::AgentEventType::AgentMessageStart));
+    QCOMPARE(types.count(domain::AgentEventType::AgentMessageComplete), 1);
+    QVERIFY(types.contains(domain::AgentEventType::ReasoningStarted));
+    QVERIFY(types.contains(domain::AgentEventType::ReasoningCompleted));
+    QVERIFY(toolStarted);
+    QVERIFY(toolCompleted);
+    QVERIFY(usageMapped);
+
+    const QJsonObject sanitized =
+        sanitizedClaudePayload(QJsonDocument::fromJson(lines.at(9)).object());
+    const QByteArray serialized = QJsonDocument(sanitized).toJson(QJsonDocument::Compact);
+    QVERIFY(serialized.contains("redacted"));
+    QVERIFY(!serialized.contains("complete private thought"));
+    QVERIFY(!serialized.contains("signature"));
 }
 
 QTEST_MAIN(TestClaudeAdapter)

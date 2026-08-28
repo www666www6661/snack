@@ -2,6 +2,7 @@
 
 #include "agent/IAgentAdapter.h"
 #include "agent/claude/ClaudeCliDiscovery.h"
+#include "agent/claude/ClaudeEventMapper.h"
 #include "agent/claude/ClaudeStreamClient.h"
 
 namespace snack::agent::claude {
@@ -35,6 +36,7 @@ class ClaudeAdapter final : public IAgentAdapter {
 
     CliInstallation installation_;
     ClaudeStreamClient client_;
+    ClaudeEventMapper eventMapper_;
     CapabilitySet capabilities_;
     AgentConnectionRequest connectionRequest_;
     domain::TurnSettingsSnapshot processSettings_;
