@@ -23,8 +23,8 @@
     <name>QObject</name>
     <message>
         <location filename="../src/app/main.cpp" line="47"/>
-        <location filename="../src/app/main.cpp" line="84"/>
-        <location filename="../src/app/main.cpp" line="133"/>
+        <location filename="../src/app/main.cpp" line="85"/>
+        <location filename="../src/app/main.cpp" line="138"/>
         <source>Snack</source>
         <translation>零食</translation>
     </message>
@@ -34,12 +34,12 @@
         <translation>无法启动应用程序：%1</translation>
     </message>
     <message>
-        <location filename="../src/app/main.cpp" line="85"/>
+        <location filename="../src/app/main.cpp" line="86"/>
         <source>Cannot open local data: %1</source>
         <translation>无法打开本地数据：%1</translation>
     </message>
     <message>
-        <location filename="../src/app/main.cpp" line="134"/>
+        <location filename="../src/app/main.cpp" line="139"/>
         <source>Cannot create the conversation session: %1</source>
         <translation>无法创建会话：%1</translation>
     </message>
@@ -47,32 +47,32 @@
 <context>
     <name>main</name>
     <message>
-        <location filename="../src/app/main.cpp" line="113"/>
+        <location filename="../src/app/main.cpp" line="114"/>
         <source>Codex conversation</source>
         <translation>Codex 会话</translation>
     </message>
     <message>
-        <location filename="../src/app/main.cpp" line="117"/>
+        <location filename="../src/app/main.cpp" line="116"/>
         <source>Claude conversation</source>
         <translation>Claude 会话</translation>
     </message>
     <message>
-        <location filename="../src/app/main.cpp" line="114"/>
+        <location filename="../src/app/main.cpp" line="112"/>
         <source>Mock conversation</source>
         <translation>模拟会话</translation>
     </message>
     <message>
-        <location filename="../src/app/main.cpp" line="144"/>
+        <location filename="../src/app/main.cpp" line="149"/>
         <source>Using Mock Agent because %1</source>
         <translation>正在使用模拟智能体，原因：%1</translation>
     </message>
     <message>
-        <location filename="../src/app/main.cpp" line="98"/>
+        <location filename="../src/app/main.cpp" line="99"/>
         <source>Database recovery mode</source>
         <translation>数据库恢复模式</translation>
     </message>
     <message>
-        <location filename="../src/app/main.cpp" line="90"/>
+        <location filename="../src/app/main.cpp" line="91"/>
         <source>A database migration failed. Existing data was opened read-only and no Agent work will be started.
 
 Reason: %1</source>
@@ -81,7 +81,7 @@ Reason: %1</source>
 原因：%1</translation>
     </message>
     <message>
-        <location filename="../src/app/main.cpp" line="95"/>
+        <location filename="../src/app/main.cpp" line="96"/>
         <source>
 
 Safety backup: %1</source>
