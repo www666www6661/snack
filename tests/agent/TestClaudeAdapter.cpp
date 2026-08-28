@@ -1,6 +1,8 @@
 #include "agent/claude/ClaudeCliDiscovery.h"
+#include "agent/claude/ClaudeStreamClient.h"
 
 #include <QFile>
+#include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -14,6 +16,64 @@ class TestClaudeAdapter final : public QObject {
     void probesExecutableWithDefaultRunner();
     void buildsSessionLaunchSpecs();
     void mapsRuntimeControls();
+    void parsesAndInitializesFragmentedStream();
+    void boundsFramesDiagnosticsAndWrites();
+    void rejectsInvalidAndCrossSessionStreams();
+    void handlesTimeoutExitAndShutdown();
+};
+
+class FakeClaudeProcessTransport final : public snack::agent::process::IProcessTransport {
+  public:
+    using IProcessTransport::IProcessTransport;
+
+    [[nodiscard]] bool isRunning() const override { return running; }
+
+    void start(const snack::agent::process::LaunchSpec& value) override {
+        launchSpec = value;
+        running = true;
+        emit started();
+    }
+
+    qint64 write(const QByteArray& data) override {
+        if (failWrites) {
+            return -1;
+        }
+        writes.append(data);
+        return data.size();
+    }
+
+    void closeWriteChannel() override { ++closeCalls; }
+
+    void terminate() override {
+        ++terminateCalls;
+        if (running && !deferTermination) {
+            running = false;
+            emit finished(0, snack::agent::process::ExitStatus::Normal);
+        }
+    }
+
+    void kill() override {
+        ++killCalls;
+        running = false;
+        emit finished(-1, snack::agent::process::ExitStatus::Crashed);
+    }
+
+    void feedOutput(const QByteArray& data) { emit standardOutputReceived(data); }
+    void feedError(const QByteArray& data) { emit standardErrorReceived(data); }
+
+    void finish(int exitCode, snack::agent::process::ExitStatus status) {
+        running = false;
+        emit finished(exitCode, status);
+    }
+
+    snack::agent::process::LaunchSpec launchSpec;
+    QList<QByteArray> writes;
+    bool running{false};
+    bool failWrites{false};
+    bool deferTermination{false};
+    int closeCalls{0};
+    int terminateCalls{0};
+    int killCalls{0};
 };
 
 namespace {
@@ -272,6 +332,157 @@ void TestClaudeAdapter::mapsRuntimeControls() {
              QStringLiteral("acceptEdits"));
     QCOMPARE(ClaudeCliDiscovery::permissionModeArgument(AccessLevel::Full),
              QStringLiteral("bypassPermissions"));
+}
+
+void TestClaudeAdapter::parsesAndInitializesFragmentedStream() {
+    using namespace snack::agent::claude;
+    qRegisterMetaType<StreamState>();
+    qRegisterMetaType<StreamRecord>();
+    qRegisterMetaType<InitInfo>();
+
+    FakeClaudeProcessTransport transport;
+    ClaudeStreamClient client(&transport);
+    QSignalSpy stateSpy(&client, &ClaudeStreamClient::stateChanged);
+    QSignalSpy initializedSpy(&client, &ClaudeStreamClient::initialized);
+    QSignalSpy recordSpy(&client, &ClaudeStreamClient::recordReceived);
+
+    QVERIFY(client.start({.program = QStringLiteral("claude")}, 1000));
+    QCOMPARE(client.state(), StreamState::AwaitingInit);
+    QCOMPARE(stateSpy.count(), 2);
+
+    const QByteArray startup =
+        R"({"type":"system","subtype":"informational","session_id":"session-1","future":true})";
+    const QByteArray init =
+        R"({"type":"system","subtype":"init","session_id":"session-1","claude_code_version":"2.1.245","cwd":"/workspace","model":"claude-opus-4-1","permissionMode":"manual","tools":["Read","Read"],"capabilities":["interrupt_receipt_v1","future_v9"]})";
+    transport.feedOutput(startup + "\r\n" + init.first(70));
+    QCOMPARE(recordSpy.count(), 1);
+    QCOMPARE(client.state(), StreamState::AwaitingInit);
+    transport.feedOutput(init.sliced(70) + "\n");
+
+    QCOMPARE(client.state(), StreamState::Ready);
+    QCOMPARE(initializedSpy.count(), 1);
+    QCOMPARE(recordSpy.count(), 2);
+    const InitInfo info = initializedSpy.constFirst().constFirst().value<InitInfo>();
+    QCOMPARE(info.sessionId, QStringLiteral("session-1"));
+    QCOMPARE(info.cliVersion, QStringLiteral("2.1.245"));
+    QCOMPARE(info.modelId, QStringLiteral("claude-opus-4-1"));
+    QCOMPARE(info.tools, QStringList({QStringLiteral("Read")}));
+    QCOMPARE(info.capabilities,
+             QStringList({QStringLiteral("interrupt_receipt_v1"), QStringLiteral("future_v9")}));
+    QCOMPARE(client.initInfo().workingDirectory, QStringLiteral("/workspace"));
+
+    QVERIFY(client.sendEnvelope({{QStringLiteral("type"), QStringLiteral("user")},
+                                 {QStringLiteral("session_id"), QStringLiteral("session-1")}}));
+    QCOMPARE(transport.writes.size(), 1);
+    QVERIFY(transport.writes.constFirst().endsWith('\n'));
+}
+
+void TestClaudeAdapter::boundsFramesDiagnosticsAndWrites() {
+    using namespace snack::agent::claude;
+    FakeClaudeProcessTransport transport;
+    ClaudeStreamClient client(&transport, nullptr, 160, 8, 100);
+    QSignalSpy warningSpy(&client, &ClaudeStreamClient::protocolWarning);
+    QSignalSpy failureSpy(&client, &ClaudeStreamClient::failureOccurred);
+
+    QVERIFY(client.start({.program = QStringLiteral("claude")}, 1000));
+    transport.feedError("0123456789abcdef");
+    QCOMPARE(client.diagnostics(), QByteArray("89abcdef"));
+
+    const QByteArray init =
+        R"({"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.245","cwd":"/w","model":"m","permissionMode":"manual"})";
+    QVERIFY(init.size() < 160);
+    transport.feedOutput(init + "\n");
+    QCOMPARE(client.state(), StreamState::Ready);
+
+    QVERIFY(!client.sendEnvelope({}));
+    QVERIFY(!client.sendEnvelope({{QStringLiteral("type"), QString(200, QLatin1Char('x'))}}));
+    QCOMPARE(warningSpy.count(), 2);
+    QVERIFY(failureSpy.isEmpty());
+
+    transport.feedOutput(QByteArray(161, 'x'));
+    QCOMPARE(client.state(), StreamState::Failed);
+    QCOMPARE(failureSpy.count(), 1);
+    QVERIFY(failureSpy.constFirst().constFirst().toString().contains(QStringLiteral("oversized")));
+}
+
+void TestClaudeAdapter::rejectsInvalidAndCrossSessionStreams() {
+    using namespace snack::agent::claude;
+    const QByteArray init =
+        R"({"type":"system","subtype":"init","session_id":"session-a","claude_code_version":"2.1.245","cwd":"/w","model":"m","permissionMode":"manual"})";
+
+    FakeClaudeProcessTransport malformedTransport;
+    ClaudeStreamClient malformedClient(&malformedTransport);
+    QSignalSpy malformedFailure(&malformedClient, &ClaudeStreamClient::failureOccurred);
+    QVERIFY(malformedClient.start({.program = QStringLiteral("claude")}));
+    malformedTransport.feedOutput("{}\n");
+    QCOMPARE(malformedClient.state(), StreamState::Failed);
+    QCOMPARE(malformedFailure.count(), 1);
+
+    FakeClaudeProcessTransport earlyTurnTransport;
+    ClaudeStreamClient earlyTurnClient(&earlyTurnTransport);
+    QVERIFY(earlyTurnClient.start({.program = QStringLiteral("claude")}));
+    earlyTurnTransport.feedOutput(R"({"type":"assistant","session_id":"session-a","message":{}})"
+                                  "\n");
+    QCOMPARE(earlyTurnClient.state(), StreamState::Failed);
+
+    FakeClaudeProcessTransport crossTransport;
+    ClaudeStreamClient crossClient(&crossTransport);
+    QSignalSpy crossFailure(&crossClient, &ClaudeStreamClient::failureOccurred);
+    QVERIFY(crossClient.start({.program = QStringLiteral("claude")}));
+    crossTransport.feedOutput(init + "\n");
+    QCOMPARE(crossClient.state(), StreamState::Ready);
+    crossTransport.feedOutput(R"({"type":"result","session_id":"session-b","subtype":"success"})"
+                              "\n");
+    QCOMPARE(crossClient.state(), StreamState::Failed);
+    QCOMPARE(crossFailure.count(), 1);
+
+    FakeClaudeProcessTransport invalidInitTransport;
+    ClaudeStreamClient invalidInitClient(&invalidInitTransport);
+    QVERIFY(invalidInitClient.start({.program = QStringLiteral("claude")}));
+    invalidInitTransport.feedOutput(R"({"type":"system","subtype":"init","session_id":"s"})"
+                                    "\n");
+    QCOMPARE(invalidInitClient.state(), StreamState::Failed);
+}
+
+void TestClaudeAdapter::handlesTimeoutExitAndShutdown() {
+    using namespace snack::agent::claude;
+
+    FakeClaudeProcessTransport timeoutTransport;
+    ClaudeStreamClient timeoutClient(&timeoutTransport, nullptr, 1024, 1024, 20);
+    QSignalSpy timeoutFailure(&timeoutClient, &ClaudeStreamClient::failureOccurred);
+    QVERIFY(timeoutClient.start({.program = QStringLiteral("claude")}, 10));
+    QTRY_COMPARE_WITH_TIMEOUT(timeoutFailure.count(), 1, 100);
+    QCOMPARE(timeoutClient.state(), StreamState::Failed);
+
+    FakeClaudeProcessTransport exitTransport;
+    ClaudeStreamClient exitClient(&exitTransport);
+    QSignalSpy exitFailure(&exitClient, &ClaudeStreamClient::failureOccurred);
+    QVERIFY(exitClient.start({.program = QStringLiteral("claude")}));
+    exitTransport.finish(2, snack::agent::process::ExitStatus::Normal);
+    QCOMPARE(exitFailure.count(), 1);
+    QVERIFY(exitFailure.constFirst().constFirst().toString().contains(QStringLiteral("code 2")));
+
+    FakeClaudeProcessTransport shutdownTransport;
+    shutdownTransport.deferTermination = true;
+    ClaudeStreamClient shutdownClient(&shutdownTransport, nullptr, 1024, 1024, 10);
+    QSignalSpy warningSpy(&shutdownClient, &ClaudeStreamClient::protocolWarning);
+    QVERIFY(shutdownClient.start({.program = QStringLiteral("claude")}));
+    shutdownClient.stop();
+    QCOMPARE(shutdownTransport.closeCalls, 1);
+    QCOMPARE(shutdownTransport.terminateCalls, 1);
+    QTRY_COMPARE_WITH_TIMEOUT(shutdownTransport.killCalls, 1, 100);
+    QCOMPARE(warningSpy.count(), 1);
+    QCOMPARE(shutdownClient.state(), StreamState::Stopped);
+
+    FakeClaudeProcessTransport writeTransport;
+    ClaudeStreamClient writeClient(&writeTransport);
+    QVERIFY(writeClient.start({.program = QStringLiteral("claude")}));
+    writeTransport.feedOutput(
+        R"({"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.245","cwd":"/w","model":"m","permissionMode":"manual"})"
+        "\n");
+    writeTransport.failWrites = true;
+    QVERIFY(!writeClient.sendEnvelope({{QStringLiteral("type"), QStringLiteral("user")}}));
+    QCOMPARE(writeClient.state(), StreamState::Failed);
 }
 
 QTEST_MAIN(TestClaudeAdapter)

@@ -3,6 +3,10 @@ set(SNACK_CORE_SOURCES
     agent/AgentRuntime.h
     agent/claude/ClaudeCliDiscovery.cpp
     agent/claude/ClaudeCliDiscovery.h
+    agent/claude/ClaudeStreamClient.cpp
+    agent/claude/ClaudeStreamClient.h
+    agent/claude/ClaudeStreamProtocol.cpp
+    agent/claude/ClaudeStreamProtocol.h
     agent/codex/CodexAdapter.cpp
     agent/codex/CodexAdapter.h
     agent/codex/CodexAccountLifecycle.cpp
