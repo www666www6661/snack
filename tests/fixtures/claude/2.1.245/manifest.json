@@ -17,6 +17,22 @@
   "controlFixtures": [
     "interrupt-receipts.json"
   ],
+  "permissionBridge": {
+    "transport": "mcp-stdio",
+    "serverImplementation": "C++20-Qt6",
+    "configurationScope": "inline-strict-only",
+    "toolName": "mcp__snack_probe__permission",
+    "claudeExitCode": 0,
+    "handshakeVerified": true,
+    "permissionPromptInvoked": false,
+    "liveModelUsed": false,
+    "userConfigurationModified": false,
+    "observedMethods": [
+      "initialize",
+      "notifications/initialized",
+      "tools/list"
+    ]
+  },
   "requiredOptions": [
     "--init-only",
     "--input-format=stream-json",

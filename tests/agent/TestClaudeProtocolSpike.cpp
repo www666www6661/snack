@@ -5,7 +5,9 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QProcess>
 #include <QSet>
+#include <QTemporaryDir>
 #include <QtTest>
 
 class TestClaudeProtocolSpike : public QObject {
@@ -21,6 +23,8 @@ class TestClaudeProtocolSpike : public QObject {
     void rejectsMalformedAndCrossSessionRecords();
     void reconcilesInterruptReceiptsByCapability();
     void rejectsAmbiguousInterruptReceipts();
+    void servesMinimalPermissionMcpContract();
+    void recordsLocalPermissionBridgeHandshake();
 };
 
 namespace {
@@ -286,6 +290,78 @@ void TestClaudeProtocolSpike::rejectsAmbiguousInterruptReceipts() {
     QVERIFY(!supportsQueuedCancellation({QStringLiteral("interrupt_cancel_queued_v1")}));
     QVERIFY(supportsQueuedCancellation(
         {QStringLiteral("interrupt_receipt_v1"), QStringLiteral("interrupt_cancel_queued_v1")}));
+}
+
+void TestClaudeProtocolSpike::servesMinimalPermissionMcpContract() {
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    const QString eventLog = temporaryDirectory.filePath(QStringLiteral("events.txt"));
+
+    QProcess server;
+    server.start(QStringLiteral(SNACK_PERMISSION_PROBE_SERVER),
+                 {QStringLiteral("--event-log"), eventLog}, QIODevice::ReadWrite);
+    QVERIFY(server.waitForStarted());
+    server.write(
+        R"({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}})"
+        "\n");
+    server.write(R"({"jsonrpc":"2.0","method":"notifications/initialized"})"
+                 "\n");
+    server.write(R"({"jsonrpc":"2.0","id":2,"method":"tools/list"})"
+                 "\n");
+    server.closeWriteChannel();
+    QVERIFY(server.waitForFinished());
+    QCOMPARE(server.exitStatus(), QProcess::NormalExit);
+    QCOMPARE(server.exitCode(), 0);
+
+    QList<QJsonObject> responses;
+    for (const QByteArray& line : server.readAllStandardOutput().split('\n')) {
+        if (!line.trimmed().isEmpty()) {
+            responses.append(QJsonDocument::fromJson(line).object());
+        }
+    }
+    QCOMPARE(responses.size(), 2);
+    QCOMPARE(responses.at(0).value(QStringLiteral("id")).toInt(), 1);
+    QCOMPARE(responses.at(0)
+                 .value(QStringLiteral("result"))
+                 .toObject()
+                 .value(QStringLiteral("serverInfo"))
+                 .toObject()
+                 .value(QStringLiteral("name"))
+                 .toString(),
+             QStringLiteral("snack-claude-permission-probe"));
+    QCOMPARE(responses.at(1).value(QStringLiteral("id")).toInt(), 2);
+    const QJsonArray tools = responses.at(1)
+                                 .value(QStringLiteral("result"))
+                                 .toObject()
+                                 .value(QStringLiteral("tools"))
+                                 .toArray();
+    QCOMPARE(tools.size(), 1);
+    QCOMPARE(tools.at(0).toObject().value(QStringLiteral("name")).toString(),
+             QStringLiteral("permission"));
+
+    QFile logFile(eventLog);
+    QVERIFY(logFile.open(QIODevice::ReadOnly));
+    QByteArray methods = logFile.readAll();
+    methods.replace("\r\n", "\n");
+    QCOMPARE(methods, QByteArray("initialize\nnotifications/initialized\ntools/list\n"));
+}
+
+void TestClaudeProtocolSpike::recordsLocalPermissionBridgeHandshake() {
+    const QJsonObject bridge = loadManifest().value(QStringLiteral("permissionBridge")).toObject();
+    QCOMPARE(bridge.value(QStringLiteral("transport")).toString(), QStringLiteral("mcp-stdio"));
+    QCOMPARE(bridge.value(QStringLiteral("serverImplementation")).toString(),
+             QStringLiteral("C++20-Qt6"));
+    QCOMPARE(bridge.value(QStringLiteral("configurationScope")).toString(),
+             QStringLiteral("inline-strict-only"));
+    QCOMPARE(bridge.value(QStringLiteral("claudeExitCode")).toInt(-1), 0);
+    QVERIFY(bridge.value(QStringLiteral("handshakeVerified")).toBool());
+    QVERIFY(!bridge.value(QStringLiteral("permissionPromptInvoked")).toBool(true));
+    QVERIFY(!bridge.value(QStringLiteral("liveModelUsed")).toBool(true));
+    QVERIFY(!bridge.value(QStringLiteral("userConfigurationModified")).toBool(true));
+    QCOMPARE(
+        stringSet(bridge.value(QStringLiteral("observedMethods")).toArray()),
+        QSet<QString>({QStringLiteral("initialize"), QStringLiteral("notifications/initialized"),
+                       QStringLiteral("tools/list")}));
 }
 
 QTEST_GUILESS_MAIN(TestClaudeProtocolSpike)

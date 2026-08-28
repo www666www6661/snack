@@ -41,6 +41,18 @@ requires capability gating, treats receipts as the pre-result queue snapshot, ke
 diagnostic-only, and rejects duplicate or contradictory IDs. It intentionally does not freeze a raw
 control envelope: the official C++ surface and fallback decision remain open for the next M5 step.
 
+## Permission bridge handshake
+
+The C++20/Qt 6 probe server implements the minimum MCP stdio initialization and tool-list contract.
+Claude Code 2.1.245 connected to it successfully on the no-message `--init-only --bare` path using an
+inline `--mcp-config`, `--strict-mcp-config`, and `--permission-prompt-tool`. The only observed MCP
+methods were `initialize`, `notifications/initialized`, and `tools/list`; Claude exited with code 0.
+No user MCP setting was read or written.
+
+This establishes process launch, MCP negotiation, and permission-tool discovery from C++. It does
+not claim that a live permission prompt was invoked: triggering one requires a model turn and remains
+an explicit opt-in check. The probe tool denies any accidental call.
+
 Default builds and tests parse sanitized fixtures only. Any probe that can send a valid user message
 or invoke a model must be a separately documented, explicit opt-in and is never part of the default
 test gate.

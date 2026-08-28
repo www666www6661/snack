@@ -43,7 +43,16 @@ target_compile_definitions(
     snack_codex_tests
     PRIVATE SNACK_TEST_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures"
 )
+
+add_executable(
+    snack_claude_permission_probe_server
+    ${PROJECT_SOURCE_DIR}/spikes/claude/ClaudePermissionProbeServer.cpp
+)
+target_link_libraries(snack_claude_permission_probe_server PRIVATE Qt6::Core)
+snack_set_project_warnings(snack_claude_permission_probe_server)
+
 snack_add_test(snack_claude_protocol_spike_tests agent/TestClaudeProtocolSpike.cpp)
+add_dependencies(snack_claude_protocol_spike_tests snack_claude_permission_probe_server)
 target_sources(
     snack_claude_protocol_spike_tests
     PRIVATE
@@ -58,7 +67,9 @@ target_include_directories(
 )
 target_compile_definitions(
     snack_claude_protocol_spike_tests
-    PRIVATE SNACK_TEST_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures"
+    PRIVATE
+        SNACK_TEST_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures"
+        SNACK_PERMISSION_PROBE_SERVER="$<TARGET_FILE:snack_claude_permission_probe_server>"
 )
 
 add_executable(snack_ui_tests ui/TestMainWindow.cpp)
