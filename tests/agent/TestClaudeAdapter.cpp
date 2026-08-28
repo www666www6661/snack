@@ -34,6 +34,7 @@ class TestClaudeAdapter final : public QObject {
     void bridgesClaudePermissionRequests();
     void servesPermissionMcpContract();
     void restartsAndResumesForSettingsAndInterrupts();
+    void encodesBoundedClaudeImageAttachments();
 };
 
 class FakeClaudeProcessTransport final : public snack::agent::process::IProcessTransport {
@@ -1084,6 +1085,79 @@ void TestClaudeAdapter::restartsAndResumesForSettingsAndInterrupts() {
                                  : 0;
     }
     QCOMPARE(interruptedEvents, 1);
+}
+
+void TestClaudeAdapter::encodesBoundedClaudeImageAttachments() {
+    using namespace snack::agent;
+    using namespace snack::agent::claude;
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString imagePath = directory.filePath(QStringLiteral("pixel.png"));
+    const QByteArray imageBytes("synthetic-png-bytes");
+    QFile image(imagePath);
+    QVERIFY(image.open(QIODevice::WriteOnly));
+    QCOMPARE(image.write(imageBytes), imageBytes.size());
+    image.close();
+
+    const CliInstallation installation{.status = CliStatus::Available,
+                                       .executablePath = QStringLiteral("claude"),
+                                       .version = QStringLiteral("2.1.245")};
+    FakeClaudeProcessTransport transport;
+    ClaudeAdapter adapter(installation, &transport, nullptr,
+                          QStringLiteral(SNACK_CLAUDE_PERMISSION_SERVER));
+    QSignalSpy finishedSpy(&adapter, &IAgentAdapter::turnFinished);
+    domain::TurnSettingsSnapshot settings;
+    settings.agentKind = domain::AgentKind::Claude;
+    settings.modelId = QStringLiteral("sonnet");
+    settings.reasoningEffort = domain::ReasoningEffort::Medium;
+    settings.accessLevel = domain::AccessLevel::Strict;
+    settings.workingDirectory = QStringLiteral("/workspace");
+    adapter.connectAgent({.workingDirectory = QStringLiteral("/workspace"),
+                          .nativeThreadId = QStringLiteral("session-image"),
+                          .settings = settings});
+    transport.feedOutput(
+        R"({"type":"system","subtype":"init","session_id":"session-image","claude_code_version":"2.1.245","cwd":"/workspace","model":"sonnet","permissionMode":"manual"})"
+        "\n");
+
+    const QUuid turnId = QUuid::createUuid();
+    adapter.startTurn(
+        {turnId, QStringLiteral("Inspect"), settings,
+         QJsonArray{QJsonObject{{QStringLiteral("kind"), QStringLiteral("image")},
+                                {QStringLiteral("path"), imagePath}},
+                    QJsonObject{{QStringLiteral("kind"), QStringLiteral("file")},
+                                {QStringLiteral("path"), QStringLiteral("/workspace/note.txt")}}}});
+    QCOMPARE(transport.writes.size(), 1);
+    const QJsonArray content = QJsonDocument::fromJson(transport.writes.constFirst())
+                                   .object()
+                                   .value(QStringLiteral("message"))
+                                   .toObject()
+                                   .value(QStringLiteral("content"))
+                                   .toArray();
+    QCOMPARE(content.size(), 3);
+    const QJsonObject source = content.at(1).toObject().value(QStringLiteral("source")).toObject();
+    QCOMPARE(source.value(QStringLiteral("type")).toString(), QStringLiteral("base64"));
+    QCOMPARE(source.value(QStringLiteral("media_type")).toString(), QStringLiteral("image/png"));
+    QCOMPARE(QByteArray::fromBase64(source.value(QStringLiteral("data")).toString().toLatin1()),
+             imageBytes);
+    QVERIFY(content.at(2)
+                .toObject()
+                .value(QStringLiteral("text"))
+                .toString()
+                .contains(QStringLiteral("note.txt")));
+
+    adapter.interruptTurn();
+    transport.feedOutput(
+        R"({"type":"system","subtype":"init","session_id":"session-image","claude_code_version":"2.1.245","cwd":"/workspace","model":"sonnet","permissionMode":"manual"})"
+        "\n");
+    const QUuid invalidTurn = QUuid::createUuid();
+    const QJsonObject missingAttachment{
+        {QStringLiteral("kind"), QStringLiteral("image")},
+        {QStringLiteral("path"), directory.filePath(QStringLiteral("missing.png"))}};
+    adapter.startTurn(
+        {invalidTurn, QStringLiteral("Missing image"), settings, QJsonArray{missingAttachment}});
+    QCOMPARE(finishedSpy.count(), 2);
+    QCOMPARE(finishedSpy.constLast().at(0).toUuid(), invalidTurn);
+    QCOMPARE(finishedSpy.constLast().at(2).toBool(), false);
 }
 
 QTEST_MAIN(TestClaudeAdapter)
