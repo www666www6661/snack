@@ -7,6 +7,8 @@ set(SNACK_CORE_SOURCES
     agent/claude/ClaudeCliDiscovery.h
     agent/claude/ClaudeEventMapper.cpp
     agent/claude/ClaudeEventMapper.h
+    agent/claude/ClaudePermissionBridge.cpp
+    agent/claude/ClaudePermissionBridge.h
     agent/claude/ClaudeStreamClient.cpp
     agent/claude/ClaudeStreamClient.h
     agent/claude/ClaudeStreamProtocol.cpp
@@ -119,6 +121,11 @@ target_compile_definitions(
 )
 snack_set_project_warnings(snack_core)
 
+add_executable(snack_claude_permission_server agent/claude/ClaudePermissionServerMain.cpp)
+target_link_libraries(snack_claude_permission_server PRIVATE Qt6::Core Qt6::Network)
+target_compile_definitions(snack_claude_permission_server PRIVATE SNACK_VERSION="${PROJECT_VERSION}")
+snack_set_project_warnings(snack_claude_permission_server)
+
 add_library(
     snack_ui STATIC
     ui/ComposerTextEdit.cpp
@@ -185,7 +192,7 @@ qt_add_translations(
 )
 
 install(
-    TARGETS snack
+    TARGETS snack snack_claude_permission_server
     BUNDLE DESTINATION .
     RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
 )

@@ -4,6 +4,8 @@
 
 #include <QFile>
 #include <QJsonDocument>
+#include <QLocalSocket>
+#include <QProcess>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -29,6 +31,8 @@ class TestClaudeAdapter final : public QObject {
     void adapterRejectsInvalidLifecycleRequests();
     void mapsVisibleStreamEventsAndRedactsThinking();
     void mapsAndAnswersClaudeQuestions();
+    void bridgesClaudePermissionRequests();
+    void servesPermissionMcpContract();
 };
 
 class FakeClaudeProcessTransport final : public snack::agent::process::IProcessTransport {
@@ -810,6 +814,190 @@ void TestClaudeAdapter::mapsAndAnswersClaudeQuestions() {
             .toObject();
     QCOMPARE(answerContent.value(QStringLiteral("Which path?")).toString(), QStringLiteral("A"));
     QCOMPARE(answerContent.value(QStringLiteral("Why?")).toString(), QStringLiteral("Because"));
+}
+
+void TestClaudeAdapter::bridgesClaudePermissionRequests() {
+    using namespace snack::agent;
+    using namespace snack::agent::claude;
+    const CliInstallation installation{.status = CliStatus::Available,
+                                       .executablePath = QStringLiteral("claude"),
+                                       .version = QStringLiteral("2.1.245")};
+    FakeClaudeProcessTransport transport;
+    ClaudeAdapter adapter(installation, &transport, nullptr,
+                          QStringLiteral(SNACK_CLAUDE_PERMISSION_SERVER));
+    QSignalSpy eventSpy(&adapter, &IAgentAdapter::eventReceived);
+    domain::TurnSettingsSnapshot settings;
+    settings.agentKind = domain::AgentKind::Claude;
+    settings.modelId = QStringLiteral("sonnet");
+    settings.reasoningEffort = domain::ReasoningEffort::Medium;
+    settings.accessLevel = domain::AccessLevel::Strict;
+    settings.workingDirectory = QStringLiteral("/workspace");
+    adapter.connectAgent({.workingDirectory = QStringLiteral("/workspace"),
+                          .nativeThreadId = QStringLiteral("session-p"),
+                          .settings = settings});
+
+    const qsizetype configIndex =
+        transport.launchSpec.arguments.indexOf(QStringLiteral("--mcp-config"));
+    QVERIFY(configIndex >= 0);
+    const QJsonObject config =
+        QJsonDocument::fromJson(transport.launchSpec.arguments.at(configIndex + 1).toUtf8())
+            .object();
+    const QJsonObject permissionServer = config.value(QStringLiteral("mcpServers"))
+                                             .toObject()
+                                             .value(QStringLiteral("snack_permission"))
+                                             .toObject();
+    QCOMPARE(permissionServer.value(QStringLiteral("command")).toString(),
+             QStringLiteral(SNACK_CLAUDE_PERMISSION_SERVER));
+    const QJsonArray helperArguments = permissionServer.value(QStringLiteral("args")).toArray();
+    const QString serverName = helperArguments.at(1).toString();
+    const QString token = helperArguments.at(3).toString();
+    QVERIFY(!serverName.isEmpty());
+    QCOMPARE(token.size(), 64);
+    QVERIFY(transport.launchSpec.arguments.contains(QStringLiteral("--permission-prompt-tool")));
+    QVERIFY(!transport.launchSpec.arguments.contains(QStringLiteral("--strict-mcp-config")));
+
+    transport.feedOutput(
+        R"({"type":"system","subtype":"init","session_id":"session-p","claude_code_version":"2.1.245","cwd":"/workspace","model":"sonnet","permissionMode":"manual"})"
+        "\n");
+    adapter.startTurn({QUuid::createUuid(), QStringLiteral("Run a command"), settings, {}});
+
+    QLocalSocket socket;
+    socket.connectToServer(serverName);
+    QVERIFY(socket.waitForConnected(1000));
+    const QJsonObject permissionArguments{
+        {QStringLiteral("tool_name"), QStringLiteral("Bash")},
+        {QStringLiteral("input"),
+         QJsonObject{{QStringLiteral("command"), QStringLiteral("cmake --build .")},
+                     {QStringLiteral("cwd"), QStringLiteral("/workspace")}}},
+        {QStringLiteral("reason"), QStringLiteral("Build the project")},
+        {QStringLiteral("permission_suggestions"),
+         QJsonArray{QJsonObject{{QStringLiteral("type"), QStringLiteral("allow")}}}},
+    };
+    QByteArray frame =
+        QJsonDocument(QJsonObject{{QStringLiteral("token"), token},
+                                  {QStringLiteral("requestId"), QStringLiteral("permission-1")},
+                                  {QStringLiteral("arguments"), permissionArguments}})
+            .toJson(QJsonDocument::Compact);
+    frame.append('\n');
+    QCOMPARE(socket.write(frame), frame.size());
+    QTRY_COMPARE_WITH_TIMEOUT(socket.bytesToWrite(), qint64{0}, 1000);
+    QTRY_VERIFY_WITH_TIMEOUT(
+        std::any_of(eventSpy.cbegin(), eventSpy.cend(),
+                    [](const QList<QVariant>& arguments) {
+                        return arguments.constFirst().value<domain::AgentEvent>().type ==
+                               domain::AgentEventType::ApprovalRequested;
+                    }),
+        1000);
+    QVERIFY(adapter.respondToApproval(QStringLiteral("permission-1"),
+                                      domain::ApprovalDecision::AcceptForSession));
+    QVERIFY(!adapter.respondToApproval(QStringLiteral("permission-1"),
+                                       domain::ApprovalDecision::Accept));
+    QTRY_VERIFY_WITH_TIMEOUT(socket.canReadLine(), 1000);
+    const QJsonObject response = QJsonDocument::fromJson(socket.readLine()).object();
+    const QJsonObject decision = response.value(QStringLiteral("decision")).toObject();
+    QCOMPARE(decision.value(QStringLiteral("behavior")).toString(), QStringLiteral("allow"));
+    QCOMPARE(decision.value(QStringLiteral("updatedInput"))
+                 .toObject()
+                 .value(QStringLiteral("command"))
+                 .toString(),
+             QStringLiteral("cmake --build ."));
+    QVERIFY(decision.value(QStringLiteral("updatedPermissions")).isArray());
+
+    const QJsonObject deny =
+        claudePermissionDecision(domain::ApprovalDecision::Decline, permissionArguments);
+    QCOMPARE(deny.value(QStringLiteral("behavior")).toString(), QStringLiteral("deny"));
+    const QJsonObject filePayload = claudeApprovalEventPayload(
+        QStringLiteral("file-1"),
+        {{QStringLiteral("tool_name"), QStringLiteral("Write")},
+         {QStringLiteral("input"),
+          QJsonObject{{QStringLiteral("file_path"), QStringLiteral("/workspace/a.cpp")}}}});
+    QCOMPARE(filePayload.value(QStringLiteral("kind")).toString(), QStringLiteral("fileChange"));
+    QCOMPARE(filePayload.value(QStringLiteral("grantRoot")).toString(),
+             QStringLiteral("/workspace/a.cpp"));
+}
+
+void TestClaudeAdapter::servesPermissionMcpContract() {
+    using namespace snack::agent::claude;
+    ClaudePermissionBridge bridge;
+    QVERIFY(bridge.start());
+    QSignalSpy permissionSpy(&bridge, &ClaudePermissionBridge::permissionRequested);
+
+    QProcess process;
+    process.start(QStringLiteral(SNACK_CLAUDE_PERMISSION_SERVER),
+                  {QStringLiteral("--bridge-server"), bridge.serverName(),
+                   QStringLiteral("--token"), bridge.authenticationToken()});
+    QVERIFY(process.waitForStarted(2000));
+    const auto transact = [&process](const QJsonObject& request) {
+        QByteArray requestFrame = QJsonDocument(request).toJson(QJsonDocument::Compact);
+        requestFrame.append('\n');
+        if (process.write(requestFrame) != requestFrame.size() ||
+            !process.waitForBytesWritten(1000)) {
+            return QJsonObject{};
+        }
+        while (!process.canReadLine() && process.waitForReadyRead(1000)) {
+        }
+        return QJsonDocument::fromJson(process.readLine()).object();
+    };
+
+    const QJsonObject initialize = transact(
+        {{QStringLiteral("jsonrpc"), QStringLiteral("2.0")},
+         {QStringLiteral("id"), 1},
+         {QStringLiteral("method"), QStringLiteral("initialize")},
+         {QStringLiteral("params"),
+          QJsonObject{{QStringLiteral("protocolVersion"), QStringLiteral("2025-06-18")}}}});
+    QCOMPARE(initialize.value(QStringLiteral("result"))
+                 .toObject()
+                 .value(QStringLiteral("protocolVersion"))
+                 .toString(),
+             QStringLiteral("2025-06-18"));
+    const QJsonObject tools = transact({{QStringLiteral("jsonrpc"), QStringLiteral("2.0")},
+                                        {QStringLiteral("id"), 2},
+                                        {QStringLiteral("method"), QStringLiteral("tools/list")}});
+    QCOMPARE(tools.value(QStringLiteral("result"))
+                 .toObject()
+                 .value(QStringLiteral("tools"))
+                 .toArray()
+                 .size(),
+             1);
+
+    QByteArray callFrame =
+        QJsonDocument(
+            QJsonObject{
+                {QStringLiteral("jsonrpc"), QStringLiteral("2.0")},
+                {QStringLiteral("id"), 3},
+                {QStringLiteral("method"), QStringLiteral("tools/call")},
+                {QStringLiteral("params"),
+                 QJsonObject{{QStringLiteral("name"), QStringLiteral("permission")},
+                             {QStringLiteral("arguments"),
+                              QJsonObject{{QStringLiteral("tool_name"), QStringLiteral("Bash")},
+                                          {QStringLiteral("input"),
+                                           QJsonObject{{QStringLiteral("command"),
+                                                        QStringLiteral("echo safe")}}}}}}}})
+            .toJson(QJsonDocument::Compact);
+    callFrame.append('\n');
+    QCOMPARE(process.write(callFrame), callFrame.size());
+    QVERIFY(process.waitForBytesWritten(1000));
+    QTRY_COMPARE_WITH_TIMEOUT(permissionSpy.count(), 1, 2000);
+    const QString requestId = permissionSpy.constFirst().at(0).toString();
+    QVERIFY(bridge.resolve(requestId,
+                           {{QStringLiteral("behavior"), QStringLiteral("deny")},
+                            {QStringLiteral("message"), QStringLiteral("Synthetic denial")}}));
+    QTRY_VERIFY_WITH_TIMEOUT(process.canReadLine(), 2000);
+    const QJsonObject callResponse = QJsonDocument::fromJson(process.readLine()).object();
+    const QString decisionText = callResponse.value(QStringLiteral("result"))
+                                     .toObject()
+                                     .value(QStringLiteral("content"))
+                                     .toArray()
+                                     .at(0)
+                                     .toObject()
+                                     .value(QStringLiteral("text"))
+                                     .toString();
+    const QJsonObject decision = QJsonDocument::fromJson(decisionText.toUtf8()).object();
+    QCOMPARE(decision.value(QStringLiteral("behavior")).toString(), QStringLiteral("deny"));
+
+    process.closeWriteChannel();
+    QVERIFY(process.waitForFinished(2000));
+    QCOMPARE(process.exitCode(), 0);
 }
 
 QTEST_MAIN(TestClaudeAdapter)

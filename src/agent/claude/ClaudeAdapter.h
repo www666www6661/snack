@@ -3,6 +3,7 @@
 #include "agent/IAgentAdapter.h"
 #include "agent/claude/ClaudeCliDiscovery.h"
 #include "agent/claude/ClaudeEventMapper.h"
+#include "agent/claude/ClaudePermissionBridge.h"
 #include "agent/claude/ClaudeStreamClient.h"
 
 #include <QHash>
@@ -14,7 +15,7 @@ class ClaudeAdapter final : public IAgentAdapter {
 
   public:
     ClaudeAdapter(CliInstallation installation, process::IProcessTransport* transport,
-                  QObject* parent = nullptr);
+                  QObject* parent = nullptr, QString permissionHelperExecutable = {});
 
     [[nodiscard]] domain::AgentKind kind() const override;
     [[nodiscard]] CapabilitySet capabilities() const override;
@@ -33,6 +34,7 @@ class ClaudeAdapter final : public IAgentAdapter {
                                                     const QJsonObject& answers) const;
     void handleInitialized(const InitInfo& info);
     void handleRecord(const StreamRecord& record);
+    void handlePermissionRequest(const QString& requestId, const QJsonObject& arguments);
     void finishActiveTurn(domain::AgentEventType type, const QString& message,
                           const QJsonObject& raw, bool interrupted, bool completed);
     void emitActiveEvent(domain::AgentEventType type, const QJsonObject& payload = {},
@@ -42,6 +44,7 @@ class ClaudeAdapter final : public IAgentAdapter {
     CliInstallation installation_;
     ClaudeStreamClient client_;
     ClaudeEventMapper eventMapper_;
+    ClaudePermissionBridge permissionBridge_;
     CapabilitySet capabilities_;
     AgentConnectionRequest connectionRequest_;
     domain::TurnSettingsSnapshot processSettings_;
@@ -49,6 +52,8 @@ class ClaudeAdapter final : public IAgentAdapter {
     QString expectedSessionId_;
     QString nativeUserMessageUuid_;
     QHash<QString, QJsonObject> pendingUserInputs_;
+    QHash<QString, QJsonObject> pendingApprovals_;
+    QString permissionHelperExecutable_;
     bool connecting_{false};
     bool connected_{false};
     bool closing_{false};
