@@ -1,6 +1,8 @@
 set(SNACK_CORE_SOURCES
     agent/AgentRuntime.cpp
     agent/AgentRuntime.h
+    agent/claude/ClaudeCliDiscovery.cpp
+    agent/claude/ClaudeCliDiscovery.h
     agent/codex/CodexAdapter.cpp
     agent/codex/CodexAdapter.h
     agent/codex/CodexAccountLifecycle.cpp

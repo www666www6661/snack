@@ -39,6 +39,7 @@ snack_add_test(snack_session_tests session/TestSessionController.cpp)
 snack_add_test(snack_session_runtime_tests session/TestSessionRuntimeRegistry.cpp)
 snack_add_test(snack_agent_runtime_tests agent/TestAgentRuntime.cpp)
 snack_add_test(snack_codex_tests agent/TestCodexAppServer.cpp)
+snack_add_test(snack_claude_adapter_tests agent/TestClaudeAdapter.cpp)
 target_compile_definitions(
     snack_codex_tests
     PRIVATE SNACK_TEST_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures"
