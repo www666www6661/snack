@@ -172,6 +172,7 @@ qt_add_executable(
 )
 
 target_link_libraries(snack PRIVATE Snack::Ui)
+add_dependencies(snack snack_claude_permission_server)
 snack_set_project_warnings(snack)
 
 set_target_properties(

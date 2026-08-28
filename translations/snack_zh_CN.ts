@@ -52,6 +52,11 @@
         <translation>Codex 会话</translation>
     </message>
     <message>
+        <location filename="../src/app/main.cpp" line="117"/>
+        <source>Claude conversation</source>
+        <translation>Claude 会话</translation>
+    </message>
+    <message>
         <location filename="../src/app/main.cpp" line="114"/>
         <source>Mock conversation</source>
         <translation>模拟会话</translation>

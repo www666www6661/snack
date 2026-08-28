@@ -28,6 +28,7 @@ AppSettingsSnapshot AppSettings::load() const {
     result.preferredAgentKind = preferredAgentKindFromString(
         settings_->value(QStringLiteral("agent/preferred"), QStringLiteral("codex")).toString());
     result.codexExecutable = settings_->value(QStringLiteral("agent/codexExecutable")).toString();
+    result.claudeExecutable = settings_->value(QStringLiteral("agent/claudeExecutable")).toString();
     result.mainWindowGeometry =
         settings_->value(QStringLiteral("window/mainGeometry")).toByteArray();
     result.mainWindowState = settings_->value(QStringLiteral("window/mainState")).toByteArray();
@@ -46,6 +47,7 @@ void AppSettings::save(const AppSettingsSnapshot& snapshot) {
     settings_->setValue(QStringLiteral("agent/preferred"),
                         domain::enumName(snapshot.preferredAgentKind));
     settings_->setValue(QStringLiteral("agent/codexExecutable"), snapshot.codexExecutable);
+    settings_->setValue(QStringLiteral("agent/claudeExecutable"), snapshot.claudeExecutable);
     settings_->setValue(QStringLiteral("window/mainGeometry"), snapshot.mainWindowGeometry);
     settings_->setValue(QStringLiteral("window/mainState"), snapshot.mainWindowState);
     settings_->sync();

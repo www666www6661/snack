@@ -26,6 +26,7 @@ void TestAppSettings::usesSafeDefaults() {
     QVERIFY(snapshot.showArchivedConversations);
     QCOMPARE(snapshot.preferredAgentKind, snack::domain::AgentKind::Codex);
     QVERIFY(snapshot.codexExecutable.isEmpty());
+    QVERIFY(snapshot.claudeExecutable.isEmpty());
     QVERIFY(snapshot.mainWindowGeometry.isEmpty());
     QVERIFY(snapshot.mainWindowState.isEmpty());
 }
@@ -44,6 +45,7 @@ void TestAppSettings::persistsValues() {
         snapshot.showArchivedConversations = false;
         snapshot.preferredAgentKind = snack::domain::AgentKind::Mock;
         snapshot.codexExecutable = QStringLiteral("custom-codex");
+        snapshot.claudeExecutable = QStringLiteral("custom-claude");
         snapshot.mainWindowGeometry = QByteArrayLiteral("geometry");
         snapshot.mainWindowState = QByteArrayLiteral("state");
         settings.save(snapshot);
@@ -58,6 +60,7 @@ void TestAppSettings::persistsValues() {
     QVERIFY(!snapshot.showArchivedConversations);
     QCOMPARE(snapshot.preferredAgentKind, snack::domain::AgentKind::Mock);
     QCOMPARE(snapshot.codexExecutable, QStringLiteral("custom-codex"));
+    QCOMPARE(snapshot.claudeExecutable, QStringLiteral("custom-claude"));
     QCOMPARE(snapshot.mainWindowGeometry, QByteArrayLiteral("geometry"));
     QCOMPARE(snapshot.mainWindowState, QByteArrayLiteral("state"));
 }

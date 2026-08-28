@@ -1,6 +1,7 @@
 #pragma once
 
 #include "agent/IAgentAdapter.h"
+#include "agent/claude/ClaudeCliDiscovery.h"
 #include "agent/codex/CodexCliDiscovery.h"
 #include "agent/process/IProcessTransport.h"
 
@@ -20,10 +21,15 @@ struct AgentRuntime {
 class AgentRuntimeFactory final {
   public:
     [[nodiscard]] static AgentRuntime create(domain::AgentKind requestedKind,
-                                             const QString& configuredCodexExecutable = {});
+                                             const QString& configuredCodexExecutable = {},
+                                             const QString& configuredClaudeExecutable = {});
     [[nodiscard]] static AgentRuntime
     createWithCodexInstallation(domain::AgentKind requestedKind,
                                 const codex::CliInstallation& installation);
+    [[nodiscard]] static AgentRuntime
+    createWithInstallations(domain::AgentKind requestedKind,
+                            const codex::CliInstallation& codexInstallation,
+                            const claude::CliInstallation& claudeInstallation);
 };
 
 } // namespace snack::agent

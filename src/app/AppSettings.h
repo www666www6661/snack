@@ -20,6 +20,7 @@ struct AppSettingsSnapshot {
     bool showArchivedConversations{true};
     domain::AgentKind preferredAgentKind{domain::AgentKind::Codex};
     QString codexExecutable;
+    QString claudeExecutable;
     QByteArray mainWindowGeometry;
     QByteArray mainWindowState;
 };

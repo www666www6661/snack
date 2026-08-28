@@ -75,7 +75,8 @@ int main(int argc, char* argv[]) {
     }
 
     snack::agent::AgentRuntime agentRuntime = snack::agent::AgentRuntimeFactory::create(
-        settingsSnapshot.preferredAgentKind, settingsSnapshot.codexExecutable);
+        settingsSnapshot.preferredAgentKind, settingsSnapshot.codexExecutable,
+        settingsSnapshot.claudeExecutable);
 
     snack::storage::EventStore eventStore;
     QString storageError;
@@ -108,10 +109,12 @@ int main(int argc, char* argv[]) {
             qWarning() << restoreError;
         }
     }
-    const QString newConversationTitle =
-        agentRuntime.selectedKind == snack::domain::AgentKind::Codex
-            ? QCoreApplication::translate("main", "Codex conversation")
-            : QCoreApplication::translate("main", "Mock conversation");
+    QString newConversationTitle = QCoreApplication::translate("main", "Mock conversation");
+    if (agentRuntime.selectedKind == snack::domain::AgentKind::Codex) {
+        newConversationTitle = QCoreApplication::translate("main", "Codex conversation");
+    } else if (agentRuntime.selectedKind == snack::domain::AgentKind::Claude) {
+        newConversationTitle = QCoreApplication::translate("main", "Claude conversation");
+    }
     snack::domain::Conversation conversation =
         snack::app::prepareConversation(restoredConversation, workspace, agentRuntime.selectedKind,
                                         newConversationTitle)
@@ -123,8 +126,10 @@ int main(int argc, char* argv[]) {
 
     snack::app::SessionManager sessions(
         &eventStore,
-        [codexExecutable = settingsSnapshot.codexExecutable](snack::domain::AgentKind kind) {
-            return snack::agent::AgentRuntimeFactory::create(kind, codexExecutable);
+        [codexExecutable = settingsSnapshot.codexExecutable,
+         claudeExecutable = settingsSnapshot.claudeExecutable](snack::domain::AgentKind kind) {
+            return snack::agent::AgentRuntimeFactory::create(kind, codexExecutable,
+                                                             claudeExecutable);
         });
     QString sessionError;
     auto* controller = sessions.addPrepared(conversation, std::move(agentRuntime), &sessionError);

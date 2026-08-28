@@ -10,7 +10,8 @@ class TestAgentRuntime final : public QObject {
     void fallsBackWhenCodexIsUnavailable();
     void preservesUnsupportedCodexVersionDetail();
     void honorsExplicitMockSelection();
-    void degradesUnimplementedClaudeSelection();
+    void createsClaudeRuntimeWhenAvailable();
+    void fallsBackWhenClaudeIsUnavailable();
 };
 
 void TestAgentRuntime::createsCodexRuntimeWhenAvailable() {
@@ -68,13 +69,32 @@ void TestAgentRuntime::honorsExplicitMockSelection() {
     QCOMPARE(runtime.adapter->kind(), snack::domain::AgentKind::Mock);
 }
 
-void TestAgentRuntime::degradesUnimplementedClaudeSelection() {
-    auto runtime = snack::agent::AgentRuntimeFactory::createWithCodexInstallation(
-        snack::domain::AgentKind::Claude, {});
+void TestAgentRuntime::createsClaudeRuntimeWhenAvailable() {
+    const auto installation =
+        snack::agent::claude::CliInstallation{.status = snack::agent::claude::CliStatus::Available,
+                                              .executablePath = QStringLiteral("claude"),
+                                              .version = QStringLiteral("2.1.245")};
+    auto runtime = snack::agent::AgentRuntimeFactory::createWithInstallations(
+        snack::domain::AgentKind::Claude, {}, installation);
+
+    QCOMPARE(runtime.requestedKind, snack::domain::AgentKind::Claude);
+    QCOMPARE(runtime.selectedKind, snack::domain::AgentKind::Claude);
+    QVERIFY(!runtime.fellBack);
+    QVERIFY(runtime.transport != nullptr);
+    QVERIFY(runtime.adapter != nullptr);
+    QCOMPARE(runtime.adapter->kind(), snack::domain::AgentKind::Claude);
+    QVERIFY(runtime.detail.contains(QStringLiteral("2.1.245")));
+}
+
+void TestAgentRuntime::fallsBackWhenClaudeIsUnavailable() {
+    auto runtime = snack::agent::AgentRuntimeFactory::createWithInstallations(
+        snack::domain::AgentKind::Claude, {},
+        {.status = snack::agent::claude::CliStatus::NotFound,
+         .detail = QStringLiteral("Claude is not installed")});
 
     QCOMPARE(runtime.selectedKind, snack::domain::AgentKind::Mock);
     QVERIFY(runtime.fellBack);
-    QVERIFY(runtime.detail.contains(QStringLiteral("Claude")));
+    QCOMPARE(runtime.detail, QStringLiteral("Claude is not installed"));
 }
 
 QTEST_GUILESS_MAIN(TestAgentRuntime)
