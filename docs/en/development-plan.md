@@ -42,6 +42,10 @@ Validate long-lived bidirectional stream-json, init capabilities and turn bounda
 
 ## M6: Claude adapter (`0.3.0`)
 
+Status: complete for local Windows implementation and model-free automated acceptance as of 2026-08-28. Production discovery, bounded bidirectional stream transport, new/resumed Session identity, sequential Turn correlation, visible streaming, thinking redaction, tools, usage, questions, image attachments, the authenticated per-Session MCP permission bridge, process-loss cleanup, and application runtime selection are implemented. The shared Codex/Claude contract verifies immutable Agent kind, common access levels, rejection of invalid operations, missing-working-directory safety, and idempotent cleanup.
+
+The official Qt 6.8.3 LLVM-MinGW fallback and MSVC WebEngine builds each pass 23/23 strict-warning tests on the local Windows 11 machine. The instrumented fallback build passes 22/22 tests with 82.85% first-party line coverage; translations are complete at 248/248, all 145 C++ source/header files pass the format gate, 63 JSON/JSONL fixture files parse successfully, and all local links in 36 Markdown files resolve. No live model Turn or live Claude permission invocation was executed. Claude setting changes are intentionally next-Turn process restart plus official `--resume`, not true hot switching, and Claude steering remains unavailable. This status does not claim Windows 10, Ubuntu, Debian, macOS, packaging, or long-running production validation.
+
 Implement only M5-confirmed session, event, approval, prompt, recovery, and settings behavior. Run the shared Codex/Claude contract suite and prevent scattered Claude branches in common UI.
 
 ## M7: lifecycle and distribution (`0.4.0`)

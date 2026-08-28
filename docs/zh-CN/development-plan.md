@@ -68,6 +68,10 @@ Qt 官方 6.8.3 LLVM-MinGW fallback 与 MSVC WebEngine 构建在本机 Windows 1
 
 ## M6：Claude 适配器（`0.3.0`）
 
+状态：截至 2026-08-28，本机 Windows 实现与无模型自动化验收完成。正式运行时已实现 CLI 发现、有界双向流、新建/恢复 Session 身份、连续 Turn 关联、可见文本流、thinking 脱敏、工具、用量、提问、图片附件、逐 Session 认证 MCP 权限桥、进程丢失清理和主应用运行时选择。Codex/Claude 公共契约覆盖 Agent 类型不可变、公共访问层级、无效操作拒绝、工作目录缺失安全以及幂等清理。
+
+Qt 官方 6.8.3 LLVM-MinGW fallback 与 MSVC WebEngine 构建在本机 Windows 11 上均通过 23/23 项严格警告测试；插桩 fallback 构建通过 22/22 项测试，第一方行覆盖率为 82.85%。翻译完成 248/248，145 个 C++ 源文件/头文件全部通过格式门禁，63 个 JSON/JSONL fixture 文件均可解析，36 个 Markdown 文件的本地链接全部有效。本次没有执行真实模型 Turn 或真实 Claude 权限调用。Claude 设置调整明确采用下一轮进程重启加官方 `--resume`，不宣称真正热切换；Claude steering 仍不可用。以上状态不代表 Windows 10、Ubuntu、Debian、macOS、安装包或长期生产验证完成。
+
 使用 M5确认的能力实现会话、流式事件、审批、问题、恢复和设置降级。公共 UI不得出现 Claude 特例分支散落。运行 Codex/Claude公共契约套件。
 
 ## M7：数据生命周期与发布（`0.4.0`）

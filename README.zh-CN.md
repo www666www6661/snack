@@ -6,7 +6,7 @@ Snack（临时显示名称：零食）是一款面向 Codex CLI 与 Claude Code 
 
 ## 当前状态
 
-M4 工作区、Diff 与终端已完成本机 Windows 自动化验收。M5 Claude 协议验证也已完成：Claude Code 最低版本冻结为 `2.1.219`，`2.1.245` 是本机无模型参考版本，纯 C++ 运行时控制降级和 MCP 权限桥契约均已记录并测试。Claude Adapter 本身属于下一阶段 M6，目前尚未实现。
+M6 已完成本机 Windows 自动化验收。Snack 现已在公共 Agent 接口后提供正式 Codex 与 Claude 适配器，包括 Claude Session 恢复、有界流传输、事件映射、提问、带本地认证的 MCP 权限桥、图片附件，以及通过公开的进程重启与 `--resume` 实现的下一轮模型/推理强度/访问层级调整。默认测试仍不调用模型；跨平台与真实模型验证继续单独跟踪。
 
 ## 产品约束
 

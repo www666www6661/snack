@@ -6,7 +6,7 @@ Snack (temporary display name: 零食) is a local-first desktop workbench for Co
 
 ## Status
 
-M4 workspace, diff, and terminal implementation is complete for local Windows automated acceptance. M5 Claude protocol validation is also complete: Claude Code `2.1.219` is the frozen minimum, `2.1.245` is the local no-model reference, and the pure C++ runtime-control degradation and MCP permission-bridge contracts are documented and tested. The Claude Adapter itself is the next M6 milestone and is not implemented yet.
+M6 is complete for local Windows automated acceptance. Snack now provides production Codex and Claude adapters behind the common Agent interface, including Claude session resume, bounded streaming, event mapping, questions, an authenticated local MCP permission bridge, image attachments, and next-turn model/effort/access changes through documented process restart and `--resume`. Default tests remain model-free; cross-platform and live-model validation are still tracked separately.
 
 ## Product constraints
 
