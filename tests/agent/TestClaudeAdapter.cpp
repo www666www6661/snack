@@ -33,6 +33,7 @@ class TestClaudeAdapter final : public QObject {
     void mapsAndAnswersClaudeQuestions();
     void bridgesClaudePermissionRequests();
     void servesPermissionMcpContract();
+    void restartsAndResumesForSettingsAndInterrupts();
 };
 
 class FakeClaudeProcessTransport final : public snack::agent::process::IProcessTransport {
@@ -42,6 +43,7 @@ class FakeClaudeProcessTransport final : public snack::agent::process::IProcessT
     [[nodiscard]] bool isRunning() const override { return running; }
 
     void start(const snack::agent::process::LaunchSpec& value) override {
+        ++startCalls;
         launchSpec = value;
         running = true;
         emit started();
@@ -85,6 +87,7 @@ class FakeClaudeProcessTransport final : public snack::agent::process::IProcessT
     bool failWrites{false};
     bool deferTermination{false};
     int closeCalls{0};
+    int startCalls{0};
     int terminateCalls{0};
     int killCalls{0};
 };
@@ -998,6 +1001,89 @@ void TestClaudeAdapter::servesPermissionMcpContract() {
     process.closeWriteChannel();
     QVERIFY(process.waitForFinished(2000));
     QCOMPARE(process.exitCode(), 0);
+}
+
+void TestClaudeAdapter::restartsAndResumesForSettingsAndInterrupts() {
+    using namespace snack::agent;
+    using namespace snack::agent::claude;
+    const CliInstallation installation{.status = CliStatus::Available,
+                                       .executablePath = QStringLiteral("claude"),
+                                       .version = QStringLiteral("2.1.245")};
+    FakeClaudeProcessTransport transport;
+    ClaudeAdapter adapter(installation, &transport, nullptr,
+                          QStringLiteral(SNACK_CLAUDE_PERMISSION_SERVER));
+    QSignalSpy connectionSpy(&adapter, &IAgentAdapter::connectionChanged);
+    QSignalSpy eventSpy(&adapter, &IAgentAdapter::eventReceived);
+    QSignalSpy finishedSpy(&adapter, &IAgentAdapter::turnFinished);
+    domain::TurnSettingsSnapshot settings;
+    settings.agentKind = domain::AgentKind::Claude;
+    settings.modelId = QStringLiteral("sonnet");
+    settings.reasoningEffort = domain::ReasoningEffort::Medium;
+    settings.accessLevel = domain::AccessLevel::Strict;
+    settings.workingDirectory = QStringLiteral("/workspace");
+    adapter.connectAgent({.workingDirectory = QStringLiteral("/workspace"),
+                          .nativeThreadId = QStringLiteral("session-r"),
+                          .settings = settings});
+    transport.feedOutput(
+        R"({"type":"system","subtype":"init","session_id":"session-r","claude_code_version":"2.1.245","cwd":"/workspace","model":"sonnet","permissionMode":"manual"})"
+        "\n");
+    QCOMPARE(connectionSpy.count(), 1);
+
+    domain::TurnSettingsSnapshot changed = settings;
+    changed.modelId = QStringLiteral("opus");
+    changed.reasoningEffort = domain::ReasoningEffort::ExtraHigh;
+    changed.accessLevel = domain::AccessLevel::Full;
+    const QUuid changedTurn = QUuid::createUuid();
+    adapter.startTurn({changedTurn, QStringLiteral("Use new settings"), changed, {}});
+    QCOMPARE(transport.startCalls, 2);
+    QCOMPARE(transport.terminateCalls, 1);
+    QVERIFY(transport.writes.isEmpty());
+    QVERIFY(transport.launchSpec.arguments.contains(QStringLiteral("--resume")));
+    QVERIFY(transport.launchSpec.arguments.contains(QStringLiteral("session-r")));
+    QVERIFY(transport.launchSpec.arguments.contains(QStringLiteral("opus")));
+    QVERIFY(transport.launchSpec.arguments.contains(QStringLiteral("xhigh")));
+    QVERIFY(transport.launchSpec.arguments.contains(QStringLiteral("bypassPermissions")));
+    transport.feedOutput(
+        R"({"type":"system","subtype":"init","session_id":"session-r","claude_code_version":"2.1.245","cwd":"/workspace","model":"opus","permissionMode":"bypassPermissions"})"
+        "\n");
+    QCOMPARE(connectionSpy.count(), 1);
+    QCOMPARE(transport.writes.size(), 1);
+    const QJsonObject sent = QJsonDocument::fromJson(transport.writes.constFirst()).object();
+    QCOMPARE(sent.value(QStringLiteral("uuid")).toString(),
+             changedTurn.toString(QUuid::WithoutBraces));
+
+    adapter.interruptTurn();
+    QCOMPARE(finishedSpy.count(), 1);
+    QCOMPARE(finishedSpy.constFirst().at(0).toUuid(), changedTurn);
+    QCOMPARE(finishedSpy.constFirst().at(1).toBool(), true);
+    QCOMPARE(transport.startCalls, 3);
+    QCOMPARE(transport.terminateCalls, 2);
+    QVERIFY(transport.launchSpec.arguments.contains(QStringLiteral("--resume")));
+    transport.feedOutput(
+        R"({"type":"system","subtype":"init","session_id":"session-r","claude_code_version":"2.1.245","cwd":"/workspace","model":"opus","permissionMode":"bypassPermissions"})"
+        "\n");
+    QCOMPARE(connectionSpy.count(), 1);
+
+    const QUuid nextTurn = QUuid::createUuid();
+    adapter.startTurn({nextTurn, QStringLiteral("Continue"), changed, {}});
+    QCOMPARE(transport.writes.size(), 2);
+    const QString result =
+        QStringLiteral(
+            R"({"type":"result","subtype":"success","session_id":"session-r","user_message_uuid":"%1","is_error":false,"result":"done"})")
+            .arg(nextTurn.toString(QUuid::WithoutBraces));
+    transport.feedOutput(result.toUtf8() + '\n');
+    QCOMPARE(finishedSpy.count(), 2);
+    QCOMPARE(finishedSpy.at(1).at(0).toUuid(), nextTurn);
+    QCOMPARE(finishedSpy.at(1).at(2).toBool(), true);
+
+    int interruptedEvents = 0;
+    for (const QList<QVariant>& arguments : eventSpy) {
+        interruptedEvents += arguments.constFirst().value<domain::AgentEvent>().type ==
+                                     domain::AgentEventType::TurnInterrupted
+                                 ? 1
+                                 : 0;
+    }
+    QCOMPARE(interruptedEvents, 1);
 }
 
 QTEST_MAIN(TestClaudeAdapter)

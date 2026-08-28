@@ -94,15 +94,26 @@ ClaudeAdapter::ClaudeAdapter(CliInstallation installation, process::IProcessTran
                 }
             });
     connect(&client_, &ClaudeStreamClient::stateChanged, this, [this](StreamState state) {
-        if (state != StreamState::Stopped || !closing_) {
+        if (state != StreamState::Stopped) {
             return;
         }
-        const bool wasActive = connecting_ || connected_;
-        connecting_ = false;
-        connected_ = false;
-        closing_ = false;
-        if (wasActive) {
-            emit connectionChanged(false, QStringLiteral("closed"));
+        if (closing_) {
+            const bool wasActive = connecting_ || connected_ || reconnecting_;
+            connecting_ = false;
+            connected_ = false;
+            reconnecting_ = false;
+            restartAfterStop_ = false;
+            closing_ = false;
+            if (wasActive) {
+                emit connectionChanged(false, QStringLiteral("closed"));
+            }
+            return;
+        }
+        if (restartAfterStop_) {
+            restartAfterStop_ = false;
+            if (!launchSession(true)) {
+                failConnection(QStringLiteral("Failed to restart Claude session"));
+            }
         }
     });
 }
@@ -142,26 +153,14 @@ void ClaudeAdapter::connectAgent(const AgentConnectionRequest& request) {
             QStringLiteral("Failed to start Claude permission bridge: %1").arg(bridgeError));
         return;
     }
-    const QJsonObject mcpConfiguration =
-        permissionBridge_.mcpConfiguration(permissionHelperExecutable_);
-    if (mcpConfiguration.isEmpty()) {
+    if (permissionBridge_.mcpConfiguration(permissionHelperExecutable_).isEmpty()) {
         permissionBridge_.stop();
         failConnection(QStringLiteral("Claude permission helper is unavailable"));
         return;
     }
 
     connecting_ = true;
-    const SessionLaunchOptions options{
-        .workingDirectory = request.workingDirectory,
-        .sessionId = expectedSessionId_,
-        .modelId = processSettings_.modelId,
-        .reasoningEffort = processSettings_.reasoningEffort,
-        .accessLevel = processSettings_.accessLevel,
-        .mcpConfigJson =
-            QString::fromUtf8(QJsonDocument(mcpConfiguration).toJson(QJsonDocument::Compact)),
-        .permissionPromptTool = permissionBridge_.permissionToolName(),
-    };
-    if (!client_.start(ClaudeCliDiscovery::sessionLaunchSpec(installation_, options, resume))) {
+    if (!launchSession(resume)) {
         failConnection(QStringLiteral("Claude process is still stopping"));
     }
 }
@@ -201,13 +200,6 @@ void ClaudeAdapter::startTurn(const TurnRequest& request) {
         reject(QStringLiteral("Claude turn settings use an unexpected working directory"));
         return;
     }
-    if (request.settings.modelId != processSettings_.modelId ||
-        request.settings.reasoningEffort != processSettings_.reasoningEffort ||
-        request.settings.accessLevel != processSettings_.accessLevel) {
-        reject(QStringLiteral("Claude process settings must be applied before the next turn"));
-        return;
-    }
-
     QString error;
     const QJsonObject envelope = makeUserEnvelope(request, &error);
     if (envelope.isEmpty()) {
@@ -218,16 +210,15 @@ void ClaudeAdapter::startTurn(const TurnRequest& request) {
     activeTurn_ = request;
     eventMapper_.reset();
     nativeUserMessageUuid_ = request.turnId.toString(QUuid::WithoutBraces);
-    if (!client_.sendEnvelope(envelope)) {
-        if (!activeTurn_.turnId.isNull()) {
-            finishActiveTurn(domain::AgentEventType::TurnFailed,
-                             QStringLiteral("Failed to send Claude turn"), {}, false, false);
-        }
+    pendingTurnEnvelope_ = envelope;
+    if (request.settings.modelId != processSettings_.modelId ||
+        request.settings.reasoningEffort != processSettings_.reasoningEffort ||
+        request.settings.accessLevel != processSettings_.accessLevel) {
+        processSettings_ = request.settings;
+        restartSession();
         return;
     }
-    emitActiveEvent(domain::AgentEventType::TurnStarted,
-                    {{QStringLiteral("nativeUserMessageUuid"), nativeUserMessageUuid_},
-                     {QStringLiteral("settings"), request.settings.toJson()}});
+    sendActiveTurn();
 }
 
 bool ClaudeAdapter::steerTurn(const SteerRequest& request) {
@@ -281,7 +272,14 @@ bool ClaudeAdapter::respondToUserInput(const QString& requestId, const QJsonObje
     return true;
 }
 
-void ClaudeAdapter::interruptTurn() {}
+void ClaudeAdapter::interruptTurn() {
+    if (activeTurn_.turnId.isNull() || reconnecting_) {
+        return;
+    }
+    finishActiveTurn(domain::AgentEventType::TurnInterrupted,
+                     QStringLiteral("Claude turn interrupted"), {}, true, false);
+    restartSession();
+}
 
 void ClaudeAdapter::closeAgent() {
     if (closing_ || (!connecting_ && !connected_)) {
@@ -292,6 +290,8 @@ void ClaudeAdapter::closeAgent() {
                          QStringLiteral("Claude connection closed"), {}, true, false);
     }
     permissionBridge_.stop();
+    restartAfterStop_ = false;
+    reconnecting_ = false;
     closing_ = true;
     if (client_.state() == StreamState::Stopped) {
         connecting_ = false;
@@ -397,6 +397,57 @@ QJsonObject ClaudeAdapter::makeUserInputEnvelope(const QString& requestId,
                                          {QStringLiteral("content"), content}}}}}}};
 }
 
+bool ClaudeAdapter::launchSession(bool resume) {
+    const QJsonObject mcpConfiguration =
+        permissionBridge_.mcpConfiguration(permissionHelperExecutable_);
+    if (mcpConfiguration.isEmpty()) {
+        return false;
+    }
+    const SessionLaunchOptions options{
+        .workingDirectory = connectionRequest_.workingDirectory,
+        .sessionId = expectedSessionId_,
+        .modelId = processSettings_.modelId,
+        .reasoningEffort = processSettings_.reasoningEffort,
+        .accessLevel = processSettings_.accessLevel,
+        .mcpConfigJson =
+            QString::fromUtf8(QJsonDocument(mcpConfiguration).toJson(QJsonDocument::Compact)),
+        .permissionPromptTool = permissionBridge_.permissionToolName(),
+    };
+    return client_.start(ClaudeCliDiscovery::sessionLaunchSpec(installation_, options, resume));
+}
+
+void ClaudeAdapter::restartSession() {
+    if (closing_ || reconnecting_) {
+        return;
+    }
+    permissionBridge_.denyAll(QStringLiteral("Claude session is restarting"));
+    pendingApprovals_.clear();
+    pendingUserInputs_.clear();
+    connected_ = false;
+    connecting_ = true;
+    reconnecting_ = true;
+    restartAfterStop_ = true;
+    client_.stop();
+}
+
+void ClaudeAdapter::sendActiveTurn() {
+    if (activeTurn_.turnId.isNull() || pendingTurnEnvelope_.isEmpty()) {
+        return;
+    }
+    const QJsonObject envelope = pendingTurnEnvelope_;
+    pendingTurnEnvelope_ = {};
+    if (!client_.sendEnvelope(envelope)) {
+        if (!activeTurn_.turnId.isNull()) {
+            finishActiveTurn(domain::AgentEventType::TurnFailed,
+                             QStringLiteral("Failed to send Claude turn"), {}, false, false);
+        }
+        return;
+    }
+    emitActiveEvent(domain::AgentEventType::TurnStarted,
+                    {{QStringLiteral("nativeUserMessageUuid"), nativeUserMessageUuid_},
+                     {QStringLiteral("settings"), activeTurn_.settings.toJson()}});
+}
+
 void ClaudeAdapter::handleInitialized(const InitInfo& info) {
     if (!connecting_) {
         return;
@@ -419,11 +470,16 @@ void ClaudeAdapter::handleInitialized(const InitInfo& info) {
         capabilities_.modelCapabilities.append(claudeModel(info.modelId, info.modelId));
     }
     capabilities_.version = QStringLiteral("claude-stream/%1").arg(info.cliVersion);
+    const bool resumedInternally = reconnecting_;
     connecting_ = false;
     connected_ = true;
+    reconnecting_ = false;
     emit capabilitiesChanged(capabilities_);
-    emit nativeIdentityChanged(info.sessionId, info.sessionId);
-    emit connectionChanged(true, capabilities_.version);
+    if (!resumedInternally) {
+        emit nativeIdentityChanged(info.sessionId, info.sessionId);
+        emit connectionChanged(true, capabilities_.version);
+    }
+    sendActiveTurn();
 }
 
 void ClaudeAdapter::handleRecord(const StreamRecord& record) {
@@ -495,6 +551,7 @@ void ClaudeAdapter::finishActiveTurn(domain::AgentEventType type, const QString&
     const QUuid turnId = activeTurn_.turnId;
     permissionBridge_.denyAll(QStringLiteral("Claude turn ended before approval"));
     activeTurn_ = {};
+    pendingTurnEnvelope_ = {};
     nativeUserMessageUuid_.clear();
     pendingUserInputs_.clear();
     pendingApprovals_.clear();
@@ -521,6 +578,8 @@ void ClaudeAdapter::failConnection(const QString& detail) {
     const bool wasActive = connecting_ || connected_;
     connecting_ = false;
     connected_ = false;
+    reconnecting_ = false;
+    restartAfterStop_ = false;
     permissionBridge_.stop();
     if (client_.state() != StreamState::Failed && client_.state() != StreamState::Stopped) {
         client_.stop();

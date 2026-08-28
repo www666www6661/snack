@@ -32,6 +32,9 @@ class ClaudeAdapter final : public IAgentAdapter {
     [[nodiscard]] QJsonObject makeUserInputEnvelope(const QString& requestId,
                                                     const QJsonObject& request,
                                                     const QJsonObject& answers) const;
+    [[nodiscard]] bool launchSession(bool resume);
+    void restartSession();
+    void sendActiveTurn();
     void handleInitialized(const InitInfo& info);
     void handleRecord(const StreamRecord& record);
     void handlePermissionRequest(const QString& requestId, const QJsonObject& arguments);
@@ -49,6 +52,7 @@ class ClaudeAdapter final : public IAgentAdapter {
     AgentConnectionRequest connectionRequest_;
     domain::TurnSettingsSnapshot processSettings_;
     TurnRequest activeTurn_;
+    QJsonObject pendingTurnEnvelope_;
     QString expectedSessionId_;
     QString nativeUserMessageUuid_;
     QHash<QString, QJsonObject> pendingUserInputs_;
@@ -57,6 +61,8 @@ class ClaudeAdapter final : public IAgentAdapter {
     bool connecting_{false};
     bool connected_{false};
     bool closing_{false};
+    bool reconnecting_{false};
+    bool restartAfterStop_{false};
 };
 
 } // namespace snack::agent::claude
