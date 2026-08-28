@@ -15,3 +15,4 @@ This documentation set is the product and engineering baseline produced by the r
 11. [Developer getting started](getting-started.md)
 12. [Codex App Server transport](codex-transport.md)
 13. [Claude protocol spike](claude-protocol-spike.md)
+14. [Claude adapter](claude-adapter.md)

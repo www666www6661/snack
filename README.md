@@ -31,6 +31,7 @@ M4 workspace, diff, and terminal implementation is complete for local Windows au
 - [Visual design system](docs/en/design-system.md)
 - [Developer getting started](docs/en/getting-started.md)
 - [Claude protocol spike](docs/en/claude-protocol-spike.md)
+- [Claude adapter](docs/en/claude-adapter.md)
 
 ## Source and license
 
