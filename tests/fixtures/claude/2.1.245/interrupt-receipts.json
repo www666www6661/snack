@@ -1,0 +1,56 @@
+[
+  {
+    "id": "legacy-no-receipt",
+    "capabilities": [],
+    "knownQueued": ["40000000-0000-4000-8000-000000000001"],
+    "receipt": null,
+    "expectedAuthoritative": false,
+    "expectedSurvivingKnown": ["40000000-0000-4000-8000-000000000001"],
+    "expectedCancelledKnown": [],
+    "expectedUnrecognized": []
+  },
+  {
+    "id": "receipt-preserves-queue",
+    "capabilities": ["interrupt_receipt_v1"],
+    "knownQueued": ["40000000-0000-4000-8000-000000000002"],
+    "receipt": {
+      "still_queued": [
+        "40000000-0000-4000-8000-000000000002",
+        "40000000-0000-4000-8000-000000000099"
+      ]
+    },
+    "expectedAuthoritative": true,
+    "expectedSurvivingKnown": ["40000000-0000-4000-8000-000000000002"],
+    "expectedCancelledKnown": [],
+    "expectedUnrecognized": ["40000000-0000-4000-8000-000000000099"]
+  },
+  {
+    "id": "cancel-field-without-capability",
+    "capabilities": ["interrupt_receipt_v1"],
+    "knownQueued": ["40000000-0000-4000-8000-000000000004"],
+    "receipt": {
+      "still_queued": [],
+      "cancelled": ["40000000-0000-4000-8000-000000000004"]
+    },
+    "expectedAuthoritative": false,
+    "expectedSurvivingKnown": ["40000000-0000-4000-8000-000000000004"],
+    "expectedCancelledKnown": [],
+    "expectedUnrecognized": []
+  },
+  {
+    "id": "receipt-cancels-queue",
+    "capabilities": ["interrupt_receipt_v1", "interrupt_cancel_queued_v1"],
+    "knownQueued": ["40000000-0000-4000-8000-000000000003"],
+    "receipt": {
+      "still_queued": [],
+      "cancelled": [
+        "40000000-0000-4000-8000-000000000003",
+        "40000000-0000-4000-8000-000000000098"
+      ]
+    },
+    "expectedAuthoritative": true,
+    "expectedSurvivingKnown": [],
+    "expectedCancelledKnown": ["40000000-0000-4000-8000-000000000003"],
+    "expectedUnrecognized": ["40000000-0000-4000-8000-000000000098"]
+  }
+]

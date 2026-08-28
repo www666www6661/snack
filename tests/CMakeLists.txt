@@ -49,6 +49,8 @@ target_sources(
     PRIVATE
         ${PROJECT_SOURCE_DIR}/spikes/claude/ClaudeStreamContract.cpp
         ${PROJECT_SOURCE_DIR}/spikes/claude/ClaudeStreamContract.h
+        ${PROJECT_SOURCE_DIR}/spikes/claude/ClaudeControlContract.cpp
+        ${PROJECT_SOURCE_DIR}/spikes/claude/ClaudeControlContract.h
 )
 target_include_directories(
     snack_claude_protocol_spike_tests

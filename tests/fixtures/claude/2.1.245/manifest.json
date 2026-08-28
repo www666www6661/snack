@@ -14,6 +14,9 @@
     "multi-turn.jsonl",
     "queue-image.jsonl"
   ],
+  "controlFixtures": [
+    "interrupt-receipts.json"
+  ],
   "requiredOptions": [
     "--init-only",
     "--input-format=stream-json",

@@ -1,3 +1,4 @@
+#include "ClaudeControlContract.h"
 #include "ClaudeStreamContract.h"
 
 #include <QFile>
@@ -18,6 +19,8 @@ class TestClaudeProtocolSpike : public QObject {
     void separatesLongLivedStreamTurns();
     void tracksQueuedImageTurns();
     void rejectsMalformedAndCrossSessionRecords();
+    void reconcilesInterruptReceiptsByCapability();
+    void rejectsAmbiguousInterruptReceipts();
 };
 
 namespace {
@@ -29,6 +32,16 @@ QJsonObject loadManifest() {
         return {};
     }
     return QJsonDocument::fromJson(file.readAll()).object();
+}
+
+QJsonArray loadArrayFixture(const QString& name) {
+    QFile file(QStringLiteral(SNACK_TEST_FIXTURE_DIR)
+                   .append(QStringLiteral("/claude/2.1.245/"))
+                   .append(name));
+    if (!file.open(QIODevice::ReadOnly)) {
+        return {};
+    }
+    return QJsonDocument::fromJson(file.readAll()).array();
 }
 
 QSet<QString> stringSet(const QJsonArray& values) {
@@ -223,6 +236,56 @@ void TestClaudeProtocolSpike::rejectsMalformedAndCrossSessionRecords() {
         parseStreamRecord(QByteArrayLiteral(R"({"type":"future-event","new_field":true})"));
     QCOMPARE(unknown.kind, StreamRecordKind::Unknown);
     QVERIFY(unknown.payload.value(QStringLiteral("new_field")).toBool());
+}
+
+void TestClaudeProtocolSpike::reconcilesInterruptReceiptsByCapability() {
+    using namespace snack::spike::claude;
+    const QJsonArray cases = loadArrayFixture(QStringLiteral("interrupt-receipts.json"));
+    QCOMPARE(cases.size(), 4);
+
+    for (const QJsonValue& value : cases) {
+        const QJsonObject fixture = value.toObject();
+        const QStringList capabilities =
+            stringSet(fixture.value(QStringLiteral("capabilities")).toArray()).values();
+        const QStringList knownQueued =
+            stringSet(fixture.value(QStringLiteral("knownQueued")).toArray()).values();
+        const bool hasReceipt = fixture.value(QStringLiteral("receipt")).isObject();
+        const InterruptReceipt receipt =
+            hasReceipt ? parseInterruptReceipt(fixture.value(QStringLiteral("receipt")).toObject())
+                       : InterruptReceipt{};
+        const QueueReconciliation result =
+            reconcileInterruptQueue(knownQueued, capabilities, hasReceipt ? &receipt : nullptr);
+
+        QCOMPARE(result.authoritative,
+                 fixture.value(QStringLiteral("expectedAuthoritative")).toBool());
+        QCOMPARE(QSet<QString>(result.survivingKnown.begin(), result.survivingKnown.end()),
+                 stringSet(fixture.value(QStringLiteral("expectedSurvivingKnown")).toArray()));
+        QCOMPARE(QSet<QString>(result.cancelledKnown.begin(), result.cancelledKnown.end()),
+                 stringSet(fixture.value(QStringLiteral("expectedCancelledKnown")).toArray()));
+        QCOMPARE(QSet<QString>(result.unrecognized.begin(), result.unrecognized.end()),
+                 stringSet(fixture.value(QStringLiteral("expectedUnrecognized")).toArray()));
+    }
+}
+
+void TestClaudeProtocolSpike::rejectsAmbiguousInterruptReceipts() {
+    using namespace snack::spike::claude;
+    const InterruptReceipt missing = parseInterruptReceipt({});
+    QVERIFY(!missing.valid);
+    const InterruptReceipt duplicate =
+        parseInterruptReceipt({{QStringLiteral("still_queued"),
+                                QJsonArray{QStringLiteral("one"), QStringLiteral("one")}}});
+    QVERIFY(!duplicate.valid);
+    const InterruptReceipt overlap =
+        parseInterruptReceipt({{QStringLiteral("still_queued"), QJsonArray{QStringLiteral("one")}},
+                               {QStringLiteral("cancelled"), QJsonArray{QStringLiteral("one")}}});
+    QVERIFY(!overlap.valid);
+
+    QVERIFY(!supportsInterruptReceipt({}));
+    QVERIFY(supportsInterruptReceipt({QStringLiteral("interrupt_receipt_v1")}));
+    QVERIFY(!supportsQueuedCancellation({QStringLiteral("interrupt_receipt_v1")}));
+    QVERIFY(!supportsQueuedCancellation({QStringLiteral("interrupt_cancel_queued_v1")}));
+    QVERIFY(supportsQueuedCancellation(
+        {QStringLiteral("interrupt_receipt_v1"), QStringLiteral("interrupt_cancel_queued_v1")}));
 }
 
 QTEST_GUILESS_MAIN(TestClaudeProtocolSpike)

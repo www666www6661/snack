@@ -36,6 +36,11 @@ examples. They exercise a startup event before `system/init`, open capability se
 boundaries, queued UUIDs, image blocks, unknown fields, malformed input, and cross-session rejection.
 They are not represented as captured model output.
 
+The interrupt fixture freezes only the public `SDKControlInterruptResponse` payload semantics. It
+requires capability gating, treats receipts as the pre-result queue snapshot, keeps unknown UUIDs
+diagnostic-only, and rejects duplicate or contradictory IDs. It intentionally does not freeze a raw
+control envelope: the official C++ surface and fallback decision remain open for the next M5 step.
+
 Default builds and tests parse sanitized fixtures only. Any probe that can send a valid user message
 or invoke a model must be a separately documented, explicit opt-in and is never part of the default
 test gate.
