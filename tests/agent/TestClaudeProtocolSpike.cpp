@@ -27,6 +27,8 @@ class TestClaudeProtocolSpike : public QObject {
     void recordsLocalPermissionBridgeHandshake();
     void freezesPureCppRuntimeControlDegradation();
     void recordsStrictStartupControlValidation();
+    void gatesMinimumClaudeVersion_data();
+    void gatesMinimumClaudeVersion();
 };
 
 namespace {
@@ -147,10 +149,10 @@ void TestClaudeProtocolSpike::coversRequiredCliOptionsAndNegativeControl() {
 
 void TestClaudeProtocolSpike::recordsOfficialCapabilityVersionGates() {
     const QJsonObject manifest = loadManifest();
-    QCOMPARE(manifest.value(QStringLiteral("minimumVersionCandidate")).toString(),
+    QCOMPARE(manifest.value(QStringLiteral("minimumVersion")).toString(),
              QStringLiteral("2.1.219"));
     QCOMPARE(manifest.value(QStringLiteral("minimumVersionStatus")).toString(),
-             QStringLiteral("candidate"));
+             QStringLiteral("frozen"));
 
     const QJsonArray sources = manifest.value(QStringLiteral("sourceUrls")).toArray();
     QVERIFY(sources.size() >= 5);
@@ -418,6 +420,28 @@ void TestClaudeProtocolSpike::recordsStrictStartupControlValidation() {
              QSet<QString>({QStringLiteral("acceptEdits"), QStringLiteral("auto"),
                             QStringLiteral("bypassPermissions"), QStringLiteral("manual"),
                             QStringLiteral("dontAsk"), QStringLiteral("plan")}));
+}
+
+void TestClaudeProtocolSpike::gatesMinimumClaudeVersion_data() {
+    QTest::addColumn<QString>("version");
+    QTest::addColumn<bool>("accepted");
+
+    QTest::newRow("older") << QStringLiteral("2.1.218") << false;
+    QTest::newRow("minimum-prerelease") << QStringLiteral("2.1.219-beta.1") << false;
+    QTest::newRow("minimum") << QStringLiteral("2.1.219") << true;
+    QTest::newRow("reference") << QStringLiteral("2.1.245") << true;
+    QTest::newRow("newer-prerelease") << QStringLiteral("2.1.246-beta.1") << true;
+    QTest::newRow("metadata") << QStringLiteral("2.1.245+local") << true;
+    QTest::newRow("missing-patch") << QStringLiteral("2.1") << false;
+    QTest::newRow("garbage") << QStringLiteral("claude") << false;
+}
+
+void TestClaudeProtocolSpike::gatesMinimumClaudeVersion() {
+    QFETCH(QString, version);
+    QFETCH(bool, accepted);
+    using namespace snack::spike::claude;
+    QCOMPARE(minimumSupportedVersion(), QStringLiteral("2.1.219"));
+    QCOMPARE(meetsMinimumVersion(version), accepted);
 }
 
 QTEST_GUILESS_MAIN(TestClaudeProtocolSpike)

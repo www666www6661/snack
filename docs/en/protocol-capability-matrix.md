@@ -1,6 +1,6 @@
 # Protocol capability matrix
 
-Reviewed: 2026-08-26
+Reviewed: 2026-08-28
 
 Locally observed versions: Codex CLI `0.149.0`, Claude Code `2.1.245`
 
@@ -8,7 +8,7 @@ Locally observed versions: Codex CLI `0.149.0`, Claude Code `2.1.245`
 
 Codex uses `codex app-server` over the default stdio JSONL transport. It is the official JSON-RPC interface for rich clients and documents authentication, models, threads, turns, events, approvals, diffs, filesystem operations, and recovery.
 
-Claude uses a persistent `claude -p --input-format stream-json --output-format stream-json --verbose --include-partial-messages` process. The CLI officially exposes bidirectional streams, session IDs, resume, permission modes, and capability announcements. However, the full live control surface is primarily exposed through the official TypeScript and Python Agent SDKs, and there is no C++ SDK today. Snack will not bind to undocumented control messages. The Claude milestone therefore begins with a protocol spike and degrades missing controls to restart-and-resume or disabled UI.
+Claude uses a persistent `claude -p --input-format stream-json --output-format stream-json --verbose --include-partial-messages --replay-user-messages` process. M5 confirms the public stream, session, image, queue, capability, and MCP bridge contracts. Because live controls remain SDK-only and there is no C++ SDK, Snack freezes next-turn restart-and-resume behavior and never binds to unpublished control messages.
 
 ## 2. Status terms
 
@@ -23,19 +23,19 @@ Claude uses a persistent `claude -p --input-format stream-json --output-format s
 | Capability | Codex app-server | Claude Code CLI | Snack behavior |
 |---|---|---|---|
 | Initialize/capabilities | Native: `initialize` | Native: `system/init.capabilities` | Capabilities outrank version checks |
-| Model discovery | Native: `model/list` | Probe: Agent SDK `supportedModels()`; no equivalent public CLI command | Show only reliable values |
+| Model discovery | Native: `model/list` | SDK-only: `supportedModels()`; no equivalent public CLI command | Show current and explicitly configured values |
 | Start session | Native: `thread/start` | Native: new print stream | Persist native ID |
 | Resume | Native: `thread/resume` | Native: `--resume` | Never synthesize context from GUI history |
 | List/read history | Native: `thread/list`, `thread/read` | Limited scripted surface | GUI indexes records; context resumes natively |
 | Streaming text | Native item deltas | Native partial `stream-json` events | Incremental rendering |
 | Image input | Native image/localImage items | Native streaming input image content | Gate by model capability |
-| Mid-turn steer | Native: `turn/steer` | Probe: streaming input supports queues/interrupts; controls live in SDK | Degrade to queueing |
-| Queued messages | GUI plus native turns | Native streaming queue | GUI keeps editable queue |
-| Interrupt | Native: `turn/interrupt` | Probe: SDK `interrupt()` and documented process signals | Prefer control; otherwise terminate cleanly and resume |
-| Live model change | Native per-turn model | Probe: SDK `setModel()` | Restart when no stable C++ route exists |
-| Live effort change | Native per-turn effort | Probe: `--effort` and SDK thinking controls | Restart fallback |
-| Live access change | Native per-turn sandbox/approval | Probe: SDK `setPermissionMode()` | Restart fallback |
-| Command approval | Native server request | Bridge: `--permission-prompt-tool` or validated official control | Idempotent local bridge |
+| Mid-turn steer | Native: `turn/steer` | No stable C++ control surface | Hold as the next GUI-queued turn |
+| Queued messages | GUI plus native turns | Native stream queue exists | Keep editable queue in GUI until dispatch |
+| Interrupt | Native: `turn/interrupt` | SDK receipt plus documented process signals | Graceful process interrupt; never invent control wire or resend |
+| Live model change | Native per-turn model | SDK-only `setModel()` | Label next-turn effect, restart with `--model`, resume |
+| Live effort change | Native per-turn effort | SDK-only `applyFlagSettings()` | Validate, restart with `--effort`, resume |
+| Live access change | Native per-turn sandbox/approval | SDK-only `setPermissionMode()` | Restart with `--permission-mode`; pending bridge prompt uses current GUI policy |
+| Command approval | Native server request | Bridge: verified C++ `--permission-prompt-tool` MCP handshake | Idempotent per-session local bridge |
 | File approval | Native file-change request | Bridge/Probe through tool approvals | Fall back to safety mode and GUI snapshots |
 | Clarifying question | Native `tool/requestUserInput` | Bridge/Probe via `AskUserQuestion` | Normalize to prompt cards |
 | Plans/todos | Native plan items/events | Native/Probe todo tool events | Never invent progress |
@@ -65,13 +65,13 @@ Claude uses a persistent `claude -p --input-format stream-json --output-format s
 - Keep stdin open in print mode with bidirectional `stream-json` for multi-turn use.
 - Treat `system/init` as the authority for capabilities, model, tools, MCP, and plugin state.
 - Treat `result` as the turn boundary carrying session ID and available usage/cost metadata.
-- Evaluate `--permission-prompt-tool` for the approval bridge. The internal bridge is not a user extension manager and never edits user configuration.
+- Use an inline, strict, per-session C++ MCP stdio server with `--permission-prompt-tool`. The bridge never edits user configuration.
 - Do not treat the TypeScript SDK's internal CLI control wire format as a stable public C++ API. If a feature requires undocumented messages, degrade it.
 - Resume with `--resume <session-id>` after process replacement. Never resend an interrupted request automatically.
 
 ## 6. Minimum-version policy
 
-The Codex minimum is frozen at `0.149.0`; prereleases of that version do not qualify. Claude remains unfrozen until M5. A version qualifies only when capability discovery, create/resume, streaming, cancellation, errors, and correctly scoped approvals all pass contract tests. Older versions receive an upgrade message, never screen scraping. Unknown newer versions may run only after the app-server command probe, initialization, model discovery, and strict runtime validation succeed.
+The Codex minimum is `0.149.0`; the Claude minimum is `2.1.219`. Prereleases of an exact minimum do not qualify. The locally observed Claude reference is `2.1.245`; older versions receive an upgrade message, never screen scraping. Newer versions still require command parsing, initialization, capability checks, and strict runtime validation. See [Claude protocol spike](claude-protocol-spike.md) for the evidence and degradation matrix.
 
 ## 7. Official sources
 

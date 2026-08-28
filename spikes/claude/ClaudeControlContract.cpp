@@ -1,7 +1,9 @@
 #include "ClaudeControlContract.h"
 
 #include <QJsonArray>
+#include <QRegularExpression>
 #include <QSet>
+#include <QVersionNumber>
 
 namespace snack::spike::claude {
 namespace {
@@ -90,6 +92,29 @@ QueueReconciliation reconcileInterruptQueue(const QStringList& knownQueued,
         }
     }
     return result;
+}
+
+QString minimumSupportedVersion() { return QStringLiteral("2.1.219"); }
+
+bool meetsMinimumVersion(const QString& version) {
+    static const QRegularExpression expression(QStringLiteral(
+        R"(^([0-9]+)\.([0-9]+)\.([0-9]+)(?:-([0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*))?(?:\+[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?$)"));
+    const QRegularExpressionMatch match = expression.match(version);
+    if (!match.hasMatch()) {
+        return false;
+    }
+    bool majorValid = false;
+    bool minorValid = false;
+    bool patchValid = false;
+    const int major = match.captured(1).toInt(&majorValid);
+    const int minor = match.captured(2).toInt(&minorValid);
+    const int patch = match.captured(3).toInt(&patchValid);
+    if (!majorValid || !minorValid || !patchValid) {
+        return false;
+    }
+    const int comparison =
+        QVersionNumber::compare(QVersionNumber(major, minor, patch), QVersionNumber(2, 1, 219));
+    return comparison > 0 || (comparison == 0 && match.captured(4).isEmpty());
 }
 
 } // namespace snack::spike::claude

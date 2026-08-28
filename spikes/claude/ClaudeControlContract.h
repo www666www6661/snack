@@ -26,5 +26,7 @@ struct QueueReconciliation {
 [[nodiscard]] QueueReconciliation reconcileInterruptQueue(const QStringList& knownQueued,
                                                           const QStringList& capabilities,
                                                           const InterruptReceipt* receipt);
+[[nodiscard]] QString minimumSupportedVersion();
+[[nodiscard]] bool meetsMinimumVersion(const QString& version);
 
 } // namespace snack::spike::claude

@@ -67,3 +67,5 @@ Windows ConPTY/Credential Manager/MSI，Linux PTY/Secret Service/.deb/Wayland/X1
 M3 响应性测试使用高输出 Fake Agent，分批发送数千个文本、工具、推理和计划增量。Turn 执行期间独立 GUI 定时器必须持续推进，每种渲染流都必须保持在文档规定的展示上限内。该门禁绝不启动 Codex 或 Claude，也不调用模型。
 
 M4 终端组件测试注入 Fake Process，覆盖输入、Unicode/ANSI 投影、resize、退出、错误、标签、独立窗口和关闭路径。显式临时 SQLite 测试证明终端屏幕能够收到输出，而会话的 Agent 事件列表仍为空。平台冒烟测试只允许通过 ConPTY 或 PTY 启动本机 Shell；绝不启动 Codex 或 Claude，也不调用模型。
+
+M5 Claude 协议测试编译可丢弃 C++ stream/control 解析器和只会拒绝的 MCP stdio 探针服务器。默认测试只读取脱敏的官方示例派生 fixture，最多启动本地探针服务器。人工无模型检查可使用 `--init-only`、`--bare`、内联 strict MCP 且不发送用户消息来启动 Claude。真实 Turn、工具、权限请求、提问、中断、队列和 resume/fork 执行必须显式 opt-in，永不进入默认门禁。

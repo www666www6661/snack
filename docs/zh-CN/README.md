@@ -14,3 +14,4 @@
 10. [视觉设计系统](design-system.md)
 11. [开发者入门](getting-started.md)
 12. [Codex App Server 传输](codex-transport.md)
+13. [Claude 协议技术验证](claude-protocol-spike.md)

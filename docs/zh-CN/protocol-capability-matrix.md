@@ -1,6 +1,6 @@
 # 协议能力矩阵
 
-核对日期：2026-08-26
+核对日期：2026-08-28
 
 本机参考版本：Codex CLI `0.149.0`，Claude Code `2.1.245`
 
@@ -8,7 +8,7 @@
 
 Codex 使用 `codex app-server` 的 stdio JSONL 传输。它是官方面向富客户端的 JSON-RPC 接口，当前文档覆盖认证、模型、线程、Turn、事件、审批、Diff、文件系统和会话恢复。
 
-Claude 使用 `claude -p --input-format stream-json --output-format stream-json --verbose --include-partial-messages` 的持久进程。Claude CLI 官方公开了流式输入输出、会话 ID、恢复、权限模式和能力列表，但完整运行时控制 API主要由官方 TypeScript/Python Agent SDK 暴露，当前没有 C++ SDK。Snack 不直接依赖未承诺稳定的内部控制消息；首个 Claude 里程碑必须完成协议技术验证，并为缺失能力采用重启后 `--resume` 或禁用控件的降级方式。
+Claude 使用 `claude -p --input-format stream-json --output-format stream-json --verbose --include-partial-messages --replay-user-messages` 的持久进程。M5 已确认公开 stream、Session、图片、队列、能力和 MCP 桥契约。实时控制仍仅由 SDK 提供，官方没有 C++ SDK，因此 Snack 冻结为“下一轮重启并 resume”，绝不依赖未公开 control 消息。
 
 ## 2. 状态定义
 
@@ -23,19 +23,19 @@ Claude 使用 `claude -p --input-format stream-json --output-format stream-json 
 | 能力 | Codex app-server | Claude Code CLI | Snack 策略 |
 |---|---|---|---|
 | 初始化与能力协商 | Native：`initialize` | Native：`system/init.capabilities` | 使用能力而非仅比较版本 |
-| 模型枚举 | Native：`model/list` | Probe：Agent SDK `supportedModels()`，CLI 无等价公开命令 | Claude 技术验证失败时只显示当前/配置允许值 |
+| 模型枚举 | Native：`model/list` | SDK-only：`supportedModels()`，CLI 无等价公开命令 | 仅显示当前值和显式配置值 |
 | 新会话 | Native：`thread/start` | Native：新 `-p` 流 | 保存原生 ID |
 | 恢复会话 | Native：`thread/resume` | Native：`--resume` | 不拼接历史冒充上下文 |
 | 列出/读取历史 | Native：`thread/list`, `thread/read` | 有限：CLI 会话选择与本地记录；脚本接口较弱 | GUI 维护索引，原生上下文按 ID恢复 |
 | 流式文本 | Native：item delta | Native：`stream-json` partial events | 增量渲染 |
 | 图片输入 | Native：`image`/`localImage` | Native：streaming input 支持图片消息 | 按模型能力显示 |
-| 执行中补充 | Native：`turn/steer` | Probe：streaming input 支持队列/中断；控制 API在 Agent SDK | 不可靠时降级为排队 |
-| 排队消息 | GUI + Native turn | Native：streaming input 队列 | GUI 仍维护可编辑队列 |
-| 中断 | Native：`turn/interrupt` | Probe：SDK `interrupt()`；CLI 支持 SIGINT/SIGTERM 语义 | 优先官方控制，必要时正常结束进程并恢复 |
-| 热切换模型 | Native：下一 `turn/start.model` | Probe：SDK `setModel()` | C++ 无稳定入口时 Restart |
-| 热切换推理强度 | Native：`turn/start.effort` | Probe：`--effort` 与 SDK thinking 控制 | C++ 无稳定入口时 Restart |
-| 热切换访问层级 | Native：per-turn sandbox/approval | Probe：SDK `setPermissionMode()` | C++ 无稳定入口时 Restart |
-| 命令审批 | Native：server request | Bridge：`--permission-prompt-tool` 或经验证的官方控制 | Bridge 必须仅监听本机且按请求 ID幂等 |
+| 执行中补充 | Native：`turn/steer` | 没有稳定 C++ 控制面 | 保留为 GUI 队列中的下一 Turn |
+| 排队消息 | GUI + Native turn | 官方 stream 队列存在 | 发送前保留在 GUI，维持可编辑 |
+| 中断 | Native：`turn/interrupt` | SDK 回执 + 官方进程信号 | 正常中断进程；不发明 control wire，不自动重发 |
+| 热切换模型 | Native：下一 `turn/start.model` | SDK-only：`setModel()` | 标记下一轮，用 `--model` 重启并 resume |
+| 热切换推理强度 | Native：`turn/start.effort` | SDK-only：`applyFlagSettings()` | 校验后用 `--effort` 重启并 resume |
+| 热切换访问层级 | Native：per-turn sandbox/approval | SDK-only：`setPermissionMode()` | 用 `--permission-mode` 重启；待处理权限卡立即使用当前 GUI 策略 |
+| 命令审批 | Native：server request | Bridge：C++ `--permission-prompt-tool` MCP 握手已验证 | 每 Session 本地桥，按请求 ID 幂等 |
 | 文件审批 | Native：file-change request | Bridge/Probe：工具审批回调模型 | 不可用时依赖会话安全模式和 GUI 快照 |
 | 用户澄清问题 | Native：`tool/requestUserInput` | Bridge/Probe：`AskUserQuestion` 进入工具审批回调 | 转为统一问题卡片 |
 | 计划/待办 | Native：plan item/events | Native/Probe：Todo 工具事件 | 不确定时显示普通工具卡片，不虚构进度 |
@@ -65,13 +65,13 @@ Claude 使用 `claude -p --input-format stream-json --output-format stream-json 
 - 使用 `-p` 非交互模式与双向 `stream-json`，保持 stdin 开放以支持多轮输入。
 - `system/init` 是能力、模型、工具、MCP 和插件状态的权威启动事件。
 - `result` 是每轮完成边界，并包含会话 ID、使用量及可能的费用字段。
-- 权限桥接优先评估 `--permission-prompt-tool`。Snack 内部桥不是用户 MCP 管理功能，也不修改用户配置文件。
+- 使用内联 strict、每 Session 独立的 C++ MCP stdio `--permission-prompt-tool`；不修改用户配置。
 - 不把 TypeScript SDK 的内部 CLI 控制报文当作稳定公共 C++ API。若技术验证只能通过未公开报文实现，则该能力降级。
 - 进程结束后使用 `--resume <session-id>`；中断请求绝不自动重发。
 
 ## 6. 最低版本政策
 
-Codex 最低版本已冻结为 `0.149.0`，该版本的预发布版不满足要求；Claude 最低版本仍等待 M5 冻结。版本合格条件：
+Codex 最低版本为 `0.149.0`，Claude 最低版本为 `2.1.219`；等于最低版本的预发布版不满足要求。本机 Claude 参考版本为 `2.1.245`。旧版本显示升级提示，不做屏幕解析；新版本仍须通过命令解析、初始化、capability 和严格运行时校验。完整证据与降级矩阵见 [Claude 协议技术验证](claude-protocol-spike.md)。版本合格条件：
 
 1. 能力握手可用且可记录。
 2. 会话创建、恢复、流式事件、取消和错误路径通过契约测试。

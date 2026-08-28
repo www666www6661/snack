@@ -27,9 +27,9 @@ tokens, user configuration, repository names, and session identifiers are exclud
 ## Evidence policy
 
 The official CLI, headless mode, streaming input, TypeScript SDK, and user-input documentation URLs
-are recorded in the manifest. Capability announcements take precedence over version checks. Version
-`2.1.219` is only a candidate minimum until the remaining long-session, queue, interrupt, resume,
-fork, image, permission bridge, and live-settings probes are complete.
+are recorded in the manifest. Capability announcements take precedence over version checks. M5
+freezes `2.1.219` as the minimum based on the documented request-ID, result-correlation, interrupt
+receipt, and queue-cancellation gates; the locally verified reference remains `2.1.245`.
 
 The versioned JSONL stream fixtures are synthetic and derived from the public SDK types and
 examples. They exercise a startup event before `system/init`, open capability sets, multi-turn result
