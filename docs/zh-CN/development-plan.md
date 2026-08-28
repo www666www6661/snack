@@ -54,6 +54,10 @@ Qt 官方 6.8.3 LLVM-MinGW 降级构建与 Qt 官方 6.8.3 `msvc2022_64` WebEngi
 
 ## M5：Claude 协议技术验证（不发布功能承诺）
 
+状态：截至 2026-08-28，官方文档契约与本机 Windows 无模型验收完成。Claude Code 最低版本冻结为 `2.1.219`，本机参考版本为 `2.1.245`。可丢弃 C++/Qt stream 与 interrupt 解析器已覆盖 init 顺序、开放 capability、多 Turn result 边界、UUID 队列、图片、畸形/跨 Session 输入、回执门控和运行时控制降级。只会拒绝的 C++ MCP stdio 服务器同时通过 Qt 契约测试，以及真实 Claude `--init-only --bare --strict-mcp-config --permission-prompt-tool` 握手；没有读取或修改用户 MCP 配置。
+
+Qt 官方 6.8.3 LLVM-MinGW fallback 与 MSVC WebEngine 构建在本机 Windows 11 上均通过 21/21 项严格警告测试；插桩 fallback 构建通过 20/20 项测试，第一方行覆盖率为 83.14%。翻译保持 247/247，130 个 C++ 源文件/头文件通过格式门禁，版本化 Claude JSON/JSONL 有效且已脱敏，双语文档链接有效。本次没有执行真实模型 Turn、工具、权限请求、提问、中断、队列运行或 resume/fork 运行。以上不代表 Windows 10、Linux、macOS、打包或生产 Claude Adapter 已验证；M6 必须从已记录的降级矩阵开始。
+
 - 验证双向 stream-json 长连接、`system/init.capabilities` 与多轮边界。
 - 验证 session resume/fork、SIGINT/interrupt、队列和图片。
 - 验证内部本地 `--permission-prompt-tool` 桥，不修改用户 MCP配置。

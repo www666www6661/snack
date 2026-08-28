@@ -6,7 +6,7 @@ Snack (temporary display name: 零食) is a local-first desktop workbench for Co
 
 ## Status
 
-The project is building the `0.1.0-alpha.2` Codex vertical slice. The C++20/Qt 6.8 application now discovers and drives Codex App Server, persists native threads and typed events, streams messages and tool activity, renders reasoning summaries and plans, handles command/file approvals, and verifies each slice with Qt Test and versioned protocol fixtures.
+M4 workspace, diff, and terminal implementation is complete for local Windows automated acceptance. M5 Claude protocol validation is also complete: Claude Code `2.1.219` is the frozen minimum, `2.1.245` is the local no-model reference, and the pure C++ runtime-control degradation and MCP permission-bridge contracts are documented and tested. The Claude Adapter itself is the next M6 milestone and is not implemented yet.
 
 ## Product constraints
 
@@ -30,6 +30,7 @@ The project is building the `0.1.0-alpha.2` Codex vertical slice. The C++20/Qt 6
 - [Development plan](docs/en/development-plan.md)
 - [Visual design system](docs/en/design-system.md)
 - [Developer getting started](docs/en/getting-started.md)
+- [Claude protocol spike](docs/en/claude-protocol-spike.md)
 
 ## Source and license
 

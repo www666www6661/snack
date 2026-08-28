@@ -34,6 +34,10 @@ Read-only files and external editors, watching/indexing, snapshots and official-
 
 ## M5: Claude protocol spike
 
+Status: complete for the official-document contract and local no-model Windows acceptance as of 2026-08-28. Claude Code `2.1.219` is the frozen minimum and `2.1.245` is the locally observed reference. Disposable C++/Qt stream and interrupt parsers cover init ordering, open capabilities, multi-turn result boundaries, UUID queues, images, malformed/cross-session input, receipt gating, and runtime-control degradation. A deny-only C++ MCP stdio server passes both its Qt contract and a real Claude `--init-only --bare --strict-mcp-config --permission-prompt-tool` handshake without reading or changing user MCP configuration.
+
+The official Qt 6.8.3 LLVM-MinGW fallback and MSVC WebEngine builds each pass 21/21 strict-warning tests on the local Windows 11 machine. The instrumented fallback build passes 20/20 tests with 83.14% first-party line coverage; translations remain complete at 247/247, all 130 C++ source/header files pass the format gate, versioned Claude JSON/JSONL is valid and sanitized, and bilingual documentation links resolve. No live model turn, tool, permission prompt, question, interrupt, queue execution, or resume/fork execution was run. This status does not claim Windows 10, Linux, macOS, packaging, or production Claude Adapter validation; M6 starts from the documented degradation matrix.
+
 Validate long-lived bidirectional stream-json, init capabilities and turn boundaries, resume/fork, interrupt/queue/images, the local `--permission-prompt-tool` bridge without user MCP changes, and stable C++ paths for live model/effort/permission changes. Freeze minimum version and degradation matrix. No screen scraping or undocumented control-wire dependency may exit this milestone.
 
 ## M6: Claude adapter (`0.3.0`)

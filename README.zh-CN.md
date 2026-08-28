@@ -6,7 +6,7 @@ Snack（临时显示名称：零食）是一款面向 Codex CLI 与 Claude Code 
 
 ## 当前状态
 
-项目正在构筑 `0.1.0-alpha.2` Codex 垂直链路。C++20/Qt 6.8 应用现已能够探测并驱动 Codex App Server、持久化原生 Thread 与类型化事件、流式展示消息和工具活动、渲染推理摘要与计划、处理命令/文件审批，并通过 Qt Test 和版本化协议 fixture 验证每个切片。
+M4 工作区、Diff 与终端已完成本机 Windows 自动化验收。M5 Claude 协议验证也已完成：Claude Code 最低版本冻结为 `2.1.219`，`2.1.245` 是本机无模型参考版本，纯 C++ 运行时控制降级和 MCP 权限桥契约均已记录并测试。Claude Adapter 本身属于下一阶段 M6，目前尚未实现。
 
 ## 产品约束
 
@@ -30,6 +30,7 @@ Snack（临时显示名称：零食）是一款面向 Codex CLI 与 Claude Code 
 - [开发计划](docs/zh-CN/development-plan.md)
 - [视觉设计系统](docs/zh-CN/design-system.md)
 - [开发者入门](docs/zh-CN/getting-started.md)
+- [Claude 协议技术验证](docs/zh-CN/claude-protocol-spike.md)
 
 ## 源码与许可证
 

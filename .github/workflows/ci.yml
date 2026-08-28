@@ -104,5 +104,5 @@ jobs:
       - name: Check formatting
         run: |
           clang-format --version
-          find src tests -type f \( -name '*.cpp' -o -name '*.h' \) -print0 \
+          find src tests spikes -type f \( -name '*.cpp' -o -name '*.h' \) -print0 \
             | xargs -0 clang-format --dry-run --Werror
