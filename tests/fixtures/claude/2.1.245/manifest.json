@@ -15,8 +15,18 @@
     "queue-image.jsonl"
   ],
   "controlFixtures": [
-    "interrupt-receipts.json"
+    "interrupt-receipts.json",
+    "runtime-controls.json"
   ],
+  "runtimeFlagProbe": {
+    "liveModelUsed": false,
+    "combinedValidFlags": "accepted-empty-success",
+    "invalidEffort": "warning-default-exit-0",
+    "invalidPermissionMode": "parser-error-exit-1",
+    "invalidModel": "deferred-validation-empty-success",
+    "locallyAdvertisedEffortValues": ["low", "medium", "high", "xhigh", "max"],
+    "permissionModes": ["acceptEdits", "auto", "bypassPermissions", "manual", "dontAsk", "plan"]
+  },
   "permissionBridge": {
     "transport": "mcp-stdio",
     "serverImplementation": "C++20-Qt6",

@@ -25,6 +25,8 @@ class TestClaudeProtocolSpike : public QObject {
     void rejectsAmbiguousInterruptReceipts();
     void servesMinimalPermissionMcpContract();
     void recordsLocalPermissionBridgeHandshake();
+    void freezesPureCppRuntimeControlDegradation();
+    void recordsStrictStartupControlValidation();
 };
 
 namespace {
@@ -362,6 +364,60 @@ void TestClaudeProtocolSpike::recordsLocalPermissionBridgeHandshake() {
         stringSet(bridge.value(QStringLiteral("observedMethods")).toArray()),
         QSet<QString>({QStringLiteral("initialize"), QStringLiteral("notifications/initialized"),
                        QStringLiteral("tools/list")}));
+}
+
+void TestClaudeProtocolSpike::freezesPureCppRuntimeControlDegradation() {
+    const QJsonArray controls = loadArrayFixture(QStringLiteral("runtime-controls.json"));
+    QCOMPARE(controls.size(), 3);
+
+    QSet<QString> ids;
+    for (const QJsonValue& value : controls) {
+        const QJsonObject control = value.toObject();
+        ids.insert(control.value(QStringLiteral("id")).toString());
+        QVERIFY(!control.value(QStringLiteral("startupFlag")).toString().isEmpty());
+        QVERIFY(!control.value(QStringLiteral("stableCppDirectSurface")).toBool(true));
+        QVERIFY(!control.value(QStringLiteral("undocumentedWireAllowed")).toBool(true));
+        QCOMPARE(control.value(QStringLiteral("runningTurnPolicy")).toString(),
+                 QStringLiteral("defer-to-next-turn"));
+        QCOMPARE(control.value(QStringLiteral("idlePolicy")).toString(),
+                 QStringLiteral("restart-and-resume"));
+
+        const QJsonArray officialLiveSurfaces =
+            control.value(QStringLiteral("officialLiveSurfaces")).toArray();
+        QVERIFY(!officialLiveSurfaces.isEmpty());
+        for (const QJsonValue& surfaceValue : officialLiveSurfaces) {
+            const QJsonObject surface = surfaceValue.toObject();
+            QCOMPARE(surface.value(QStringLiteral("language")).toString(),
+                     QStringLiteral("TypeScript"));
+            QVERIFY(surface.value(QStringLiteral("streamingInputOnly")).toBool());
+        }
+    }
+    QCOMPARE(ids, QSet<QString>({QStringLiteral("model"), QStringLiteral("effort"),
+                                 QStringLiteral("permission-mode")}));
+
+    const QJsonObject permission = controls.at(2).toObject();
+    QCOMPARE(permission.value(QStringLiteral("pendingPromptPolicy")).toString(),
+             QStringLiteral("bridge-policy-immediate"));
+}
+
+void TestClaudeProtocolSpike::recordsStrictStartupControlValidation() {
+    const QJsonObject probe = loadManifest().value(QStringLiteral("runtimeFlagProbe")).toObject();
+    QVERIFY(!probe.value(QStringLiteral("liveModelUsed")).toBool(true));
+    QCOMPARE(probe.value(QStringLiteral("combinedValidFlags")).toString(),
+             QStringLiteral("accepted-empty-success"));
+    QCOMPARE(probe.value(QStringLiteral("invalidEffort")).toString(),
+             QStringLiteral("warning-default-exit-0"));
+    QCOMPARE(probe.value(QStringLiteral("invalidPermissionMode")).toString(),
+             QStringLiteral("parser-error-exit-1"));
+    QCOMPARE(probe.value(QStringLiteral("invalidModel")).toString(),
+             QStringLiteral("deferred-validation-empty-success"));
+    QCOMPARE(stringSet(probe.value(QStringLiteral("locallyAdvertisedEffortValues")).toArray()),
+             QSet<QString>({QStringLiteral("low"), QStringLiteral("medium"), QStringLiteral("high"),
+                            QStringLiteral("xhigh"), QStringLiteral("max")}));
+    QCOMPARE(stringSet(probe.value(QStringLiteral("permissionModes")).toArray()),
+             QSet<QString>({QStringLiteral("acceptEdits"), QStringLiteral("auto"),
+                            QStringLiteral("bypassPermissions"), QStringLiteral("manual"),
+                            QStringLiteral("dontAsk"), QStringLiteral("plan")}));
 }
 
 QTEST_GUILESS_MAIN(TestClaudeProtocolSpike)

@@ -1,0 +1,65 @@
+[
+  {
+    "id": "model",
+    "startupFlag": "--model",
+    "officialLiveSurfaces": [
+      {
+        "name": "Query.setModel",
+        "language": "TypeScript",
+        "streamingInputOnly": true,
+        "effect": "current-turn-next-model-call"
+      },
+      {
+        "name": "Query.applyFlagSettings.model",
+        "language": "TypeScript",
+        "streamingInputOnly": true,
+        "effect": "current-turn-next-model-call"
+      }
+    ],
+    "stableCppDirectSurface": false,
+    "undocumentedWireAllowed": false,
+    "runningTurnPolicy": "defer-to-next-turn",
+    "idlePolicy": "restart-and-resume",
+    "catalogPolicy": "current-and-configured-values-until-official-cpp-catalog"
+  },
+  {
+    "id": "effort",
+    "startupFlag": "--effort",
+    "officialLiveSurfaces": [
+      {
+        "name": "Query.applyFlagSettings.effortLevel",
+        "language": "TypeScript",
+        "streamingInputOnly": true,
+        "effect": "next-turn"
+      }
+    ],
+    "stableCppDirectSurface": false,
+    "undocumentedWireAllowed": false,
+    "runningTurnPolicy": "defer-to-next-turn",
+    "idlePolicy": "restart-and-resume",
+    "validationPolicy": "strict-app-side-allowlist"
+  },
+  {
+    "id": "permission-mode",
+    "startupFlag": "--permission-mode",
+    "officialLiveSurfaces": [
+      {
+        "name": "Query.setPermissionMode",
+        "language": "TypeScript",
+        "streamingInputOnly": true,
+        "effect": "next-permission-check"
+      },
+      {
+        "name": "Query.applyFlagSettings.permissions",
+        "language": "TypeScript",
+        "streamingInputOnly": true,
+        "effect": "next-turn"
+      }
+    ],
+    "stableCppDirectSurface": false,
+    "undocumentedWireAllowed": false,
+    "runningTurnPolicy": "defer-to-next-turn",
+    "idlePolicy": "restart-and-resume",
+    "pendingPromptPolicy": "bridge-policy-immediate"
+  }
+]

@@ -53,6 +53,20 @@ This establishes process launch, MCP negotiation, and permission-tool discovery 
 not claim that a live permission prompt was invoked: triggering one requires a model turn and remains
 an explicit opt-in check. The probe tool denies any accidental call.
 
+## Runtime controls
+
+The local CLI accepts valid `--model`, `--effort`, and `--permission-mode` values on `--init-only`.
+Validation is not uniform: an unknown permission mode is a parser error, an unknown effort only warns
+and silently falls back, and an unknown model is not validated before a turn. Snack must therefore
+validate every GUI selection before launch.
+
+The official live setters are exposed by the TypeScript Agent SDK in streaming-input mode. There is
+no official C++ SDK or fully published C++ control-wire schema. M5 therefore rejects direct private
+control messages. In M6, a pure C++ session queues model, effort, and permission-mode changes for the
+next turn, then restarts and resumes with official CLI flags. A currently displayed MCP permission
+prompt can still apply the GUI bridge policy immediately. This is an explicit degradation from the
+requested ChatGPT-like hot switching, not a claim of full parity.
+
 Default builds and tests parse sanitized fixtures only. Any probe that can send a valid user message
 or invoke a model must be a separately documented, explicit opt-in and is never part of the default
 test gate.
