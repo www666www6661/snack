@@ -8,6 +8,12 @@
   "userConfigurationModified": false,
   "minimumVersionCandidate": "2.1.219",
   "minimumVersionStatus": "candidate",
+  "streamFixtureOrigin": "synthetic-official-example-derived",
+  "streamFixtures": [
+    "system-init.jsonl",
+    "multi-turn.jsonl",
+    "queue-image.jsonl"
+  ],
   "requiredOptions": [
     "--init-only",
     "--input-format=stream-json",
@@ -76,6 +82,18 @@
       "input": "eof",
       "exitCode": 0,
       "resultCategory": "empty-success"
+    },
+    {
+      "id": "resume-init-only",
+      "input": "eof",
+      "exitCode": 0,
+      "resultCategory": "accepted-and-empty-success"
+    },
+    {
+      "id": "resume-fork-init-only",
+      "input": "eof",
+      "exitCode": 0,
+      "resultCategory": "accepted-and-empty-success"
     },
     {
       "id": "unknown-option-negative-control",

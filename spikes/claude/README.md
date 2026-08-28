@@ -18,6 +18,7 @@ The local commands established these facts:
   omits it from top-level help.
 - Invalid JSON and a user envelope without a message fail before a model turn.
 - An empty object and stream EOF exit successfully without output.
+- `--resume` and `--resume` plus `--fork-session` are accepted on the `--init-only` path.
 
 Only normalized categories are committed in
 `tests/fixtures/claude/2.1.245/manifest.json`. Raw output, executable paths, authentication state,
@@ -29,6 +30,11 @@ The official CLI, headless mode, streaming input, TypeScript SDK, and user-input
 are recorded in the manifest. Capability announcements take precedence over version checks. Version
 `2.1.219` is only a candidate minimum until the remaining long-session, queue, interrupt, resume,
 fork, image, permission bridge, and live-settings probes are complete.
+
+The versioned JSONL stream fixtures are synthetic and derived from the public SDK types and
+examples. They exercise a startup event before `system/init`, open capability sets, multi-turn result
+boundaries, queued UUIDs, image blocks, unknown fields, malformed input, and cross-session rejection.
+They are not represented as captured model output.
 
 Default builds and tests parse sanitized fixtures only. Any probe that can send a valid user message
 or invoke a model must be a separately documented, explicit opt-in and is never part of the default

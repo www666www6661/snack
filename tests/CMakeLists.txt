@@ -44,6 +44,16 @@ target_compile_definitions(
     PRIVATE SNACK_TEST_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures"
 )
 snack_add_test(snack_claude_protocol_spike_tests agent/TestClaudeProtocolSpike.cpp)
+target_sources(
+    snack_claude_protocol_spike_tests
+    PRIVATE
+        ${PROJECT_SOURCE_DIR}/spikes/claude/ClaudeStreamContract.cpp
+        ${PROJECT_SOURCE_DIR}/spikes/claude/ClaudeStreamContract.h
+)
+target_include_directories(
+    snack_claude_protocol_spike_tests
+    PRIVATE ${PROJECT_SOURCE_DIR}/spikes/claude
+)
 target_compile_definitions(
     snack_claude_protocol_spike_tests
     PRIVATE SNACK_TEST_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures"

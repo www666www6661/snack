@@ -1,3 +1,5 @@
+#include "ClaudeStreamContract.h"
+
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -12,6 +14,10 @@ class TestClaudeProtocolSpike : public QObject {
     void recordsSanitizedNoModelEvidence();
     void coversRequiredCliOptionsAndNegativeControl();
     void recordsOfficialCapabilityVersionGates();
+    void parsesInitAfterStartupEvents();
+    void separatesLongLivedStreamTurns();
+    void tracksQueuedImageTurns();
+    void rejectsMalformedAndCrossSessionRecords();
 };
 
 namespace {
@@ -33,6 +39,22 @@ QSet<QString> stringSet(const QJsonArray& values) {
     return result;
 }
 
+QList<snack::spike::claude::StreamRecord> loadJsonLines(const QString& name) {
+    QFile file(QStringLiteral(SNACK_TEST_FIXTURE_DIR)
+                   .append(QStringLiteral("/claude/2.1.245/"))
+                   .append(name));
+    if (!file.open(QIODevice::ReadOnly)) {
+        return {};
+    }
+    QList<snack::spike::claude::StreamRecord> records;
+    for (const QByteArray& line : file.readAll().split('\n')) {
+        if (!line.trimmed().isEmpty()) {
+            records.append(snack::spike::claude::parseStreamRecord(line));
+        }
+    }
+    return records;
+}
+
 } // namespace
 
 void TestClaudeProtocolSpike::recordsSanitizedNoModelEvidence() {
@@ -45,6 +67,8 @@ void TestClaudeProtocolSpike::recordsSanitizedNoModelEvidence() {
     QVERIFY(manifest.value(QStringLiteral("sanitized")).toBool());
     QVERIFY(!manifest.value(QStringLiteral("liveModelUsed")).toBool(true));
     QVERIFY(!manifest.value(QStringLiteral("userConfigurationModified")).toBool(true));
+    QCOMPARE(manifest.value(QStringLiteral("streamFixtureOrigin")).toString(),
+             QStringLiteral("synthetic-official-example-derived"));
 
     const QByteArray serialized = QJsonDocument(manifest).toJson(QJsonDocument::Compact).toLower();
     const QList<QByteArray> forbidden = {"c:\\\\users",  "d:\\\\projects", "oauth_token",
@@ -92,6 +116,8 @@ void TestClaudeProtocolSpike::coversRequiredCliOptionsAndNegativeControl() {
         QStringLiteral("stream-missing-type"),
         QStringLiteral("stream-missing-message"),
         QStringLiteral("stream-eof"),
+        QStringLiteral("resume-init-only"),
+        QStringLiteral("resume-fork-init-only"),
         QStringLiteral("unknown-option-negative-control"),
     };
     for (const QString& id : expectedProbeIds) {
@@ -123,6 +149,80 @@ void TestClaudeProtocolSpike::recordsOfficialCapabilityVersionGates() {
     QVERIFY(capabilities.contains(QStringLiteral("permission-prompt-tool-interaction-guard")));
     QVERIFY(capabilities.contains(QStringLiteral("interrupt-receipt-v1")));
     QVERIFY(capabilities.contains(QStringLiteral("interrupt-cancel-queued-v1")));
+}
+
+void TestClaudeProtocolSpike::parsesInitAfterStartupEvents() {
+    using namespace snack::spike::claude;
+    const QList<StreamRecord> records = loadJsonLines(QStringLiteral("system-init.jsonl"));
+    QCOMPARE(records.size(), 2);
+    QCOMPARE(records.at(0).kind, StreamRecordKind::SystemEvent);
+    QCOMPARE(records.at(1).kind, StreamRecordKind::SystemInit);
+    QVERIFY(records.at(1).payload.contains(QStringLiteral("future_field")));
+
+    StreamContractState state;
+    for (const StreamRecord& record : records) {
+        QVERIFY(state.consume(record));
+    }
+    QCOMPARE(state.sessionId(), QStringLiteral("10000000-0000-4000-8000-000000000001"));
+    QCOMPARE(state.capabilities(), QStringList({QStringLiteral("interrupt_receipt_v1"),
+                                                QStringLiteral("interrupt_cancel_queued_v1"),
+                                                QStringLiteral("future_capability_v9")}));
+}
+
+void TestClaudeProtocolSpike::separatesLongLivedStreamTurns() {
+    using namespace snack::spike::claude;
+    const QList<StreamRecord> records = loadJsonLines(QStringLiteral("multi-turn.jsonl"));
+    QCOMPARE(records.size(), 8);
+
+    StreamContractState state;
+    int resultCount = 0;
+    int partialCount = 0;
+    for (const StreamRecord& record : records) {
+        QVERIFY(state.consume(record));
+        resultCount += record.kind == StreamRecordKind::Result ? 1 : 0;
+        partialCount += record.kind == StreamRecordKind::PartialAssistant ? 1 : 0;
+    }
+    QCOMPARE(resultCount, 2);
+    QCOMPARE(partialCount, 1);
+    QCOMPARE(state.completedUserMessages(),
+             QStringList({QStringLiteral("20000000-0000-4000-8000-000000000001"),
+                          QStringLiteral("20000000-0000-4000-8000-000000000002")}));
+    QVERIFY(state.pendingUserMessages().isEmpty());
+}
+
+void TestClaudeProtocolSpike::tracksQueuedImageTurns() {
+    using namespace snack::spike::claude;
+    const QList<StreamRecord> records = loadJsonLines(QStringLiteral("queue-image.jsonl"));
+    QCOMPARE(records.size(), 4);
+    QVERIFY(containsImage(records.at(1)));
+
+    StreamContractState state;
+    QVERIFY(state.consume(records.at(0)));
+    QVERIFY(state.consume(records.at(1)));
+    QCOMPARE(state.pendingUserMessages().size(), 2);
+    QVERIFY(state.consume(records.at(2)));
+    QCOMPARE(state.pendingUserMessages(),
+             QStringList({QStringLiteral("30000000-0000-4000-8000-000000000002")}));
+    QVERIFY(state.consume(records.at(3)));
+    QVERIFY(state.pendingUserMessages().isEmpty());
+}
+
+void TestClaudeProtocolSpike::rejectsMalformedAndCrossSessionRecords() {
+    using namespace snack::spike::claude;
+    const StreamRecord malformed = parseStreamRecord(QByteArrayLiteral("not-json"));
+    QCOMPARE(malformed.kind, StreamRecordKind::Malformed);
+    QVERIFY(!malformed.error.isEmpty());
+
+    StreamContractState state;
+    QVERIFY(state.consume(parseStreamRecord(
+        QByteArrayLiteral(R"({"type":"user","uuid":"one","session_id":"session-a"})"))));
+    QVERIFY(!state.consume(
+        parseStreamRecord(QByteArrayLiteral(R"({"type":"result","session_id":"session-b"})"))));
+
+    const StreamRecord unknown =
+        parseStreamRecord(QByteArrayLiteral(R"({"type":"future-event","new_field":true})"));
+    QCOMPARE(unknown.kind, StreamRecordKind::Unknown);
+    QVERIFY(unknown.payload.value(QStringLiteral("new_field")).toBool());
 }
 
 QTEST_GUILESS_MAIN(TestClaudeProtocolSpike)
