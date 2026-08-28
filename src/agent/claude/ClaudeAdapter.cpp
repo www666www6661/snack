@@ -4,6 +4,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
+#include <QJsonDocument>
 #include <QMimeDatabase>
 #include <QUuid>
 
@@ -201,9 +202,33 @@ bool ClaudeAdapter::respondToApproval(const QString& requestId, domain::Approval
 }
 
 bool ClaudeAdapter::respondToUserInput(const QString& requestId, const QJsonObject& answers) {
-    Q_UNUSED(requestId)
-    Q_UNUSED(answers)
-    return false;
+    const auto pending = pendingUserInputs_.constFind(requestId);
+    if (pending == pendingUserInputs_.cend() || activeTurn_.turnId.isNull()) {
+        return false;
+    }
+    const QJsonArray questions = pending->value(QStringLiteral("questions")).toArray();
+    if (answers.size() != questions.size()) {
+        return false;
+    }
+    for (const QJsonValue& questionValue : questions) {
+        const QString id = questionValue.toObject().value(QStringLiteral("id")).toString();
+        const QJsonValue answer = answers.value(id);
+        if (!answer.isObject() || !answer.toObject().value(QStringLiteral("answers")).isArray() ||
+            answer.toObject().value(QStringLiteral("answers")).toArray().isEmpty()) {
+            return false;
+        }
+        for (const QJsonValue& value :
+             answer.toObject().value(QStringLiteral("answers")).toArray()) {
+            if (!value.isString()) {
+                return false;
+            }
+        }
+    }
+    if (!client_.sendEnvelope(makeUserInputEnvelope(requestId, *pending, answers))) {
+        return false;
+    }
+    pendingUserInputs_.remove(requestId);
+    return true;
 }
 
 void ClaudeAdapter::interruptTurn() {}
@@ -288,6 +313,39 @@ QJsonObject ClaudeAdapter::makeUserEnvelope(const TurnRequest& request, QString*
                                                 {QStringLiteral("content"), content}}}};
 }
 
+QJsonObject ClaudeAdapter::makeUserInputEnvelope(const QString& requestId,
+                                                 const QJsonObject& request,
+                                                 const QJsonObject& answers) const {
+    QJsonObject responseAnswers;
+    for (const QJsonValue& questionValue : request.value(QStringLiteral("questions")).toArray()) {
+        const QJsonObject question = questionValue.toObject();
+        const QJsonArray values = answers.value(question.value(QStringLiteral("id")).toString())
+                                      .toObject()
+                                      .value(QStringLiteral("answers"))
+                                      .toArray();
+        QStringList text;
+        for (const QJsonValue& value : values) {
+            text.append(value.toString());
+        }
+        responseAnswers.insert(question.value(QStringLiteral("question")).toString(),
+                               text.join(QStringLiteral(", ")));
+    }
+    const QString content =
+        QString::fromUtf8(QJsonDocument(QJsonObject{{QStringLiteral("answers"), responseAnswers}})
+                              .toJson(QJsonDocument::Compact));
+    return {{QStringLiteral("type"), QStringLiteral("user")},
+            {QStringLiteral("uuid"), QUuid::createUuid().toString(QUuid::WithoutBraces)},
+            {QStringLiteral("session_id"), expectedSessionId_},
+            {QStringLiteral("parent_tool_use_id"), QJsonValue::Null},
+            {QStringLiteral("message"),
+             QJsonObject{
+                 {QStringLiteral("role"), QStringLiteral("user")},
+                 {QStringLiteral("content"),
+                  QJsonArray{QJsonObject{{QStringLiteral("type"), QStringLiteral("tool_result")},
+                                         {QStringLiteral("tool_use_id"), requestId},
+                                         {QStringLiteral("content"), content}}}}}}};
+}
+
 void ClaudeAdapter::handleInitialized(const InitInfo& info) {
     if (!connecting_) {
         return;
@@ -322,6 +380,12 @@ void ClaudeAdapter::handleRecord(const StreamRecord& record) {
         return;
     }
     for (const MappedEvent& event : eventMapper_.consume(record)) {
+        if (event.type == domain::AgentEventType::UserInputRequested) {
+            const QString requestId = event.payload.value(QStringLiteral("requestId")).toString();
+            if (!requestId.isEmpty() && !pendingUserInputs_.contains(requestId)) {
+                pendingUserInputs_.insert(requestId, event.payload);
+            }
+        }
         emitActiveEvent(event.type, event.payload, event.rawPayload);
     }
     if (record.kind != StreamRecordKind::Result) {
@@ -365,6 +429,7 @@ void ClaudeAdapter::finishActiveTurn(domain::AgentEventType type, const QString&
     const QUuid turnId = activeTurn_.turnId;
     activeTurn_ = {};
     nativeUserMessageUuid_.clear();
+    pendingUserInputs_.clear();
     emit turnFinished(turnId, interrupted, completed);
 }
 

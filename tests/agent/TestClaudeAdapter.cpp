@@ -28,6 +28,7 @@ class TestClaudeAdapter final : public QObject {
     void adapterSendsAndCorrelatesMultipleTurns();
     void adapterRejectsInvalidLifecycleRequests();
     void mapsVisibleStreamEventsAndRedactsThinking();
+    void mapsAndAnswersClaudeQuestions();
 };
 
 class FakeClaudeProcessTransport final : public snack::agent::process::IProcessTransport {
@@ -738,6 +739,77 @@ void TestClaudeAdapter::mapsVisibleStreamEventsAndRedactsThinking() {
     QVERIFY(serialized.contains("redacted"));
     QVERIFY(!serialized.contains("complete private thought"));
     QVERIFY(!serialized.contains("signature"));
+}
+
+void TestClaudeAdapter::mapsAndAnswersClaudeQuestions() {
+    using namespace snack::agent;
+    using namespace snack::agent::claude;
+
+    ClaudeEventMapper mapper;
+    mapper.reset();
+    const StreamRecord questionRecord = parseStreamRecord(
+        R"({"type":"assistant","message":{"id":"msg-q","content":[{"type":"tool_use","id":"ask-1","name":"AskUserQuestion","input":{"questions":[{"header":"Choice","question":"Which path?","multiSelect":false,"options":[{"label":"A","description":"First"},{"label":"B","description":"Second"}]},{"header":"Details","question":"Why?","multiSelect":true,"options":[]}]}}]}})");
+    const QList<MappedEvent> mapped = mapper.consume(questionRecord);
+    QCOMPARE(mapped.size(), 1);
+    QCOMPARE(mapped.constFirst().type, domain::AgentEventType::UserInputRequested);
+    const QJsonObject request = mapped.constFirst().payload;
+    QCOMPARE(request.value(QStringLiteral("requestId")).toString(), QStringLiteral("ask-1"));
+    QVERIFY(request.value(QStringLiteral("isBlocking")).toBool());
+    const QJsonArray questions = request.value(QStringLiteral("questions")).toArray();
+    QCOMPARE(questions.size(), 2);
+    QCOMPARE(questions.at(0).toObject().value(QStringLiteral("options")).toArray().size(), 2);
+    QVERIFY(questions.at(1).toObject().value(QStringLiteral("options")).isNull());
+
+    const CliInstallation installation{.status = CliStatus::Available,
+                                       .executablePath = QStringLiteral("claude"),
+                                       .version = QStringLiteral("2.1.245")};
+    FakeClaudeProcessTransport transport;
+    ClaudeAdapter adapter(installation, &transport);
+    QSignalSpy eventSpy(&adapter, &IAgentAdapter::eventReceived);
+    domain::TurnSettingsSnapshot settings;
+    settings.agentKind = domain::AgentKind::Claude;
+    settings.modelId = QStringLiteral("sonnet");
+    settings.reasoningEffort = domain::ReasoningEffort::Medium;
+    settings.accessLevel = domain::AccessLevel::Strict;
+    settings.workingDirectory = QStringLiteral("/workspace");
+    adapter.connectAgent({.workingDirectory = QStringLiteral("/workspace"),
+                          .nativeThreadId = QStringLiteral("session-q"),
+                          .settings = settings});
+    transport.feedOutput(
+        R"({"type":"system","subtype":"init","session_id":"session-q","claude_code_version":"2.1.245","cwd":"/workspace","model":"sonnet","permissionMode":"manual"})"
+        "\n");
+    adapter.startTurn({QUuid::createUuid(), QStringLiteral("Ask me"), settings, {}});
+    QCOMPARE(transport.writes.size(), 1);
+    transport.feedOutput(
+        R"({"type":"assistant","session_id":"session-q","message":{"id":"msg-q","content":[{"type":"tool_use","id":"ask-1","name":"AskUserQuestion","input":{"questions":[{"header":"Choice","question":"Which path?","multiSelect":false,"options":[{"label":"A","description":"First"},{"label":"B","description":"Second"}]},{"header":"Details","question":"Why?","multiSelect":true,"options":[]}]}}]}})"
+        "\n");
+
+    QVERIFY(std::any_of(eventSpy.cbegin(), eventSpy.cend(), [](const QList<QVariant>& arguments) {
+        return arguments.constFirst().value<domain::AgentEvent>().type ==
+               domain::AgentEventType::UserInputRequested;
+    }));
+    const QJsonObject answers{
+        {QStringLiteral("question-0"),
+         QJsonObject{{QStringLiteral("answers"), QJsonArray{QStringLiteral("A")}}}},
+        {QStringLiteral("question-1"),
+         QJsonObject{{QStringLiteral("answers"), QJsonArray{QStringLiteral("Because")}}}},
+    };
+    QVERIFY(!adapter.respondToUserInput(QStringLiteral("ask-1"), {}));
+    QVERIFY(adapter.respondToUserInput(QStringLiteral("ask-1"), answers));
+    QVERIFY(!adapter.respondToUserInput(QStringLiteral("ask-1"), answers));
+    QCOMPARE(transport.writes.size(), 2);
+    const QJsonObject response = QJsonDocument::fromJson(transport.writes.constLast()).object();
+    const QJsonObject message = response.value(QStringLiteral("message")).toObject();
+    const QJsonObject toolResult =
+        message.value(QStringLiteral("content")).toArray().at(0).toObject();
+    QCOMPARE(toolResult.value(QStringLiteral("tool_use_id")).toString(), QStringLiteral("ask-1"));
+    const QJsonObject answerContent =
+        QJsonDocument::fromJson(toolResult.value(QStringLiteral("content")).toString().toUtf8())
+            .object()
+            .value(QStringLiteral("answers"))
+            .toObject();
+    QCOMPARE(answerContent.value(QStringLiteral("Which path?")).toString(), QStringLiteral("A"));
+    QCOMPARE(answerContent.value(QStringLiteral("Why?")).toString(), QStringLiteral("Because"));
 }
 
 QTEST_MAIN(TestClaudeAdapter)

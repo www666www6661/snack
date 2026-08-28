@@ -43,6 +43,7 @@ class ClaudeEventMapper final {
     QHash<qint64, ContentBlock> blocks_;
     QSet<QString> startedTools_;
     QSet<QString> completedTools_;
+    QSet<QString> questionTools_;
     QSet<QString> startedReasoning_;
     QString messageItemId_;
     QString streamedText_;

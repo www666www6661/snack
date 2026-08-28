@@ -37,12 +37,55 @@ QJsonObject toolPayload(const QString& itemId, const QString& name, const QJsonO
             {QStringLiteral("status"), QStringLiteral("running")}};
 }
 
+QJsonObject userInputPayload(const QString& itemId, const QJsonObject& input) {
+    const QJsonArray sourceQuestions = input.value(QStringLiteral("questions")).toArray();
+    QJsonArray questions;
+    for (qsizetype index = 0; index < sourceQuestions.size(); ++index) {
+        const QJsonObject source = sourceQuestions.at(index).toObject();
+        const QString question = source.value(QStringLiteral("question")).toString();
+        if (question.isEmpty()) {
+            return {};
+        }
+        QJsonArray options;
+        for (const QJsonValue& optionValue : source.value(QStringLiteral("options")).toArray()) {
+            const QJsonObject option = optionValue.toObject();
+            if (!option.value(QStringLiteral("label")).toString().isEmpty()) {
+                options.append(QJsonObject{
+                    {QStringLiteral("label"), option.value(QStringLiteral("label")).toString()},
+                    {QStringLiteral("description"),
+                     option.value(QStringLiteral("description")).toString()}});
+            }
+        }
+        QJsonObject mapped{
+            {QStringLiteral("id"), QStringLiteral("question-%1").arg(index)},
+            {QStringLiteral("header"),
+             source.value(QStringLiteral("header")).toString(QStringLiteral("Question"))},
+            {QStringLiteral("question"), question},
+            {QStringLiteral("isOther"), true},
+            {QStringLiteral("isSecret"), false}};
+        if (!options.isEmpty() && !source.value(QStringLiteral("multiSelect")).toBool()) {
+            mapped.insert(QStringLiteral("options"), options);
+        } else {
+            mapped.insert(QStringLiteral("options"), QJsonValue::Null);
+        }
+        questions.append(mapped);
+    }
+    if (questions.isEmpty()) {
+        return {};
+    }
+    return {{QStringLiteral("requestId"), itemId},
+            {QStringLiteral("itemId"), itemId},
+            {QStringLiteral("isBlocking"), true},
+            {QStringLiteral("questions"), questions}};
+}
+
 } // namespace
 
 void ClaudeEventMapper::reset() {
     blocks_.clear();
     startedTools_.clear();
     completedTools_.clear();
+    questionTools_.clear();
     startedReasoning_.clear();
     messageItemId_.clear();
     streamedText_.clear();
@@ -106,6 +149,18 @@ void ClaudeEventMapper::appendText(const QString& text, QList<MappedEvent>* even
 void ClaudeEventMapper::startTool(const ContentBlock& block, const QJsonObject& input,
                                   QList<MappedEvent>* events, const QJsonObject& raw) {
     if (block.itemId.isEmpty() || startedTools_.contains(block.itemId)) {
+        return;
+    }
+    if (block.name == QLatin1String("AskUserQuestion")) {
+        const QJsonObject payload = userInputPayload(block.itemId, input);
+        if (payload.isEmpty()) {
+            return;
+        }
+        startedTools_.insert(block.itemId);
+        questionTools_.insert(block.itemId);
+        events->append({.type = domain::AgentEventType::UserInputRequested,
+                        .payload = payload,
+                        .rawPayload = raw});
         return;
     }
     startedTools_.insert(block.itemId);
@@ -280,6 +335,9 @@ void ClaudeEventMapper::consumeUser(const QJsonObject& payload, QList<MappedEven
             continue;
         }
         completedTools_.insert(itemId);
+        if (questionTools_.contains(itemId)) {
+            continue;
+        }
         QJsonObject eventPayload{
             {QStringLiteral("itemId"), itemId},
             {QStringLiteral("kind"), QStringLiteral("dynamicToolCall")},

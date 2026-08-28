@@ -5,6 +5,8 @@
 #include "agent/claude/ClaudeEventMapper.h"
 #include "agent/claude/ClaudeStreamClient.h"
 
+#include <QHash>
+
 namespace snack::agent::claude {
 
 class ClaudeAdapter final : public IAgentAdapter {
@@ -26,6 +28,9 @@ class ClaudeAdapter final : public IAgentAdapter {
 
   private:
     [[nodiscard]] QJsonObject makeUserEnvelope(const TurnRequest& request, QString* error) const;
+    [[nodiscard]] QJsonObject makeUserInputEnvelope(const QString& requestId,
+                                                    const QJsonObject& request,
+                                                    const QJsonObject& answers) const;
     void handleInitialized(const InitInfo& info);
     void handleRecord(const StreamRecord& record);
     void finishActiveTurn(domain::AgentEventType type, const QString& message,
@@ -43,6 +48,7 @@ class ClaudeAdapter final : public IAgentAdapter {
     TurnRequest activeTurn_;
     QString expectedSessionId_;
     QString nativeUserMessageUuid_;
+    QHash<QString, QJsonObject> pendingUserInputs_;
     bool connecting_{false};
     bool connected_{false};
     bool closing_{false};
