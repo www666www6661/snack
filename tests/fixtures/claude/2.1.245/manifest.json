@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "cliVersion": "2.1.245",
+  "observedAt": "2026-08-28",
+  "evidenceType": "local-no-model-probe",
+  "sanitized": true,
+  "liveModelUsed": false,
+  "userConfigurationModified": false,
+  "minimumVersionCandidate": "2.1.219",
+  "minimumVersionStatus": "candidate",
+  "requiredOptions": [
+    "--init-only",
+    "--input-format=stream-json",
+    "--output-format=stream-json",
+    "--permission-prompt-tool",
+    "--safe-mode",
+    "--strict-mcp-config"
+  ],
+  "sourceUrls": [
+    "https://code.claude.com/docs/en/cli-reference.md",
+    "https://code.claude.com/docs/en/headless.md",
+    "https://code.claude.com/docs/en/agent-sdk/streaming-vs-single-mode.md",
+    "https://code.claude.com/docs/en/agent-sdk/typescript.md",
+    "https://code.claude.com/docs/en/agent-sdk/user-input.md"
+  ],
+  "versionGates": [
+    {
+      "capability": "permission-prompt-tool-interaction-guard",
+      "minimumCliVersion": "2.1.199",
+      "sourceUrl": "https://code.claude.com/docs/en/cli-reference.md"
+    },
+    {
+      "capability": "interrupt-receipt-v1",
+      "minimumCliVersion": "2.1.205",
+      "sourceUrl": "https://code.claude.com/docs/en/agent-sdk/typescript.md"
+    },
+    {
+      "capability": "interrupt-cancel-queued-v1",
+      "minimumCliVersion": "2.1.219",
+      "sourceUrl": "https://code.claude.com/docs/en/agent-sdk/typescript.md"
+    }
+  ],
+  "probes": [
+    {
+      "id": "init-only",
+      "input": "eof",
+      "exitCode": 0,
+      "resultCategory": "empty-success"
+    },
+    {
+      "id": "permission-prompt-tool-parse",
+      "input": "eof",
+      "exitCode": 0,
+      "resultCategory": "accepted-and-empty-success"
+    },
+    {
+      "id": "stream-invalid-json",
+      "input": "synthetic-invalid-json",
+      "exitCode": 1,
+      "resultCategory": "json-parse-error"
+    },
+    {
+      "id": "stream-missing-type",
+      "input": "synthetic-empty-object",
+      "exitCode": 0,
+      "resultCategory": "ignored-empty-success"
+    },
+    {
+      "id": "stream-missing-message",
+      "input": "synthetic-user-envelope-without-message",
+      "exitCode": 1,
+      "resultCategory": "missing-user-role-error"
+    },
+    {
+      "id": "stream-eof",
+      "input": "eof",
+      "exitCode": 0,
+      "resultCategory": "empty-success"
+    },
+    {
+      "id": "unknown-option-negative-control",
+      "input": "eof",
+      "exitCode": 1,
+      "resultCategory": "unknown-option-error"
+    }
+  ]
+}

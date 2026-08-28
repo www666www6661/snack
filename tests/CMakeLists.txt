@@ -43,6 +43,11 @@ target_compile_definitions(
     snack_codex_tests
     PRIVATE SNACK_TEST_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures"
 )
+snack_add_test(snack_claude_protocol_spike_tests agent/TestClaudeProtocolSpike.cpp)
+target_compile_definitions(
+    snack_claude_protocol_spike_tests
+    PRIVATE SNACK_TEST_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures"
+)
 
 add_executable(snack_ui_tests ui/TestMainWindow.cpp)
 target_link_libraries(snack_ui_tests PRIVATE Snack::Ui Qt6::Test)
